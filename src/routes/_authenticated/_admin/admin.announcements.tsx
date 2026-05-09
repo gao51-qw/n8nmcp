@@ -96,7 +96,102 @@ function formatDiffValue(field: string, value: unknown): string {
   return JSON.stringify(value);
 }
 
+type ExportEntry = {
+  e: {
+    id: string;
+    announcement_id: string | null;
+    actor_id: string | null;
+    action: string;
+    summary: string | null;
+    changes: Record<string, unknown> | null;
+    created_at: string;
+  };
+  actorName: string;
+  announcement: { title: string } | null | undefined;
+  changes: {
+    changes?: Record<string, { from: unknown; to: unknown }>;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+};
+
+function downloadBlob(filename: string, mime: string, content: string) {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const s = typeof value === "string" ? value : JSON.stringify(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  if (format === "json") {
+    const payload = entries.map(({ e, actorName, announcement }) => ({
+      id: e.id,
+      created_at: e.created_at,
+      action: e.action,
+      actor_id: e.actor_id,
+      actor_name: actorName,
+      announcement_id: e.announcement_id,
+      announcement_title: announcement?.title ?? null,
+      summary: e.summary,
+      changes: e.changes,
+    }));
+    downloadBlob(
+      `announcement-audit-${stamp}.json`,
+      "application/json",
+      JSON.stringify(payload, null, 2),
+    );
+    return;
+  }
+  const headers = [
+    "id",
+    "created_at",
+    "action",
+    "actor_id",
+    "actor_name",
+    "announcement_id",
+    "announcement_title",
+    "summary",
+    "changed_fields",
+    "changes_json",
+  ];
+  const rows = entries.map(({ e, actorName, announcement, changes }) => {
+    const diff = changes.changes ?? {};
+    return [
+      e.id,
+      e.created_at,
+      e.action,
+      e.actor_id ?? "",
+      actorName,
+      e.announcement_id ?? "",
+      announcement?.title ?? "",
+      e.summary ?? "",
+      Object.keys(diff).join("|"),
+      JSON.stringify(changes),
+    ]
+      .map(csvEscape)
+      .join(",");
+  });
+  downloadBlob(
+    `announcement-audit-${stamp}.csv`,
+    "text/csv",
+    [headers.join(","), ...rows].join("\r\n"),
+  );
+}
+
 function ChangesDiff({
+
   changes,
 }: {
   changes: {
