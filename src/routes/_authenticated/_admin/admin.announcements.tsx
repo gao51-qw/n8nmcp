@@ -495,7 +495,7 @@ function AdminAnnouncements() {
           size="icon"
           variant="ghost"
           className="text-destructive"
-          onClick={() => remove.mutate(a.id)}
+          onClick={() => remove.mutate(a)}
           disabled={remove.isPending}
           title="Delete"
         >
