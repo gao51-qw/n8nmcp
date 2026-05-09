@@ -124,6 +124,16 @@ function RootShell({ children }: { children: React.ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
 
+  // Re-apply the persisted theme on every route change. The FOUC script and
+  // ThemeToggle already keep things in sync, but a navigation can occasionally
+  // leave the .dark class out of sync (e.g. after auth-driven redirects or
+  // when external code mutates document.documentElement). This is a cheap
+  // idempotent guard that prevents brief visual mismatches.
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  useEffect(() => {
+    applyTheme(getStoredTheme());
+  }, [pathname]);
+
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
