@@ -328,6 +328,17 @@ function AdminAnnouncements() {
             <Send className="h-4 w-4" />
           </Button>
         )}
+        {a.status === "scheduled" && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => cancelSchedule.mutate(a.id)}
+            disabled={cancelSchedule.isPending}
+            title="Cancel schedule (move to Draft)"
+          >
+            <CalendarX className="h-4 w-4" />
+          </Button>
+        )}
         <Button size="icon" variant="ghost" onClick={() => openEdit(a)} title="Edit">
           <Pencil className="h-4 w-4" />
         </Button>
