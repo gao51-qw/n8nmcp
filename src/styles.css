@@ -107,6 +107,43 @@
   --shadow-elegant: 0 10px 40px -10px oklch(0.1 0.02 270 / 60%);
 }
 
+/* Light theme overrides — applied when html lacks the .dark class */
+html:not(.dark) {
+  --background: oklch(0.99 0.005 270);
+  --foreground: oklch(0.18 0.025 270);
+
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.025 270);
+
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.025 270);
+
+  --primary: oklch(0.55 0.22 295);
+  --primary-foreground: oklch(0.99 0 0);
+  --primary-glow: oklch(0.68 0.20 280);
+
+  --secondary: oklch(0.95 0.01 270);
+  --secondary-foreground: oklch(0.22 0.025 270);
+
+  --muted: oklch(0.96 0.008 270);
+  --muted-foreground: oklch(0.45 0.02 270);
+
+  --accent: oklch(0.93 0.04 285);
+  --accent-foreground: oklch(0.22 0.025 270);
+
+  --border: oklch(0.88 0.015 270);
+  --input: oklch(0.94 0.01 270);
+  --ring: oklch(0.55 0.22 295);
+
+  --sidebar: oklch(0.97 0.008 270);
+  --sidebar-foreground: oklch(0.22 0.025 270);
+  --sidebar-accent: oklch(0.92 0.02 285);
+  --sidebar-accent-foreground: oklch(0.22 0.025 270);
+  --sidebar-border: oklch(0.86 0.015 270);
+
+  --shadow-elegant: 0 10px 40px -10px oklch(0.5 0.02 270 / 25%);
+}
+
 @layer base {
   * {
     border-color: var(--color-border);
