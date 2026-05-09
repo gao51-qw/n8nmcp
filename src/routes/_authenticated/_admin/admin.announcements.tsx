@@ -37,6 +37,7 @@ import {
   Clock,
   Eye,
   FileText,
+  History,
   Loader2,
   Megaphone,
   Pencil,
@@ -179,10 +180,100 @@ function AdminAnnouncements() {
     };
   }, [data]);
 
+  type AuditEntry = {
+    id: string;
+    announcement_id: string | null;
+    actor_id: string | null;
+    action: string;
+    summary: string | null;
+    changes: Record<string, unknown> | null;
+    created_at: string;
+  };
+
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ["announcement-audit"],
+    queryFn: async (): Promise<{
+      entries: AuditEntry[];
+      actors: Record<string, { display_name: string | null; email: string | null }>;
+    }> => {
+      const { data: entries, error } = await supabase
+        .from("announcement_audit_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      const list = (entries ?? []) as AuditEntry[];
+      const ids = Array.from(
+        new Set(list.map((e) => e.actor_id).filter((v): v is string => !!v)),
+      );
+      let actors: Record<string, { display_name: string | null; email: string | null }> = {};
+      if (ids.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name, email")
+          .in("id", ids);
+        for (const p of profs ?? []) {
+          actors[p.id] = { display_name: p.display_name, email: p.email };
+        }
+      }
+      return { entries: list, actors };
+    },
+  });
+
   const validateBase = (t: string, b: string) => {
     if (!t || !b) throw new Error("Title and body are required");
     if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
     if (b.length > BODY_MAX) throw new Error(`Body must be under ${BODY_MAX} chars`);
+  };
+
+  type AuditAction =
+    | "create"
+    | "update"
+    | "delete"
+    | "publish"
+    | "cancel_schedule"
+    | "republish";
+
+  // Best-effort audit log writer. Never blocks the primary mutation: we already
+  // ran the user's intended change before logging, so a failure here only
+  // surfaces a console warning.
+  const logAudit = async (
+    announcementId: string | null,
+    action: AuditAction,
+    summary: string,
+    changes: Record<string, unknown>,
+  ) => {
+    if (!user?.id) return;
+    const { error } = await supabase.from("announcement_audit_logs").insert({
+      announcement_id: announcementId,
+      actor_id: user.id,
+      action,
+      summary,
+      changes: changes as never,
+    });
+    if (error) console.warn("audit log insert failed", error);
+  };
+
+  // Diff two announcement snapshots into { field: { from, to } } pairs so the
+  // log only stores fields that actually changed.
+  const diffFields = (
+    before: Partial<Announcement>,
+    after: Partial<Announcement>,
+  ): Record<string, { from: unknown; to: unknown }> => {
+    const fields: Array<keyof Announcement> = [
+      "title",
+      "body",
+      "status",
+      "scheduled_for",
+      "published_at",
+    ];
+    const out: Record<string, { from: unknown; to: unknown }> = {};
+    for (const f of fields) {
+      const b = before[f] ?? null;
+      const a = after[f] ?? null;
+      if (b !== a) out[f] = { from: b, to: a };
+    }
+    return out;
   };
 
   const create = useMutation({
@@ -223,8 +314,15 @@ function AdminAnnouncements() {
         };
       }
 
-      const { error } = await supabase.from("announcements").insert(row);
+      const { data: inserted, error } = await supabase
+        .from("announcements")
+        .insert(row)
+        .select("id")
+        .single();
       if (error) throw error;
+      await logAudit(inserted?.id ?? null, "create", `Created (${row.status})`, {
+        after: row,
+      });
     },
     onSuccess: () => {
       toast.success(
@@ -238,6 +336,7 @@ function AdminAnnouncements() {
       setBody("");
       setScheduledFor("");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
@@ -275,59 +374,104 @@ function AdminAnnouncements() {
         .update(patch)
         .eq("id", editing.id);
       if (error) throw error;
+
+      const wasRepublish =
+        editing.status === "published" &&
+        editStatus === "published" &&
+        republish;
+      const action: AuditAction = wasRepublish ? "republish" : "update";
+      const changes = diffFields(editing, { ...editing, ...patch });
+      const summaryParts = Object.keys(changes);
+      const summary = wasRepublish
+        ? "Republished (bumped to top)"
+        : summaryParts.length
+          ? `Updated: ${summaryParts.join(", ")}`
+          : "Saved (no field changes)";
+      await logAudit(editing.id, action, summary, { changes });
     },
     onSuccess: () => {
       toast.success("Updated");
       setEditing(null);
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("announcements").delete().eq("id", id);
+    mutationFn: async (a: Announcement) => {
+      const { error } = await supabase.from("announcements").delete().eq("id", a.id);
       if (error) throw error;
+      await logAudit(a.id, "delete", `Deleted "${a.title}"`, {
+        before: {
+          title: a.title,
+          body: a.body,
+          status: a.status,
+          scheduled_for: a.scheduled_for,
+          published_at: a.published_at,
+        },
+      });
     },
     onSuccess: () => {
       toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
+      qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const publishNow = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (a: Announcement) => {
+      const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from("announcements")
         .update({
           status: "published",
           scheduled_for: null,
-          published_at: new Date().toISOString(),
+          published_at: nowIso,
         })
-        .eq("id", id);
+        .eq("id", a.id);
       if (error) throw error;
+      await logAudit(a.id, "publish", `Published "${a.title}"`, {
+        changes: diffFields(a, {
+          ...a,
+          status: "published",
+          scheduled_for: null,
+          published_at: nowIso,
+        }),
+      });
     },
     onSuccess: () => {
       toast.success("Published");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const cancelSchedule = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (a: Announcement) => {
       const { error } = await supabase
         .from("announcements")
         .update({ status: "draft", scheduled_for: null })
-        .eq("id", id);
+        .eq("id", a.id);
       if (error) throw error;
+      await logAudit(
+        a.id,
+        "cancel_schedule",
+        `Canceled schedule for "${a.title}"`,
+        {
+          changes: diffFields(a, { ...a, status: "draft", scheduled_for: null }),
+        },
+      );
     },
     onSuccess: () => {
       toast.success("Schedule canceled — moved to Draft");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -368,7 +512,7 @@ function AdminAnnouncements() {
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => publishNow.mutate(a.id)}
+            onClick={() => publishNow.mutate(a)}
             disabled={publishNow.isPending}
             title="Publish now"
           >
@@ -379,7 +523,7 @@ function AdminAnnouncements() {
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => cancelSchedule.mutate(a.id)}
+            onClick={() => cancelSchedule.mutate(a)}
             disabled={cancelSchedule.isPending}
             title="Cancel schedule (move to Draft)"
           >
@@ -393,7 +537,7 @@ function AdminAnnouncements() {
           size="icon"
           variant="ghost"
           className="text-destructive"
-          onClick={() => remove.mutate(a.id)}
+          onClick={() => remove.mutate(a)}
           disabled={remove.isPending}
           title="Delete"
         >
@@ -561,6 +705,84 @@ function AdminAnnouncements() {
           </Card>
         );
       })}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-4 w-4" /> Audit log
+            <span className="text-muted-foreground">
+              ({auditData?.entries.length ?? 0})
+            </span>
+          </CardTitle>
+          <CardDescription>
+            Last 50 actions on announcements — who did what, when, and which fields
+            changed. Auto-publish runs by the system are not captured here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {auditLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : !auditData?.entries.length ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No activity yet — your next edit will appear here.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {auditData.entries.map((e) => {
+                const actor = e.actor_id ? auditData.actors[e.actor_id] : null;
+                const actorName =
+                  actor?.display_name || actor?.email || "Unknown admin";
+                const announcement = e.announcement_id
+                  ? data?.find((a) => a.id === e.announcement_id)
+                  : null;
+                const changes = (e.changes ?? {}) as {
+                  changes?: Record<string, { from: unknown; to: unknown }>;
+                  before?: Record<string, unknown>;
+                  after?: Record<string, unknown>;
+                };
+                return (
+                  <li key={e.id} className="py-3">
+                    <details className="group">
+                      <summary className="flex cursor-pointer items-center justify-between gap-3 list-none">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <Badge variant="outline" className="font-mono">
+                              {e.action}
+                            </Badge>
+                            <span className="font-medium">{actorName}</span>
+                            <span className="text-muted-foreground">
+                              · {new Date(e.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="mt-1 truncate text-sm">
+                            {e.summary || "—"}
+                            {announcement && (
+                              <span className="ml-1 text-muted-foreground">
+                                — "{announcement.title}"
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground group-open:hidden">
+                          Show
+                        </span>
+                        <span className="hidden shrink-0 text-xs text-muted-foreground group-open:inline">
+                          Hide
+                        </span>
+                      </summary>
+                      <pre className="mt-2 max-h-64 overflow-auto rounded bg-muted p-3 text-[11px] leading-relaxed">
+                        {JSON.stringify(changes, null, 2)}
+                      </pre>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent className="max-w-lg">

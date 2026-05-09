@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      announcement_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          announcement_id: string | null
+          changes: Json
+          created_at: string
+          id: string
+          summary: string | null
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          announcement_id?: string | null
+          changes?: Json
+          created_at?: string
+          id?: string
+          summary?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          announcement_id?: string | null
+          changes?: Json
+          created_at?: string
+          id?: string
+          summary?: string | null
+        }
+        Relationships: []
+      }
       announcements: {
         Row: {
           body: string
