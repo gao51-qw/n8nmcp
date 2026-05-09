@@ -142,10 +142,31 @@ function csvEscape(value: unknown): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
+function buildFieldChanges(
+  changes: ExportEntry["changes"],
+): Array<{
+  field: string;
+  label: string;
+  from: unknown;
+  to: unknown;
+  from_display: string;
+  to_display: string;
+}> {
+  const diff = changes.changes ?? {};
+  return Object.entries(diff).map(([field, { from, to }]) => ({
+    field,
+    label: FIELD_LABELS[field] ?? field,
+    from: from ?? null,
+    to: to ?? null,
+    from_display: formatDiffValue(field, from),
+    to_display: formatDiffValue(field, to),
+  }));
+}
+
 function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   if (format === "json") {
-    const payload = entries.map(({ e, actorName, announcement }) => ({
+    const payload = entries.map(({ e, actorName, announcement, changes }) => ({
       id: e.id,
       created_at: e.created_at,
       action: e.action,
@@ -154,6 +175,7 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
       announcement_id: e.announcement_id,
       announcement_title: announcement?.title ?? null,
       summary: e.summary,
+      field_changes: buildFieldChanges(changes),
       changes: e.changes,
     }));
     downloadBlob(
@@ -163,6 +185,9 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
     );
     return;
   }
+  // CSV uses long format: one row per changed field. Entries with no field
+  // changes still emit a single row with empty field/from/to columns so they
+  // appear in the export.
   const headers = [
     "id",
     "created_at",
@@ -172,12 +197,16 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
     "announcement_id",
     "announcement_title",
     "summary",
-    "changed_fields",
+    "field",
+    "field_label",
+    "from",
+    "to",
     "changes_json",
   ];
-  const rows = entries.map(({ e, actorName, announcement, changes }) => {
-    const diff = changes.changes ?? {};
-    return [
+  const rows: string[] = [];
+  for (const { e, actorName, announcement, changes } of entries) {
+    const fieldChanges = buildFieldChanges(changes);
+    const base = [
       e.id,
       e.created_at,
       e.action,
@@ -186,18 +215,34 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
       e.announcement_id ?? "",
       announcement?.title ?? "",
       e.summary ?? "",
-      Object.keys(diff).join("|"),
-      JSON.stringify(changes),
-    ]
-      .map(csvEscape)
-      .join(",");
-  });
+    ];
+    const changesJson = JSON.stringify(changes);
+    if (fieldChanges.length === 0) {
+      rows.push([...base, "", "", "", "", changesJson].map(csvEscape).join(","));
+      continue;
+    }
+    for (const fc of fieldChanges) {
+      rows.push(
+        [
+          ...base,
+          fc.field,
+          fc.label,
+          fc.from_display,
+          fc.to_display,
+          changesJson,
+        ]
+          .map(csvEscape)
+          .join(","),
+      );
+    }
+  }
   downloadBlob(
     `announcement-audit-${stamp}.csv`,
     "text/csv",
     [headers.join(","), ...rows].join("\r\n"),
   );
 }
+
 
 function ChangesDiff({
 
