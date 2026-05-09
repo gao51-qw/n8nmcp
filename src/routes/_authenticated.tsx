@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabase } from "@/integrations/supabase/client";
-import { setTheme, type ThemeChoice } from "@/lib/theme";
+import { setTheme, getStoredTheme, type ThemeChoice } from "@/lib/theme";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
