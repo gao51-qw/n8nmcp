@@ -228,7 +228,10 @@ function InstanceDialog({
       qc.invalidateQueries({ queryKey: ["instances"] });
       onClose();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      console.error("[instance save] failed:", e);
+      toast.error(e.message || "Failed to save instance");
+    },
   });
 
   return (
