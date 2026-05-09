@@ -333,6 +333,20 @@ function AdminAnnouncements() {
         .update(patch)
         .eq("id", editing.id);
       if (error) throw error;
+
+      const wasRepublish =
+        editing.status === "published" &&
+        editStatus === "published" &&
+        republish;
+      const action: AuditAction = wasRepublish ? "republish" : "update";
+      const changes = diffFields(editing, { ...editing, ...patch });
+      const summaryParts = Object.keys(changes);
+      const summary = wasRepublish
+        ? "Republished (bumped to top)"
+        : summaryParts.length
+          ? `Updated: ${summaryParts.join(", ")}`
+          : "Saved (no field changes)";
+      await logAudit(editing.id, action, summary, { changes });
     },
     onSuccess: () => {
       toast.success("Updated");
