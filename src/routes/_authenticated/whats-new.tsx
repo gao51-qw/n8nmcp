@@ -45,6 +45,7 @@ function WhatsNew() {
       const { data, count, error } = await supabase
         .from("announcements")
         .select("*", { count: "exact" })
+        .eq("status", "published")
         .order("published_at", { ascending: false })
         .range(from, to);
       if (error) throw error;
