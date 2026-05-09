@@ -296,6 +296,7 @@ function AdminAnnouncements() {
       setBody("");
       setScheduledFor("");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
