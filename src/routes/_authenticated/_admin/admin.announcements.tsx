@@ -93,6 +93,51 @@ function StatusBadge({ a }: { a: Announcement }) {
   return <Badge>Published</Badge>;
 }
 
+/**
+ * Mirrors the article styling used by /whats-new so admins can see the exact
+ * rendered output before saving / publishing / scheduling.
+ */
+function WhatsNewPreview({
+  title,
+  body,
+  publishAt,
+}: {
+  title: string;
+  body: string;
+  publishAt?: string | null;
+}) {
+  const hasContent = title.trim() || body.trim();
+  if (!hasContent) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+        Add a title or body to preview the announcement.
+      </div>
+    );
+  }
+  const stamp = publishAt ? new Date(publishAt) : new Date();
+  return (
+    <div className="rounded-lg border border-dashed border-primary/40 bg-muted/20 p-3">
+      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Preview · /whats-new
+      </div>
+      <article className="rounded-xl border border-border bg-card p-6">
+        <div className="flex items-center justify-between gap-3">
+          <time className="text-xs text-muted-foreground" title={stamp.toLocaleString()}>
+            {stamp.toLocaleString()}
+          </time>
+          <Badge>Latest</Badge>
+        </div>
+        <h2 className="mt-2 text-lg font-semibold">{title || "Untitled"}</h2>
+        {body.trim() ? (
+          <Markdown className="mt-2">{body}</Markdown>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">No body yet.</p>
+        )}
+      </article>
+    </div>
+  );
+}
+
 function AdminAnnouncements() {
   const { user } = useAuth();
   const qc = useQueryClient();
