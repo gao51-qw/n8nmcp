@@ -4,7 +4,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { supabase } from "@/integrations/supabase/client";
-import { setTheme, type ThemeChoice } from "@/lib/theme";
+import { setTheme, getStoredTheme, type ThemeChoice } from "@/lib/theme";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -19,7 +19,11 @@ function AuthGate() {
     if (!loading && !user) navigate({ to: "/login" });
   }, [user, loading, navigate]);
 
-  // Hydrate the user's saved theme preference (best-effort, no remote write).
+  // Step 1 (already done): the FOUC script in __root.tsx applied the
+  // localStorage theme synchronously before first paint, so the page loads
+  // in the user's last-known theme.
+  // Step 2: once the auth session is hydrated, reconcile with the backend
+  // preference. Only re-apply if it actually differs to avoid any flash.
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
@@ -29,10 +33,12 @@ function AuthGate() {
       .eq("id", user.id)
       .maybeSingle()
       .then(({ data }) => {
-        const t = data?.theme_preference as ThemeChoice | undefined;
-        if (!cancelled && t && ["light", "dark", "system"].includes(t)) {
-          void setTheme(t, { remote: false });
-        }
+        if (cancelled) return;
+        const remote = data?.theme_preference as ThemeChoice | undefined;
+        if (!remote || !["light", "dark", "system"].includes(remote)) return;
+        const local = getStoredTheme();
+        if (remote === local) return; // No-op → no flash.
+        void setTheme(remote, { remote: false });
       });
     return () => {
       cancelled = true;
