@@ -115,8 +115,8 @@ function WhatsNewPreview({
       </div>
       <article className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center justify-between gap-3">
-          <time className="text-xs text-muted-foreground" title={stamp.toLocaleString()}>
-            {stamp.toLocaleString()}
+          <time className="text-xs text-muted-foreground" title={formatLocalLong(stamp)}>
+            {formatLocal(stamp)}
           </time>
           <Badge>Latest</Badge>
         </div>
