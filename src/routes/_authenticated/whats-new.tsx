@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, Megaphone, Sparkles } from "lucide-react";
+import { Markdown } from "@/components/markdown";
 
 const PAGE_SIZE = 5;
 
@@ -114,9 +115,7 @@ function WhatsNew() {
                     {isFreshest && <Badge>Latest</Badge>}
                   </div>
                   <h2 className="mt-2 text-lg font-semibold">{a.title}</h2>
-                  <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
-                    {a.body}
-                  </p>
+                  <Markdown className="mt-2">{a.body}</Markdown>
                 </article>
               );
             })}
