@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
@@ -134,6 +134,42 @@ function WhatsNewPreview({
 function AdminAnnouncements() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const router = useRouter();
+  // Tracks audit-log row IDs we already toasted in this session, so realtime
+  // echoes from our own writes (or duplicate events) never produce dup toasts.
+  const seenAuditIds = useRef<Set<string>>(new Set());
+
+  const goToWhatsNew = () => router.navigate({ to: "/whats-new" });
+
+  /**
+   * Rich notification for high-impact actions. Includes a description with
+   * the announcement title + the relevant timestamp, and (where useful) a
+   * "View on What's New" action so the admin can confirm immediately.
+   */
+  const notify = (
+    kind: "create" | "publish" | "republish" | "delete" | "cancel_schedule" | "schedule" | "draft" | "update",
+    title: string,
+    detail?: string,
+  ) => {
+    const headlines: Record<typeof kind, string> = {
+      create: "Announcement created",
+      publish: "Published to What's New",
+      republish: "Republished — bumped to top",
+      delete: "Announcement deleted",
+      cancel_schedule: "Schedule canceled",
+      schedule: "Announcement scheduled",
+      draft: "Saved as draft",
+      update: "Announcement updated",
+    };
+    const showAction = kind === "publish" || kind === "republish" || kind === "create";
+    toast(headlines[kind], {
+      description: detail ? `"${title}" — ${detail}` : `"${title}"`,
+      action: showAction
+        ? { label: "View on What's New", onClick: goToWhatsNew }
+        : undefined,
+    });
+  };
+
 
   // Create form
   const [title, setTitle] = useState("");
@@ -212,6 +248,42 @@ function AdminAnnouncements() {
     },
   });
 
+  // Live-update audit list + show toast when ANOTHER admin session (or the
+  // pg_cron auto-publisher, if it ever logs) writes a new audit row.
+  useEffect(() => {
+    const channel = supabase
+      .channel("announcement-audit-stream")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "announcement_audit_logs" },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            action: string;
+            summary: string | null;
+            actor_id: string | null;
+          };
+          // Skip echoes of writes we already toasted in this tab.
+          if (seenAuditIds.current.has(row.id)) return;
+          seenAuditIds.current.add(row.id);
+          // Skip our own writes that happened in another tab where we already
+          // hold the actor session — we still want to know, so show as a
+          // lighter "info" toast instead of suppressing entirely.
+          const isSelf = row.actor_id && user?.id && row.actor_id === user.id;
+          toast(isSelf ? "Synced from another tab" : "Announcement activity", {
+            description: row.summary ?? row.action,
+          });
+          qc.invalidateQueries({ queryKey: ["announcement-audit"] });
+          qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+          qc.invalidateQueries({ queryKey: ["whats-new"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc, user?.id]);
+
   const validateBase = (t: string, b: string) => {
     if (!t || !b) throw new Error("Title and body are required");
     if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
@@ -234,16 +306,26 @@ function AdminAnnouncements() {
     action: AuditAction,
     summary: string,
     changes: Record<string, unknown>,
-  ) => {
-    if (!user?.id) return;
-    const { error } = await supabase.from("announcement_audit_logs").insert({
-      announcement_id: announcementId,
-      actor_id: user.id,
-      action,
-      summary,
-      changes: changes as never,
-    });
-    if (error) console.warn("audit log insert failed", error);
+  ): Promise<string | null> => {
+    if (!user?.id) return null;
+    const { data, error } = await supabase
+      .from("announcement_audit_logs")
+      .insert({
+        announcement_id: announcementId,
+        actor_id: user.id,
+        action,
+        summary,
+        changes: changes as never,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      console.warn("audit log insert failed", error);
+      return null;
+    }
+    // Mark as seen so the realtime subscription doesn't re-toast our own write.
+    if (data?.id) seenAuditIds.current.add(data.id);
+    return data?.id ?? null;
   };
 
   // Diff two announcement snapshots into { field: { from, to } } pairs so the
@@ -317,12 +399,17 @@ function AdminAnnouncements() {
       });
     },
     onSuccess: () => {
-      toast.success(
-        mode === "draft"
-          ? "Saved as draft"
-          : mode === "scheduled"
-            ? "Scheduled"
-            : "Published",
+      const t = title.trim();
+      const detail =
+        mode === "scheduled" && scheduledFor
+          ? `publishes ${formatLocal(localInputToIso(scheduledFor))}`
+          : mode === "published"
+            ? `now live`
+            : undefined;
+      notify(
+        mode === "draft" ? "draft" : mode === "scheduled" ? "schedule" : "create",
+        t,
+        detail,
       );
       setTitle("");
       setBody("");
@@ -382,7 +469,15 @@ function AdminAnnouncements() {
       await logAudit(editing.id, action, summary, { changes });
     },
     onSuccess: () => {
-      toast.success("Updated");
+      const wasRepublish =
+        editing?.status === "published" &&
+        editStatus === "published" &&
+        republish;
+      notify(
+        wasRepublish ? "republish" : "update",
+        editTitle.trim() || editing?.title || "(untitled)",
+        wasRepublish ? "bumped to top of What's New" : undefined,
+      );
       setEditing(null);
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
@@ -405,8 +500,8 @@ function AdminAnnouncements() {
         },
       });
     },
-    onSuccess: () => {
-      toast.success("Deleted");
+    onSuccess: (_, a) => {
+      notify("delete", a.title);
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
@@ -435,8 +530,8 @@ function AdminAnnouncements() {
         }),
       });
     },
-    onSuccess: () => {
-      toast.success("Published");
+    onSuccess: (_, a) => {
+      notify("publish", a.title, "now live on What's New");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
@@ -460,8 +555,8 @@ function AdminAnnouncements() {
         },
       );
     },
-    onSuccess: () => {
-      toast.success("Schedule canceled — moved to Draft");
+    onSuccess: (_, a) => {
+      notify("cancel_schedule", a.title, "moved back to Draft");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
     },
