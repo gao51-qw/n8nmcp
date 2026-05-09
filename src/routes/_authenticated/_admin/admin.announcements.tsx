@@ -634,6 +634,16 @@ function AdminAnnouncements() {
                   value={scheduledFor}
                   onChange={(e) => setScheduledFor(e.target.value)}
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Times use your local zone <strong>{localTimeZone}</strong>.
+                  {scheduledFor && (
+                    <>
+                      {" "}
+                      Saved as <span className="font-mono">{formatUtc(localInputToIso(scheduledFor))}</span>;
+                      readers see it in their own zone.
+                    </>
+                  )}
+                </p>
               </div>
             )}
           </div>
