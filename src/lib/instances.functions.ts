@@ -60,7 +60,15 @@ export const updateInstance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => updateSchema.parse(d))
   .handler(async ({ context, data }) => {
-    const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    const patch: {
+      updated_at: string;
+      name?: string;
+      base_url?: string;
+      api_key_encrypted?: string;
+      api_key_iv?: string;
+      api_key_tag?: string;
+      status?: string;
+    } = { updated_at: new Date().toISOString() };
     if (data.name) patch.name = data.name;
     if (data.base_url) patch.base_url = data.base_url.replace(/\/+$/, "");
     if (data.api_key) {
