@@ -464,8 +464,8 @@ function AdminAnnouncements() {
         },
       });
     },
-    onSuccess: () => {
-      toast.success("Deleted");
+    onSuccess: (_, a) => {
+      notify("delete", a.title);
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
