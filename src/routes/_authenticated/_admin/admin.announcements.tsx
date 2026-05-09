@@ -951,22 +951,45 @@ function AdminAnnouncements() {
                 : entries;
               return (
                 <>
-                  <div className="relative mb-3">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="search"
-                      value={auditQuery}
-                      onChange={(ev) => setAuditQuery(ev.target.value)}
-                      placeholder="Search by title, summary, action, actor, or field changes…"
-                      className="pl-8"
-                      aria-label="Search audit log"
-                    />
-                    {auditQuery && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {filtered.length} of {entries.length} matching
-                      </div>
-                    )}
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        value={auditQuery}
+                        onChange={(ev) => setAuditQuery(ev.target.value)}
+                        placeholder="Search by title, summary, action, actor, or field changes…"
+                        className="pl-8"
+                        aria-label="Search audit log"
+                      />
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportAudit(filtered, "csv")}
+                        disabled={!filtered.length}
+                      >
+                        <Download className="mr-1.5 h-4 w-4" /> CSV
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportAudit(filtered, "json")}
+                        disabled={!filtered.length}
+                      >
+                        <Download className="mr-1.5 h-4 w-4" /> JSON
+                      </Button>
+                    </div>
                   </div>
+                  {auditQuery && (
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      {filtered.length} of {entries.length} matching
+                    </div>
+                  )}
+
                   {filtered.length === 0 ? (
                     <p className="py-4 text-center text-sm text-muted-foreground">
                       No entries match "{auditQuery}".
