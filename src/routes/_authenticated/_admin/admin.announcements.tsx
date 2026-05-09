@@ -40,6 +40,7 @@ import {
   History,
   Loader2,
   Megaphone,
+  Download,
   Pencil,
   Search,
   Send,
@@ -95,7 +96,102 @@ function formatDiffValue(field: string, value: unknown): string {
   return JSON.stringify(value);
 }
 
+type ExportEntry = {
+  e: {
+    id: string;
+    announcement_id: string | null;
+    actor_id: string | null;
+    action: string;
+    summary: string | null;
+    changes: Record<string, unknown> | null;
+    created_at: string;
+  };
+  actorName: string;
+  announcement: { title: string } | null | undefined;
+  changes: {
+    changes?: Record<string, { from: unknown; to: unknown }>;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+};
+
+function downloadBlob(filename: string, mime: string, content: string) {
+  const blob = new Blob([content], { type: `${mime};charset=utf-8` });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function csvEscape(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  const s = typeof value === "string" ? value : JSON.stringify(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  if (format === "json") {
+    const payload = entries.map(({ e, actorName, announcement }) => ({
+      id: e.id,
+      created_at: e.created_at,
+      action: e.action,
+      actor_id: e.actor_id,
+      actor_name: actorName,
+      announcement_id: e.announcement_id,
+      announcement_title: announcement?.title ?? null,
+      summary: e.summary,
+      changes: e.changes,
+    }));
+    downloadBlob(
+      `announcement-audit-${stamp}.json`,
+      "application/json",
+      JSON.stringify(payload, null, 2),
+    );
+    return;
+  }
+  const headers = [
+    "id",
+    "created_at",
+    "action",
+    "actor_id",
+    "actor_name",
+    "announcement_id",
+    "announcement_title",
+    "summary",
+    "changed_fields",
+    "changes_json",
+  ];
+  const rows = entries.map(({ e, actorName, announcement, changes }) => {
+    const diff = changes.changes ?? {};
+    return [
+      e.id,
+      e.created_at,
+      e.action,
+      e.actor_id ?? "",
+      actorName,
+      e.announcement_id ?? "",
+      announcement?.title ?? "",
+      e.summary ?? "",
+      Object.keys(diff).join("|"),
+      JSON.stringify(changes),
+    ]
+      .map(csvEscape)
+      .join(",");
+  });
+  downloadBlob(
+    `announcement-audit-${stamp}.csv`,
+    "text/csv",
+    [headers.join(","), ...rows].join("\r\n"),
+  );
+}
+
 function ChangesDiff({
+
   changes,
 }: {
   changes: {
@@ -950,22 +1046,45 @@ function AdminAnnouncements() {
                 : entries;
               return (
                 <>
-                  <div className="relative mb-3">
-                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      type="search"
-                      value={auditQuery}
-                      onChange={(ev) => setAuditQuery(ev.target.value)}
-                      placeholder="Search by title, summary, action, actor, or field changes…"
-                      className="pl-8"
-                      aria-label="Search audit log"
-                    />
-                    {auditQuery && (
-                      <div className="mt-1 text-xs text-muted-foreground">
-                        {filtered.length} of {entries.length} matching
-                      </div>
-                    )}
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        type="search"
+                        value={auditQuery}
+                        onChange={(ev) => setAuditQuery(ev.target.value)}
+                        placeholder="Search by title, summary, action, actor, or field changes…"
+                        className="pl-8"
+                        aria-label="Search audit log"
+                      />
+                    </div>
+                    <div className="flex shrink-0 gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportAudit(filtered, "csv")}
+                        disabled={!filtered.length}
+                      >
+                        <Download className="mr-1.5 h-4 w-4" /> CSV
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => exportAudit(filtered, "json")}
+                        disabled={!filtered.length}
+                      >
+                        <Download className="mr-1.5 h-4 w-4" /> JSON
+                      </Button>
+                    </div>
                   </div>
+                  {auditQuery && (
+                    <div className="mb-2 text-xs text-muted-foreground">
+                      {filtered.length} of {entries.length} matching
+                    </div>
+                  )}
+
                   {filtered.length === 0 ? (
                     <p className="py-4 text-center text-sm text-muted-foreground">
                       No entries match "{auditQuery}".
