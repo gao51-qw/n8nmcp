@@ -33,6 +33,14 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
   CalendarX,
   Clock,
   Eye,
@@ -40,6 +48,7 @@ import {
   History,
   Loader2,
   Megaphone,
+  ChevronDown,
   Download,
   Pencil,
   Search,
@@ -361,6 +370,7 @@ function AdminAnnouncements() {
   const [editScheduledFor, setEditScheduledFor] = useState("");
   const [republish, setRepublish] = useState(false);
   const [auditQuery, setAuditQuery] = useState("");
+  const [exportingAll, setExportingAll] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-announcements"],
@@ -424,6 +434,79 @@ function AdminAnnouncements() {
       return { entries: list, actors };
     },
   });
+
+  const handleExportAll = async (format: "csv" | "json") => {
+    if (exportingAll) return;
+    setExportingAll(true);
+    const t = toast.loading("Loading full audit history…");
+    try {
+      const all: AuditEntry[] = [];
+      const pageSize = 1000;
+      let from = 0;
+      for (;;) {
+        const { data: page, error } = await supabase
+          .from("announcement_audit_logs")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        const rows = (page ?? []) as AuditEntry[];
+        all.push(...rows);
+        if (rows.length < pageSize) break;
+        from += pageSize;
+      }
+      const actorIds = Array.from(
+        new Set(all.map((e) => e.actor_id).filter((v): v is string => !!v)),
+      );
+      const annIds = Array.from(
+        new Set(all.map((e) => e.announcement_id).filter((v): v is string => !!v)),
+      );
+      const actors: Record<string, { display_name: string | null; email: string | null }> = {
+        ...(auditData?.actors ?? {}),
+      };
+      if (actorIds.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name, email")
+          .in("id", actorIds);
+        for (const p of profs ?? []) {
+          actors[p.id] = { display_name: p.display_name, email: p.email };
+        }
+      }
+      const annTitles: Record<string, string> = {};
+      for (const a of data ?? []) annTitles[a.id] = a.title;
+      const missing = annIds.filter((id) => !annTitles[id]);
+      if (missing.length) {
+        const { data: anns } = await supabase
+          .from("announcements")
+          .select("id, title")
+          .in("id", missing);
+        for (const a of anns ?? []) annTitles[a.id] = a.title;
+      }
+      const exportEntries = all.map((e) => {
+        const actor = e.actor_id ? actors[e.actor_id] : null;
+        return {
+          e,
+          actorName: actor?.display_name || actor?.email || "Unknown admin",
+          announcement:
+            e.announcement_id && annTitles[e.announcement_id]
+              ? { title: annTitles[e.announcement_id] }
+              : null,
+          changes: (e.changes ?? {}) as {
+            changes?: Record<string, { from: unknown; to: unknown }>;
+            before?: Record<string, unknown>;
+            after?: Record<string, unknown>;
+          },
+        };
+      });
+      exportAudit(exportEntries, format);
+      toast.success(`Exported ${exportEntries.length} entries`, { id: t });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Export failed", { id: t });
+    } finally {
+      setExportingAll(false);
+    }
+  };
 
   // Live-update audit list + show toast when ANOTHER admin session (or the
   // pg_cron auto-publisher, if it ever logs) writes a new audit row.
@@ -1059,24 +1142,45 @@ function AdminAnnouncements() {
                       />
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => exportAudit(filtered, "csv")}
-                        disabled={!filtered.length}
-                      >
-                        <Download className="mr-1.5 h-4 w-4" /> CSV
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => exportAudit(filtered, "json")}
-                        disabled={!filtered.length}
-                      >
-                        <Download className="mr-1.5 h-4 w-4" /> JSON
-                      </Button>
+                      {(["csv", "json"] as const).map((fmt) => (
+                        <DropdownMenu key={fmt}>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={exportingAll}
+                            >
+                              {exportingAll ? (
+                                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="mr-1.5 h-4 w-4" />
+                              )}
+                              {fmt.toUpperCase()}
+                              <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>Export as {fmt.toUpperCase()}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              disabled={!filtered.length}
+                              onSelect={() => exportAudit(filtered, fmt)}
+                            >
+                              Current view ({filtered.length})
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={exportingAll}
+                              onSelect={(ev) => {
+                                ev.preventDefault();
+                                void handleExportAll(fmt);
+                              }}
+                            >
+                              All history (paginated)
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ))}
                     </div>
                   </div>
                   {auditQuery && (
