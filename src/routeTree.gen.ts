@@ -21,6 +21,7 @@ import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticat
 import { Route as AuthenticatedInstancesRouteImport } from './routes/_authenticated/instances'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as AuthenticatedConnectRouteImport } from './routes/_authenticated/connect'
+import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
@@ -87,6 +88,11 @@ const AuthenticatedConnectRoute = AuthenticatedConnectRouteImport.update({
   path: '/connect',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
@@ -127,6 +133,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/chat': typeof AuthenticatedChatRoute
   '/connect': typeof AuthenticatedConnectRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/instances': typeof AuthenticatedInstancesRoute
@@ -145,6 +152,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/chat': typeof AuthenticatedChatRoute
   '/connect': typeof AuthenticatedConnectRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/instances': typeof AuthenticatedInstancesRoute
@@ -166,6 +174,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/api-keys': typeof AuthenticatedApiKeysRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/chat': typeof AuthenticatedChatRoute
   '/_authenticated/connect': typeof AuthenticatedConnectRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/instances': typeof AuthenticatedInstancesRoute
@@ -186,6 +195,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/api-keys'
     | '/billing'
+    | '/chat'
     | '/connect'
     | '/dashboard'
     | '/instances'
@@ -204,6 +214,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/api-keys'
     | '/billing'
+    | '/chat'
     | '/connect'
     | '/dashboard'
     | '/instances'
@@ -224,6 +235,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin'
     | '/_authenticated/api-keys'
     | '/_authenticated/billing'
+    | '/_authenticated/chat'
     | '/_authenticated/connect'
     | '/_authenticated/dashboard'
     | '/_authenticated/instances'
@@ -331,6 +343,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedConnectRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/chat': {
+      id: '/_authenticated/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/billing': {
       id: '/_authenticated/billing'
       path: '/billing'
@@ -394,6 +413,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedApiKeysRoute: typeof AuthenticatedApiKeysRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedChatRoute: typeof AuthenticatedChatRoute
   AuthenticatedConnectRoute: typeof AuthenticatedConnectRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedInstancesRoute: typeof AuthenticatedInstancesRoute
@@ -406,6 +426,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedApiKeysRoute: AuthenticatedApiKeysRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedChatRoute: AuthenticatedChatRoute,
   AuthenticatedConnectRoute: AuthenticatedConnectRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedInstancesRoute: AuthenticatedInstancesRoute,
