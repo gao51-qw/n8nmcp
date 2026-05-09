@@ -186,6 +186,56 @@ function AdminAnnouncements() {
     if (b.length > BODY_MAX) throw new Error(`Body must be under ${BODY_MAX} chars`);
   };
 
+  type AuditAction =
+    | "create"
+    | "update"
+    | "delete"
+    | "publish"
+    | "cancel_schedule"
+    | "republish";
+
+  // Best-effort audit log writer. Never blocks the primary mutation: we already
+  // ran the user's intended change before logging, so a failure here only
+  // surfaces a console warning.
+  const logAudit = async (
+    announcementId: string | null,
+    action: AuditAction,
+    summary: string,
+    changes: Record<string, unknown>,
+  ) => {
+    if (!user?.id) return;
+    const { error } = await supabase.from("announcement_audit_logs").insert({
+      announcement_id: announcementId,
+      actor_id: user.id,
+      action,
+      summary,
+      changes,
+    });
+    if (error) console.warn("audit log insert failed", error);
+  };
+
+  // Diff two announcement snapshots into { field: { from, to } } pairs so the
+  // log only stores fields that actually changed.
+  const diffFields = (
+    before: Partial<Announcement>,
+    after: Partial<Announcement>,
+  ): Record<string, { from: unknown; to: unknown }> => {
+    const fields: Array<keyof Announcement> = [
+      "title",
+      "body",
+      "status",
+      "scheduled_for",
+      "published_at",
+    ];
+    const out: Record<string, { from: unknown; to: unknown }> = {};
+    for (const f of fields) {
+      const b = before[f] ?? null;
+      const a = after[f] ?? null;
+      if (b !== a) out[f] = { from: b, to: a };
+    }
+    return out;
+  };
+
   const create = useMutation({
     mutationFn: async () => {
       const t = title.trim();
