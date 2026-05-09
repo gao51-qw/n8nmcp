@@ -1236,15 +1236,40 @@ function AdminAnnouncements() {
                               <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-70" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-56">
-                            <DropdownMenuLabel>Export as {fmt.toUpperCase()}</DropdownMenuLabel>
+                          <DropdownMenuContent align="end" className="w-72">
+                            <DropdownMenuLabel>
+                              Export as {fmt.toUpperCase()} — choose scope
+                            </DropdownMenuLabel>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              disabled={!filtered.length}
+                              disabled={!filtered.length || !auditQuery}
                               onSelect={() => exportAudit(filtered, fmt)}
                             >
-                              Current view ({filtered.length})
+                              <div className="flex flex-col">
+                                <span>
+                                  Filtered results ({filtered.length})
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {auditQuery
+                                    ? `Matches "${auditQuery}"`
+                                    : "No active search"}
+                                </span>
+                              </div>
                             </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={!entries.length}
+                              onSelect={() => exportAudit(entries, fmt)}
+                            >
+                              <div className="flex flex-col">
+                                <span>
+                                  All loaded, unfiltered ({entries.length})
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  Last 50 audit rows, ignores search
+                                </span>
+                              </div>
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem
                               disabled={exportingAll}
                               onSelect={(ev) => {
@@ -1252,7 +1277,12 @@ function AdminAnnouncements() {
                                 void handleExportAll(fmt);
                               }}
                             >
-                              All history (paginated)
+                              <div className="flex flex-col">
+                                <span>All history</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Paginated fetch, ignores search
+                                </span>
+                              </div>
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
