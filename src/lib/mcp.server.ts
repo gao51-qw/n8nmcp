@@ -57,7 +57,7 @@ export async function authenticateBearer(req: Request): Promise<AuthedKey | null
   return {
     user_id: key.user_id,
     key_id: key.id,
-    tier: sub?.tier ?? "free",
+    tier: ((sub?.tier as Tier) ?? "free"),
   };
 }
 
