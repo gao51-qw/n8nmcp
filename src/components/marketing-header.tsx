@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Sparkles } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function MarketingHeader() {
   const { user } = useAuth();
@@ -20,6 +21,7 @@ export function MarketingHeader() {
           <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
         </nav>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           {user ? (
             <Button asChild size="sm"><Link to="/dashboard">Dashboard</Link></Button>
           ) : (
