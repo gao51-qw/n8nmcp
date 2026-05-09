@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  CalendarX,
   Clock,
   FileText,
   Loader2,
@@ -269,6 +270,21 @@ function AdminAnnouncements() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const cancelSchedule = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("announcements")
+        .update({ status: "draft", scheduled_for: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Schedule canceled — moved to Draft");
+      qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const openEdit = (a: Announcement) => {
     setEditing(a);
     setEditTitle(a.title);
@@ -310,6 +326,17 @@ function AdminAnnouncements() {
             title="Publish now"
           >
             <Send className="h-4 w-4" />
+          </Button>
+        )}
+        {a.status === "scheduled" && (
+          <Button
+            size="icon"
+            variant="ghost"
+            onClick={() => cancelSchedule.mutate(a.id)}
+            disabled={cancelSchedule.isPending}
+            title="Cancel schedule (move to Draft)"
+          >
+            <CalendarX className="h-4 w-4" />
           </Button>
         )}
         <Button size="icon" variant="ghost" onClick={() => openEdit(a)} title="Edit">
