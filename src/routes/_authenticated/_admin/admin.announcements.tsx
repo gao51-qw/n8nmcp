@@ -37,6 +37,7 @@ import {
   Clock,
   Eye,
   FileText,
+  History,
   Loader2,
   Megaphone,
   Pencil,
