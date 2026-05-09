@@ -1218,7 +1218,7 @@ function AdminAnnouncements() {
                       />
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      {(["csv", "json"] as const).map((fmt) => (
+                      {(["csv", "xlsx", "json"] as const).map((fmt) => (
                         <DropdownMenu key={fmt}>
                           <DropdownMenuTrigger asChild>
                             <Button
