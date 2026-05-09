@@ -164,7 +164,10 @@ function buildFieldChanges(
   }));
 }
 
-function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
+function exportAudit(
+  entries: ExportEntry[],
+  format: "csv" | "json" | "xlsx",
+) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   if (format === "json") {
     const payload = entries.map(({ e, actorName, announcement, changes }) => ({
@@ -186,9 +189,9 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
     );
     return;
   }
-  // CSV uses long format: one row per changed field. Entries with no field
-  // changes still emit a single row with empty field/from/to columns so they
-  // appear in the export.
+
+  // CSV/XLSX use long format: one row per changed field. Entries with no
+  // field changes still emit a single row with empty field/from/to columns.
   const headers = [
     "id",
     "created_at",
@@ -204,10 +207,10 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
     "to",
     "changes_json",
   ];
-  const rows: string[] = [];
+  const rows: (string | null)[][] = [];
   for (const { e, actorName, announcement, changes } of entries) {
     const fieldChanges = buildFieldChanges(changes);
-    const base = [
+    const base: (string | null)[] = [
       e.id,
       e.created_at,
       e.action,
@@ -219,30 +222,57 @@ function exportAudit(entries: ExportEntry[], format: "csv" | "json") {
     ];
     const changesJson = JSON.stringify(changes);
     if (fieldChanges.length === 0) {
-      rows.push([...base, "", "", "", "", changesJson].map(csvEscape).join(","));
+      rows.push([...base, "", "", "", "", changesJson]);
       continue;
     }
     for (const fc of fieldChanges) {
-      rows.push(
-        [
-          ...base,
-          fc.field,
-          fc.label,
-          fc.from_display,
-          fc.to_display,
-          changesJson,
-        ]
-          .map(csvEscape)
-          .join(","),
-      );
+      rows.push([
+        ...base,
+        fc.field,
+        fc.label,
+        fc.from_display,
+        fc.to_display,
+        changesJson,
+      ]);
     }
   }
-  downloadBlob(
-    `announcement-audit-${stamp}.csv`,
-    "text/csv",
-    [headers.join(","), ...rows].join("\r\n"),
-  );
+
+  if (format === "xlsx") {
+    const aoa = [headers, ...rows];
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws["!cols"] = headers.map((h) => {
+      const maxLen = aoa.reduce((m, row) => {
+        const cell = row[headers.indexOf(h)];
+        const len = cell ? String(cell).length : 0;
+        return Math.max(m, len);
+      }, h.length);
+      return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
+    });
+    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Audit log");
+    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
+    const blob = new Blob([buf], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `announcement-audit-${stamp}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // CSV
+  const csv = [headers, ...rows]
+    .map((row) => row.map(csvEscape).join(","))
+    .join("\r\n");
+  downloadBlob(`announcement-audit-${stamp}.csv`, "text/csv", csv);
 }
+
 
 
 function ChangesDiff({
