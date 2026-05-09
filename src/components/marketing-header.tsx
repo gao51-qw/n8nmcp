@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Sparkles } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export function MarketingHeader() {
   const { user } = useAuth();
