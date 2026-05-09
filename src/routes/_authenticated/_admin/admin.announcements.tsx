@@ -270,6 +270,21 @@ function AdminAnnouncements() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const cancelSchedule = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("announcements")
+        .update({ status: "draft", scheduled_for: null })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Schedule canceled — moved to Draft");
+      qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const openEdit = (a: Announcement) => {
     setEditing(a);
     setEditTitle(a.title);
