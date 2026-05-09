@@ -264,6 +264,7 @@ function AdminAnnouncements() {
   const [editStatus, setEditStatus] = useState<Status>("published");
   const [editScheduledFor, setEditScheduledFor] = useState("");
   const [republish, setRepublish] = useState(false);
+  const [auditQuery, setAuditQuery] = useState("");
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-announcements"],
