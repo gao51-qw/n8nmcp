@@ -50,11 +50,11 @@ function Login() {
         className="pointer-events-none absolute -top-32 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
         style={{ background: "var(--gradient-primary)" }}
       />
-      <div className="absolute right-4 top-4 animate-in fade-in duration-500"><ThemeToggle /></div>
+      <div className="absolute right-4 top-4 motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"><ThemeToggle /></div>
       <div className="relative w-full max-w-sm space-y-6">
         <Link
           to="/"
-          className="flex items-center justify-center gap-2 font-semibold animate-in fade-in slide-in-from-top-2 duration-500"
+          className="flex items-center justify-center gap-2 font-semibold motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-300"
         >
           <span
             className="grid h-8 w-8 place-items-center rounded-md transition-transform hover:scale-110"
@@ -65,8 +65,8 @@ function Login() {
           n8n-mcp
         </Link>
         <div
-          className="rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500"
-          style={{ animationDelay: "80ms", animationFillMode: "both" }}
+          className="rounded-xl border border-border bg-card p-6 shadow-lg motion-safe:animate-in motion-safe:fade-in motion-safe:zoom-in-[0.98] motion-safe:slide-in-from-bottom-1 motion-safe:duration-[320ms] motion-safe:ease-out"
+          style={{ animationDelay: "60ms", animationFillMode: "both" }}
         >
           <h1 className="text-xl font-semibold">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to your account</p>
