@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Server, KeyRound, BarChart3, Sparkles } from "lucide-react";
+import { QuotaCard } from "@/components/quota-card";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — n8n-mcp" }] }),
@@ -49,6 +50,8 @@ function Dashboard() {
         <StatCard icon={KeyRound} label="Active API keys" value={stats.keys} />
         <StatCard icon={BarChart3} label="MCP calls today" value={stats.callsToday} />
       </div>
+
+      <QuotaCard />
 
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-2 text-sm font-semibold">
