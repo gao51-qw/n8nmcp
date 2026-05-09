@@ -45,6 +45,14 @@ import {
   Trash2,
 } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import {
+  formatLocal,
+  formatLocalLong,
+  formatUtc,
+  isoToLocalInput,
+  localInputToIso,
+  localTimeZone,
+} from "@/lib/format-datetime";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/announcements")({
   head: () => ({ meta: [{ title: "Admin · Announcements — n8n-mcp" }] }),
@@ -66,22 +74,6 @@ type Announcement = {
 const TITLE_MAX = 200;
 const BODY_MAX = 5000;
 
-// Convert local datetime-input value to ISO; empty -> null.
-function localInputToIso(v: string): string | null {
-  if (!v) return null;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-// Convert ISO -> "YYYY-MM-DDTHH:mm" for <input type="datetime-local">.
-function isoToLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
-}
 
 function StatusBadge({ a }: { a: Announcement }) {
   if (a.status === "draft") return <Badge variant="secondary">Draft</Badge>;
@@ -123,8 +115,8 @@ function WhatsNewPreview({
       </div>
       <article className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center justify-between gap-3">
-          <time className="text-xs text-muted-foreground" title={stamp.toLocaleString()}>
-            {stamp.toLocaleString()}
+          <time className="text-xs text-muted-foreground" title={formatLocalLong(stamp)}>
+            {formatLocal(stamp)}
           </time>
           <Badge>Latest</Badge>
         </div>
@@ -494,14 +486,21 @@ function AdminAnnouncements() {
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <StatusBadge a={a} />
           {a.status === "scheduled" && a.scheduled_for ? (
-            <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-flex items-center gap-1"
+              title={formatLocalLong(a.scheduled_for)}
+            >
               <Clock className="h-3 w-3" />
-              Publishes {new Date(a.scheduled_for).toLocaleString()}
+              Publishes {formatLocal(a.scheduled_for)}
             </span>
           ) : a.status === "published" ? (
-            <span>Published {new Date(a.published_at).toLocaleString()}</span>
+            <span title={formatLocalLong(a.published_at)}>
+              Published {formatLocal(a.published_at)}
+            </span>
           ) : (
-            <span>Draft · saved {new Date(a.published_at).toLocaleString()}</span>
+            <span title={formatLocalLong(a.published_at)}>
+              Draft · saved {formatLocal(a.published_at)}
+            </span>
           )}
         </div>
         <div className="mt-1 font-semibold">{a.title}</div>
@@ -635,6 +634,16 @@ function AdminAnnouncements() {
                   value={scheduledFor}
                   onChange={(e) => setScheduledFor(e.target.value)}
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  Times use your local zone <strong>{localTimeZone}</strong>.
+                  {scheduledFor && (
+                    <>
+                      {" "}
+                      Saved as <span className="font-mono">{formatUtc(localInputToIso(scheduledFor))}</span>;
+                      readers see it in their own zone.
+                    </>
+                  )}
+                </p>
               </div>
             )}
           </div>
@@ -752,8 +761,11 @@ function AdminAnnouncements() {
                               {e.action}
                             </Badge>
                             <span className="font-medium">{actorName}</span>
-                            <span className="text-muted-foreground">
-                              · {new Date(e.created_at).toLocaleString()}
+                            <span
+                              className="text-muted-foreground"
+                              title={formatLocalLong(e.created_at)}
+                            >
+                              · {formatLocal(e.created_at)}
                             </span>
                           </div>
                           <div className="mt-1 truncate text-sm">
@@ -863,6 +875,15 @@ function AdminAnnouncements() {
                     value={editScheduledFor}
                     onChange={(e) => setEditScheduledFor(e.target.value)}
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    {localTimeZone}
+                    {editScheduledFor && (
+                      <>
+                        {" "}
+                        · <span className="font-mono">{formatUtc(localInputToIso(editScheduledFor))}</span>
+                      </>
+                    )}
+                  </p>
                 </div>
               )}
             </div>

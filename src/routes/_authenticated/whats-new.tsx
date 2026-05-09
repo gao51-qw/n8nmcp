@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, Megaphone, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { formatLocal, formatLocalLong } from "@/lib/format-datetime";
 
 const PAGE_SIZE = 5;
 
@@ -109,7 +110,9 @@ function WhatsNew() {
                     <time
                       dateTime={a.published_at}
                       className="text-xs text-muted-foreground"
-                      title={new Date(a.published_at).toLocaleString()}
+                      title={`${formatLocalLong(a.published_at)} — exact: ${formatLocal(
+                        a.published_at,
+                      )}`}
                     >
                       {relativeTime(a.published_at)}
                     </time>
