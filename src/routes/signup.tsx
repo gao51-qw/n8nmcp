@@ -38,11 +38,11 @@ function Signup() {
     toast.success("Check your email to confirm your account.");
   };
 
-  const handleGoogle = async () => {
-    const result = await lovable.auth.signInWithOAuth("google", {
+  const handleOAuth = async (provider: "google" | "apple") => {
+    const result = await lovable.auth.signInWithOAuth(provider, {
       redirect_uri: window.location.origin + "/dashboard",
     });
-    if (result.error) toast.error("Google sign-in failed");
+    if (result.error) toast.error(`${provider} sign-in failed`);
   };
 
   return (
@@ -58,9 +58,14 @@ function Signup() {
           <h1 className="text-xl font-semibold">Create your account</h1>
           <p className="mt-1 text-sm text-muted-foreground">Start with the free tier</p>
 
-          <Button variant="outline" className="mt-6 w-full" onClick={handleGoogle}>
-            Continue with Google
-          </Button>
+          <div className="mt-6 grid gap-2">
+            <Button variant="outline" className="w-full" onClick={() => handleOAuth("google")}>
+              Continue with Google
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => handleOAuth("apple")}>
+              Continue with Apple
+            </Button>
+          </div>
 
           <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
             <div className="h-px flex-1 bg-border" /> OR <div className="h-px flex-1 bg-border" />
