@@ -209,7 +209,7 @@ function AdminAnnouncements() {
       actor_id: user.id,
       action,
       summary,
-      changes,
+      changes: changes as never,
     });
     if (error) console.warn("audit log insert failed", error);
   };
