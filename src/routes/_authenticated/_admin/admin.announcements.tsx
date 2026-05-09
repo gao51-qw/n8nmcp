@@ -71,6 +71,85 @@ type Announcement = {
   scheduled_for: string | null;
 };
 
+const FIELD_LABELS: Record<string, string> = {
+  title: "Title",
+  body: "Body",
+  status: "Status",
+  scheduled_for: "Scheduled for",
+  published_at: "Published at",
+};
+
+const DATE_FIELDS = new Set(["scheduled_for", "published_at"]);
+
+function formatDiffValue(field: string, value: unknown): string {
+  if (value === null || value === undefined || value === "") return "—";
+  if (DATE_FIELDS.has(field) && typeof value === "string") {
+    try {
+      return formatLocal(value);
+    } catch {
+      return String(value);
+    }
+  }
+  if (typeof value === "string") return value;
+  return JSON.stringify(value);
+}
+
+function ChangesDiff({
+  changes,
+}: {
+  changes: {
+    changes?: Record<string, { from: unknown; to: unknown }>;
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+  };
+}) {
+  const diff = changes.changes ?? {};
+  const entries = Object.entries(diff);
+  if (!entries.length) {
+    return (
+      <p className="mt-2 rounded bg-muted px-3 py-2 text-xs text-muted-foreground">
+        No field-level changes recorded.
+      </p>
+    );
+  }
+  return (
+    <dl className="mt-2 space-y-2 rounded border border-border bg-muted/40 p-3">
+      {entries.map(([field, { from, to }]) => {
+        const label = FIELD_LABELS[field] ?? field;
+        const isLong =
+          field === "body" ||
+          (typeof from === "string" && from.length > 80) ||
+          (typeof to === "string" && to.length > 80);
+        return (
+          <div key={field} className="text-xs">
+            <dt className="mb-1 font-medium text-foreground">{label}</dt>
+            <dd
+              className={
+                isLong
+                  ? "grid gap-1.5"
+                  : "grid items-center gap-1.5 sm:grid-cols-[1fr_auto_1fr]"
+              }
+            >
+              <span className="rounded bg-destructive/10 px-2 py-1 font-mono text-[11px] leading-relaxed text-destructive line-through decoration-destructive/60 whitespace-pre-wrap break-words">
+                {formatDiffValue(field, from)}
+              </span>
+              <span
+                aria-hidden
+                className="text-center text-muted-foreground sm:px-1"
+              >
+                →
+              </span>
+              <span className="rounded bg-emerald-500/10 px-2 py-1 font-mono text-[11px] leading-relaxed text-emerald-700 dark:text-emerald-400 whitespace-pre-wrap break-words">
+                {formatDiffValue(field, to)}
+              </span>
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
 const TITLE_MAX = 200;
 const BODY_MAX = 5000;
 
