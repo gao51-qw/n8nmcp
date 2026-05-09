@@ -308,22 +308,31 @@ function ConnectPage() {
       <div className="grid gap-4 md:grid-cols-2">
         {filtered.map((p) => {
           const block = p.build(url, token);
+          const open = expanded[p.id] ?? false;
           return (
-            <div key={p.id} className="rounded-xl border border-border bg-card p-5">
-              <div className="flex items-start justify-between gap-2">
-                <div>
+            <div key={p.id} className="rounded-xl border border-border bg-card">
+              <button
+                type="button"
+                onClick={() => setExpanded((s) => ({ ...s, [p.id]: !open }))}
+                className="flex w-full items-start justify-between gap-2 rounded-xl p-5 text-left transition-colors hover:bg-muted/30"
+                aria-expanded={open}
+              >
+                <div className="min-w-0">
                   <div className="text-base font-semibold">{p.name}</div>
-                  <div className="mt-0.5 text-xs text-muted-foreground">{p.description}</div>
+                  <div className="mt-0.5 truncate text-xs text-muted-foreground">{p.description}</div>
                 </div>
-                <Badge variant="secondary" className="uppercase">
-                  {p.category}
-                </Badge>
-              </div>
-              <div className="mt-3">
-                <CodeBlock code={block.code} lang={block.lang} />
-              </div>
-              {block.note && (
-                <p className="mt-2 text-xs text-muted-foreground">{block.note}</p>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="secondary" className="uppercase">{p.category}</Badge>
+                  <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+                </div>
+              </button>
+              {open && (
+                <div className="px-5 pb-5">
+                  <CodeBlock code={block.code} lang={block.lang} />
+                  {block.note && (
+                    <p className="mt-2 text-xs text-muted-foreground">{block.note}</p>
+                  )}
+                </div>
               )}
             </div>
           );
