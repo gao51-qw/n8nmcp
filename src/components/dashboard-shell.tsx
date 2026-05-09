@@ -11,8 +11,11 @@ import {
   Users,
   LogOut,
   Sparkles,
+  Plug,
+  MessagesSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -20,6 +23,8 @@ const NAV = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/instances", label: "n8n Instances", icon: Server },
   { to: "/api-keys", label: "API Keys", icon: KeyRound },
+  { to: "/connect", label: "Connect Client", icon: Plug },
+  { to: "/chat", label: "Chat Agent", icon: MessagesSquare },
   { to: "/usage", label: "Usage", icon: BarChart3 },
   { to: "/billing", label: "Billing", icon: CreditCard },
   { to: "/whats-new", label: "What's New", icon: Megaphone },
@@ -59,7 +64,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
         <nav className="flex-1 space-y-1 p-3">
           {NAV.map((item) => {
-            const active = location.pathname.startsWith(item.to);
+            const active = location.pathname === item.to || location.pathname.startsWith(item.to + "/");
             const Icon = item.icon;
             return (
               <Link
@@ -115,6 +120,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       <main className="flex-1 overflow-x-hidden">
+        <div className="flex h-12 items-center justify-end gap-1 border-b border-border px-4 md:px-6">
+          <ThemeToggle />
+        </div>
         <div className="mx-auto max-w-6xl p-6 md:p-10">{children}</div>
       </main>
     </div>
