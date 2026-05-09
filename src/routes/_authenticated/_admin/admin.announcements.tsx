@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -15,7 +16,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2, Megaphone, Trash2 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Loader2, Megaphone, Pencil, Trash2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/announcements")({
   head: () => ({ meta: [{ title: "Admin · Announcements — n8n-mcp" }] }),
@@ -30,11 +39,19 @@ type Announcement = {
   created_by: string | null;
 };
 
+const TITLE_MAX = 200;
+const BODY_MAX = 5000;
+
 function AdminAnnouncements() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
+
+  const [editing, setEditing] = useState<Announcement | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editBody, setEditBody] = useState("");
+  const [republish, setRepublish] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-announcements"],
@@ -50,9 +67,14 @@ function AdminAnnouncements() {
 
   const create = useMutation({
     mutationFn: async () => {
+      const t = title.trim();
+      const b = body.trim();
+      if (!t || !b) throw new Error("Title and body are required");
+      if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
+      if (b.length > BODY_MAX) throw new Error(`Body must be under ${BODY_MAX} chars`);
       const { error } = await supabase.from("announcements").insert({
-        title: title.trim(),
-        body: body.trim(),
+        title: t,
+        body: b,
         created_by: user?.id ?? null,
       });
       if (error) throw error;
@@ -62,6 +84,32 @@ function AdminAnnouncements() {
       setTitle("");
       setBody("");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const update = useMutation({
+    mutationFn: async () => {
+      if (!editing) return;
+      const t = editTitle.trim();
+      const b = editBody.trim();
+      if (!t || !b) throw new Error("Title and body are required");
+      if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
+      if (b.length > BODY_MAX) throw new Error(`Body must be under ${BODY_MAX} chars`);
+      const patch = republish
+        ? { title: t, body: b, published_at: new Date().toISOString() }
+        : { title: t, body: b };
+      const { error } = await supabase
+        .from("announcements")
+        .update(patch)
+        .eq("id", editing.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success(republish ? "Updated and republished" : "Updated");
+      setEditing(null);
+      qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
@@ -77,6 +125,13 @@ function AdminAnnouncements() {
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const openEdit = (a: Announcement) => {
+    setEditing(a);
+    setEditTitle(a.title);
+    setEditBody(a.body);
+    setRepublish(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -103,7 +158,7 @@ function AdminAnnouncements() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="MCP gateway now supports streaming"
-              maxLength={200}
+              maxLength={TITLE_MAX}
             />
           </div>
           <div className="space-y-2">
@@ -114,6 +169,7 @@ function AdminAnnouncements() {
               onChange={(e) => setBody(e.target.value)}
               placeholder="What changed and why it matters."
               rows={6}
+              maxLength={BODY_MAX}
             />
           </div>
           <div className="flex justify-end">
@@ -157,20 +213,82 @@ function AdminAnnouncements() {
                     {a.body}
                   </p>
                 </div>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="text-destructive shrink-0"
-                  onClick={() => remove.mutate(a.id)}
-                  disabled={remove.isPending}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                <div className="flex shrink-0 gap-1">
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => openEdit(a)}
+                    title="Edit"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => remove.mutate(a.id)}
+                    disabled={remove.isPending}
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             ))
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Edit announcement</DialogTitle>
+            <DialogDescription>
+              Update the title or body. Optionally republish to bump it to the top of What's New.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-title">Title</Label>
+              <Input
+                id="edit-title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                maxLength={TITLE_MAX}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-body">Body</Label>
+              <Textarea
+                id="edit-body"
+                value={editBody}
+                onChange={(e) => setEditBody(e.target.value)}
+                rows={8}
+                maxLength={BODY_MAX}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <Checkbox
+                checked={republish}
+                onCheckedChange={(v) => setRepublish(v === true)}
+              />
+              Republish (update timestamp to now)
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => update.mutate()}
+              disabled={!editTitle.trim() || !editBody.trim() || update.isPending}
+            >
+              {update.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+              Save changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
