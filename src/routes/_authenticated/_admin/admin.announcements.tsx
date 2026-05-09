@@ -879,9 +879,8 @@ function AdminAnnouncements() {
                           Hide
                         </span>
                       </summary>
-                      <pre className="mt-2 max-h-64 overflow-auto rounded bg-muted p-3 text-[11px] leading-relaxed">
-                        {JSON.stringify(changes, null, 2)}
-                      </pre>
+                      <ChangesDiff changes={changes} />
+
                     </details>
                   </li>
                 );
