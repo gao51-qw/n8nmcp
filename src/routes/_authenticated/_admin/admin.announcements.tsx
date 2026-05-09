@@ -270,16 +270,26 @@ function AdminAnnouncements() {
     action: AuditAction,
     summary: string,
     changes: Record<string, unknown>,
-  ) => {
-    if (!user?.id) return;
-    const { error } = await supabase.from("announcement_audit_logs").insert({
-      announcement_id: announcementId,
-      actor_id: user.id,
-      action,
-      summary,
-      changes: changes as never,
-    });
-    if (error) console.warn("audit log insert failed", error);
+  ): Promise<string | null> => {
+    if (!user?.id) return null;
+    const { data, error } = await supabase
+      .from("announcement_audit_logs")
+      .insert({
+        announcement_id: announcementId,
+        actor_id: user.id,
+        action,
+        summary,
+        changes: changes as never,
+      })
+      .select("id")
+      .single();
+    if (error) {
+      console.warn("audit log insert failed", error);
+      return null;
+    }
+    // Mark as seen so the realtime subscription doesn't re-toast our own write.
+    if (data?.id) seenAuditIds.current.add(data.id);
+    return data?.id ?? null;
   };
 
   // Diff two announcement snapshots into { field: { from, to } } pairs so the
