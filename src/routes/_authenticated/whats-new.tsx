@@ -114,9 +114,7 @@ function WhatsNew() {
                     {isFreshest && <Badge>Latest</Badge>}
                   </div>
                   <h2 className="mt-2 text-lg font-semibold">{a.title}</h2>
-                  <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
-                    {a.body}
-                  </p>
+                  <Markdown className="mt-2">{a.body}</Markdown>
                 </article>
               );
             })}

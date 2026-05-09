@@ -209,9 +209,7 @@ function AdminAnnouncements() {
                     {new Date(a.published_at).toLocaleString()}
                   </div>
                   <div className="mt-1 font-semibold">{a.title}</div>
-                  <p className="mt-1 whitespace-pre-line text-sm text-muted-foreground">
-                    {a.body}
-                  </p>
+                  <Markdown className="mt-1">{a.body}</Markdown>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <Button
