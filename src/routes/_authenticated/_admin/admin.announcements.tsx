@@ -248,6 +248,42 @@ function AdminAnnouncements() {
     },
   });
 
+  // Live-update audit list + show toast when ANOTHER admin session (or the
+  // pg_cron auto-publisher, if it ever logs) writes a new audit row.
+  useEffect(() => {
+    const channel = supabase
+      .channel("announcement-audit-stream")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "announcement_audit_logs" },
+        (payload) => {
+          const row = payload.new as {
+            id: string;
+            action: string;
+            summary: string | null;
+            actor_id: string | null;
+          };
+          // Skip echoes of writes we already toasted in this tab.
+          if (seenAuditIds.current.has(row.id)) return;
+          seenAuditIds.current.add(row.id);
+          // Skip our own writes that happened in another tab where we already
+          // hold the actor session — we still want to know, so show as a
+          // lighter "info" toast instead of suppressing entirely.
+          const isSelf = row.actor_id && user?.id && row.actor_id === user.id;
+          toast(isSelf ? "Synced from another tab" : "Announcement activity", {
+            description: row.summary ?? row.action,
+          });
+          qc.invalidateQueries({ queryKey: ["announcement-audit"] });
+          qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+          qc.invalidateQueries({ queryKey: ["whats-new"] });
+        },
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [qc, user?.id]);
+
   const validateBase = (t: string, b: string) => {
     if (!t || !b) throw new Error("Title and body are required");
     if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
