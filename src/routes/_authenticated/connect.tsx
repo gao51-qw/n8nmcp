@@ -222,6 +222,7 @@ function ConnectPage() {
   const [keys, setKeys] = useState<{ id: string; name: string; key_prefix: string }[]>([]);
   const [keyId, setKeyId] = useState("");
   const [filter, setFilter] = useState<"all" | "desktop" | "ide" | "cli" | "web">("all");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     supabase
