@@ -25,6 +25,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Loader2, Megaphone, Pencil, Trash2 } from "lucide-react";
+import { Markdown } from "@/components/markdown";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/announcements")({
   head: () => ({ meta: [{ title: "Admin · Announcements — n8n-mcp" }] }),
