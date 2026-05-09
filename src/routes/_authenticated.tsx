@@ -3,6 +3,8 @@ import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { DashboardShell } from "@/components/dashboard-shell";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { supabase } from "@/integrations/supabase/client";
+import { setTheme, type ThemeChoice } from "@/lib/theme";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -16,6 +18,26 @@ function AuthGate() {
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/login" });
   }, [user, loading, navigate]);
+
+  // Hydrate the user's saved theme preference (best-effort, no remote write).
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    supabase
+      .from("profiles")
+      .select("theme_preference")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        const t = data?.theme_preference as ThemeChoice | undefined;
+        if (!cancelled && t && ["light", "dark", "system"].includes(t)) {
+          void setTheme(t, { remote: false });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (loading || !user) {
     return (
