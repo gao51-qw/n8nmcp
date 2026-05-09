@@ -43,24 +43,39 @@ function Login() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4">
-      <div className="absolute right-4 top-4"><ThemeToggle /></div>
-      <div className="w-full max-w-sm space-y-6">
-        <Link to="/" className="flex items-center justify-center gap-2 font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-md" style={{ background: "var(--gradient-primary)" }}>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      {/* Ambient background glow */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-32 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
+        style={{ background: "var(--gradient-primary)" }}
+      />
+      <div className="absolute right-4 top-4 animate-in fade-in duration-500"><ThemeToggle /></div>
+      <div className="relative w-full max-w-sm space-y-6">
+        <Link
+          to="/"
+          className="flex items-center justify-center gap-2 font-semibold animate-in fade-in slide-in-from-top-2 duration-500"
+        >
+          <span
+            className="grid h-8 w-8 place-items-center rounded-md transition-transform hover:scale-110"
+            style={{ background: "var(--gradient-primary)" }}
+          >
             <Sparkles className="h-4 w-4 text-primary-foreground" />
           </span>
           n8n-mcp
         </Link>
-        <div className="rounded-xl border border-border bg-card p-6">
+        <div
+          className="rounded-xl border border-border bg-card p-6 shadow-lg animate-in fade-in zoom-in-95 slide-in-from-bottom-2 duration-500"
+          style={{ animationDelay: "80ms", animationFillMode: "both" }}
+        >
           <h1 className="text-xl font-semibold">Welcome back</h1>
           <p className="mt-1 text-sm text-muted-foreground">Sign in to your account</p>
 
           <div className="mt-6 grid gap-2">
-            <Button variant="outline" className="w-full" onClick={() => handleOAuth("google")}>
+            <Button variant="outline" className="w-full transition-transform active:scale-[.98]" onClick={() => handleOAuth("google")}>
               Continue with Google
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => handleOAuth("apple")}>
+            <Button variant="outline" className="w-full transition-transform active:scale-[.98]" onClick={() => handleOAuth("apple")}>
               Continue with Apple
             </Button>
           </div>
@@ -78,8 +93,15 @@ function Login() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
+            <Button type="submit" className="w-full transition-transform active:scale-[.98]" disabled={loading}>
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Signing in…
+                </span>
+              ) : (
+                "Sign in"
+              )}
             </Button>
           </form>
 
