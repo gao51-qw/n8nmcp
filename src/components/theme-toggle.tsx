@@ -1,33 +1,76 @@
-import { Moon, Sun } from "lucide-react";
+import { Moon, Sun, Monitor, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useEffect, useState } from "react";
 
+export type ThemeChoice = "light" | "dark" | "system";
 const STORAGE_KEY = "n8n-mcp-theme";
 
-function applyTheme(t: "dark" | "light") {
+function resolveSystem(): "light" | "dark" {
+  if (typeof window === "undefined") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme(choice: ThemeChoice) {
   if (typeof document === "undefined") return;
-  document.documentElement.classList.toggle("dark", t === "dark");
+  const effective = choice === "system" ? resolveSystem() : choice;
+  document.documentElement.classList.toggle("dark", effective === "dark");
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const [theme, setTheme] = useState<ThemeChoice>("dark");
 
   useEffect(() => {
-    const saved = (localStorage.getItem(STORAGE_KEY) as "dark" | "light" | null) ?? "dark";
+    const saved = (localStorage.getItem(STORAGE_KEY) as ThemeChoice | null) ?? "dark";
     setTheme(saved);
     applyTheme(saved);
+    // React to OS changes when in "system" mode.
+    const mql = window.matchMedia("(prefers-color-scheme: dark)");
+    const onChange = () => {
+      const cur = (localStorage.getItem(STORAGE_KEY) as ThemeChoice | null) ?? "dark";
+      if (cur === "system") applyTheme("system");
+    };
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
   }, []);
 
-  const toggle = () => {
-    const next = theme === "dark" ? "light" : "dark";
+  const choose = (next: ThemeChoice) => {
     setTheme(next);
     applyTheme(next);
     localStorage.setItem(STORAGE_KEY, next);
   };
 
+  const Icon = theme === "light" ? Sun : theme === "dark" ? Moon : Monitor;
+
   return (
-    <Button variant="ghost" size="icon" onClick={toggle} aria-label="Toggle theme">
-      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-    </Button>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="icon" aria-label="Toggle theme">
+          <Icon className="h-4 w-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-36">
+        {(
+          [
+            { v: "light", label: "Light", I: Sun },
+            { v: "dark", label: "Dark", I: Moon },
+            { v: "system", label: "System", I: Monitor },
+          ] as const
+        ).map(({ v, label, I }) => (
+          <DropdownMenuItem key={v} onClick={() => choose(v)} className="justify-between">
+            <span className="flex items-center gap-2">
+              <I className="h-4 w-4" />
+              {label}
+            </span>
+            {theme === v && <Check className="h-3.5 w-3.5 text-muted-foreground" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
