@@ -263,7 +263,7 @@ function MessageRow({ role, content, pending }: { role: "user" | "assistant"; co
         ) : isUser ? (
           <div className="whitespace-pre-wrap">{content}</div>
         ) : (
-          <Markdown content={content} />
+          <Markdown>{content}</Markdown>
         )}
       </div>
       {isUser && (
