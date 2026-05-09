@@ -20,6 +20,8 @@ import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedInstancesRouteImport } from './routes/_authenticated/instances'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
+import { Route as AuthenticatedConnectRouteImport } from './routes/_authenticated/connect'
+import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/chat'
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
@@ -81,6 +83,16 @@ const AuthenticatedDashboardRoute = AuthenticatedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedConnectRoute = AuthenticatedConnectRouteImport.update({
+  id: '/connect',
+  path: '/connect',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedChatRoute = AuthenticatedChatRouteImport.update({
+  id: '/chat',
+  path: '/chat',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
 const AuthenticatedBillingRoute = AuthenticatedBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
@@ -121,6 +133,8 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/chat': typeof AuthenticatedChatRoute
+  '/connect': typeof AuthenticatedConnectRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/instances': typeof AuthenticatedInstancesRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -138,6 +152,8 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/billing': typeof AuthenticatedBillingRoute
+  '/chat': typeof AuthenticatedChatRoute
+  '/connect': typeof AuthenticatedConnectRoute
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/instances': typeof AuthenticatedInstancesRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -158,6 +174,8 @@ export interface FileRoutesById {
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/api-keys': typeof AuthenticatedApiKeysRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
+  '/_authenticated/chat': typeof AuthenticatedChatRoute
+  '/_authenticated/connect': typeof AuthenticatedConnectRoute
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/instances': typeof AuthenticatedInstancesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -177,6 +195,8 @@ export interface FileRouteTypes {
     | '/signup'
     | '/api-keys'
     | '/billing'
+    | '/chat'
+    | '/connect'
     | '/dashboard'
     | '/instances'
     | '/settings'
@@ -194,6 +214,8 @@ export interface FileRouteTypes {
     | '/signup'
     | '/api-keys'
     | '/billing'
+    | '/chat'
+    | '/connect'
     | '/dashboard'
     | '/instances'
     | '/settings'
@@ -213,6 +235,8 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin'
     | '/_authenticated/api-keys'
     | '/_authenticated/billing'
+    | '/_authenticated/chat'
+    | '/_authenticated/connect'
     | '/_authenticated/dashboard'
     | '/_authenticated/instances'
     | '/_authenticated/settings'
@@ -312,6 +336,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedDashboardRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/connect': {
+      id: '/_authenticated/connect'
+      path: '/connect'
+      fullPath: '/connect'
+      preLoaderRoute: typeof AuthenticatedConnectRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/chat': {
+      id: '/_authenticated/chat'
+      path: '/chat'
+      fullPath: '/chat'
+      preLoaderRoute: typeof AuthenticatedChatRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/billing': {
       id: '/_authenticated/billing'
       path: '/billing'
@@ -375,6 +413,8 @@ interface AuthenticatedRouteChildren {
   AuthenticatedAdminRoute: typeof AuthenticatedAdminRouteWithChildren
   AuthenticatedApiKeysRoute: typeof AuthenticatedApiKeysRoute
   AuthenticatedBillingRoute: typeof AuthenticatedBillingRoute
+  AuthenticatedChatRoute: typeof AuthenticatedChatRoute
+  AuthenticatedConnectRoute: typeof AuthenticatedConnectRoute
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedInstancesRoute: typeof AuthenticatedInstancesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -386,6 +426,8 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedAdminRoute: AuthenticatedAdminRouteWithChildren,
   AuthenticatedApiKeysRoute: AuthenticatedApiKeysRoute,
   AuthenticatedBillingRoute: AuthenticatedBillingRoute,
+  AuthenticatedChatRoute: AuthenticatedChatRoute,
+  AuthenticatedConnectRoute: AuthenticatedConnectRoute,
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedInstancesRoute: AuthenticatedInstancesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

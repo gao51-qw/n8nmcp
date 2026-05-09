@@ -1,84 +1,148 @@
-# n8n-mcp SaaS 全栈开发计划
+## 范围
 
-目标：在当前 TanStack Start + Lovable Cloud 项目里复刻 dashboard.n8n-mcp.com 的能力，包括营销首页、控制台、平台 API Key、n8n 实例管理、用量/订阅、管理后台，以及 `/mcp` Streamable HTTP 网关。
+按差异分析，把 5 块功能全部补齐：
 
-由于体量很大，分 5 个阶段交付，每阶段都能跑通、能演示。本次先实施阶段 1+2，然后逐步推进，每完成一阶段会暂停让你确认。
-
----
-
-## 阶段 1：地基（Auth + 数据库 + 布局）
-
-1. 启用 Lovable Cloud（Supabase）。
-2. 数据库 schema（migration）：
-   - `profiles`（user_id PK → auth.users，email, display_name, plan_tier default 'free', created_at）
-   - `user_roles` + `app_role` enum（admin/user）+ `has_role()` SECURITY DEFINER
-   - `n8n_instances`（id, user_id, name, base_url, api_key_encrypted, api_key_iv, api_key_tag, status, last_checked_at, created_at）
-   - `platform_api_keys`（id, user_id, name, key_prefix, key_hash, last_used_at, created_at, revoked_at）
-   - `subscriptions`（user_id PK, tier, status, stripe_customer_id, stripe_subscription_id, current_period_end）
-   - `usage_daily`（user_id, day date, mcp_calls int, PK(user_id, day)）
-   - `mcp_call_logs`（id, user_id, instance_id, tool_name, status, latency_ms, created_at）
-   - `audit_logs`、`announcements`、`whats_new`
-   - 全部启用 RLS：用户只能读写自己的行；admin 可读所有。
-3. 注册触发器：新用户自动建 `profiles` + `subscriptions(tier='free')`。
-4. Auth：邮箱密码 + Google（自动重定向 + onAuthStateChange，按 Lovable Cloud 规范）。
-5. 路由骨架：
-   - `/`（营销首页）`/pricing` `/docs` `/login` `/signup`
-   - `_authenticated/` 守卫层
-   - `_authenticated/dashboard` `/instances` `/api-keys` `/usage` `/billing` `/settings/profile` `/whats-new`
-   - `_authenticated/_admin/admin/users`（admin 守卫）
-6. 设计系统：在 `src/styles.css` 写 oklch tokens，配色参照 n8n-mcp.com（深色科技感 + 紫蓝渐变）。侧边栏 + 顶栏 + 主内容布局。
-
-## 阶段 2：核心 CRUD
-
-1. **n8n 实例**：列表 / 新增 / 编辑 / 删除 / 测试连接。API Key 用 AES-256-GCM 加密后入库（server fn，密钥来自 `ENCRYPTION_KEY` secret）。"测试连接"在 server fn 里 fetch `${base_url}/api/v1/workflows?limit=1` 验证。
-2. **平台 API Key**：生成 `nmcp_<32 hex>`，前 8 位作 prefix 明文显示，剩余 SHA-256 哈希入库；只在创建时一次性返回完整 key；支持撤销。
-3. **Profile / Settings**：显示名、邮箱、修改密码、删除账号。
-
-## 阶段 3：MCP Streamable HTTP 网关
-
-1. 服务端路由 `src/routes/api/public/mcp.ts`，处理 `POST /api/public/mcp`：
-   - 校验 `Authorization: Bearer nmcp_...` → 查 `platform_api_keys`（按 prefix + 哈希），找到 user_id。
-   - 校验 `Accept` 同时含 `application/json` 和 `text/event-stream`、`MCP-Protocol-Version` 头。
-   - 限流：查当日 `usage_daily.mcp_calls`，free=100/day 上限，超限返 429。
-   - 解析 JSON-RPC（`initialize` / `tools/list` / `tools/call` / `ping`）。
-   - 工具集：`n8n_list_workflows`、`n8n_get_workflow`、`n8n_run_workflow`、`n8n_list_executions` 等，转发到用户配置的 n8n 实例。
-   - 返回 SSE 流（`text/event-stream`，分块写 `data: {...}\n\n`）。Worker 支持 `ReadableStream` 响应；只要不是无限长连接（按 MCP 规范每个请求是短会话）就能用。
-   - 写入 `mcp_call_logs` + `usage_daily` upsert（+1）。
-2. 在 `/dashboard` 显示连接示例（curl + Claude Desktop JSON 配置）。
-
-## 阶段 4：订阅与计费
-
-1. 启用 Lovable 内置 Stripe payments。
-2. `/billing` 页：显示当前套餐、用量进度条、升级按钮（Free / Supporter $19/mo / Pro $49/mo）。
-3. Stripe webhook（`/api/public/stripe-webhook`）→ 验签 → 更新 `subscriptions.tier`。
-
-## 阶段 5：管理后台 + 打磨
-
-1. `/admin/users` 列表（仅 admin），可看每个用户的 tier、用量、实例数。
-2. `/admin/announcements` 发布公告 → `/whats-new` 展示。
-3. 可观测性：dashboard 顶部展示当日调用次数 / 成功率折线图（Recharts）。
-4. SEO meta、404 页、空状态、加载骨架屏。
+1. **Connect Client 预设页**（前端）
+2. **Onboarding 步骤条**（前端）
+3. **Chat Agent**（前端 + 后端 + AI Gateway + 数据库）
+4. **多 OAuth + 主题切换**（前端 + 配置）
+5. **Billing 矩阵改造**（前端 + 后端 + 数据库）
 
 ---
 
-## 关键技术点
+## 1. Connect Client 预设页
 
-- **加密 key**：阶段 2 开始前我会让你添加 `ENCRYPTION_KEY` secret（64 hex = 32 字节）。
-- **MCP SDK**：Worker 不能直接用 `@modelcontextprotocol/sdk` 的 stdio 部分，但可以手写 JSON-RPC + SSE Response，按规范返回。无需安装 SDK。
-- **SSE on Worker**：用 `new Response(readableStream, { headers: { 'Content-Type': 'text/event-stream' } })`，每个 MCP 请求是 request-scoped 流，不是真长连——Cloudflare Workers 完全支持。
-- **n8n API 转发**：server fn 内 fetch `${instance.base_url}/api/v1/...`，header `X-N8N-API-KEY: ${decrypted}`。
-- **Google OAuth**：用 Lovable Cloud 内置，不需要任何额外配置。
+**新文件**：`src/routes/_authenticated/connect.tsx`
+
+- 网格卡片展示：Claude.ai、ChatGPT、Cursor、Claude Code、Codex CLI、Warp、Gemini CLI、Continue、Cline、Windsurf、Zed、VS Code、Mistral Le Chat、Raycast 等 14+ 客户端
+- 每张卡片：图标 + 名称 + "推荐配置" 代码块 + 复制按钮
+- 顶部下拉选择当前 API Key（从 `platform_api_keys` 读取），把 Bearer token 自动注入到所有片段
+- MCP 端点 URL = `${origin}/api/public/mcp`
+- 配置形态分两类：
+  - **JSON 客户端**（Claude Desktop、Cursor、VS Code、Cline、Continue、Windsurf、Zed）→ `mcpServers` 配置块
+  - **CLI 客户端**（Codex、Claude Code、Gemini CLI、Warp）→ shell 命令
+  - **网页客户端**（Claude.ai、ChatGPT、Mistral）→ "添加 Custom Connector" 引导文案 + URL/Token 字段
+
+**侧边栏**：在 `dashboard-shell.tsx` 加 "Connect Client" 菜单项。
 
 ---
 
-## 本轮我会做的事（阶段 1）
+## 2. Onboarding 步骤条
 
-1. 启用 Lovable Cloud。
-2. 写一份完整 schema migration（含 RLS、触发器、enum）。
-3. 搭出所有路由骨架 + 守卫 + 侧边栏布局 + 设计系统 tokens。
-4. 实现登录/注册/Google 登录页面 + onAuthStateChange。
-5. Dashboard 首页显示欢迎 + 占位卡片。
+**新组件**：`src/components/onboarding-steps.tsx`
 
-完成后停下来给你看，确认 OK 再进阶段 2。
+- 4 步：
+  1. 添加 n8n 实例（查 `n8n_instances` 数量 > 0）
+  2. 生成 API Key（查 `platform_api_keys` 未撤销数量 > 0）
+  3. 连接客户端（前端 localStorage 标记，访问 /connect 后置 1）
+  4. 首次 MCP 调用（查 `mcp_call_logs` 总数 > 0）
+- 顶部 progress bar + checklist，全部完成后显示"完成"提示且 7 天内可关闭（localStorage）
+- 嵌入 `dashboard.tsx` 顶部
 
-预计本轮产出文件：~20 个（routes、components、migration、styles、auth hook、布局）。
+新增 server function `getOnboardingStatus`，单次返回 4 个布尔。
+
+---
+
+## 3. Chat Agent
+
+**数据库迁移**：
+```sql
+create table chat_conversations (
+  id uuid pk default gen_random_uuid(),
+  user_id uuid not null,
+  title text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+create table chat_messages (
+  id uuid pk default gen_random_uuid(),
+  conversation_id uuid not null references chat_conversations on delete cascade,
+  role text not null check (role in ('user','assistant','system')),
+  content text not null,
+  created_at timestamptz default now()
+);
+-- RLS: 仅本人可读写
+```
+
+**Edge Function**：`supabase/functions/chat-agent/index.ts`
+- 使用 Lovable AI Gateway，模型 `google/gemini-3-flash-preview`
+- 系统提示词：你是 n8n workflow 生成助手，输出 JSON workflow 时使用代码块
+- SSE 流式返回
+- 处理 429/402
+
+**新路由**：`src/routes/_authenticated/chat.tsx`
+- 左侧会话列表，右侧消息流
+- markdown 渲染（已有 `markdown.tsx`）
+- "应用到 n8n" 按钮：检测 assistant 消息中的 ```json workflow 代码块，POST 到用户选中的 n8n 实例 `/api/v1/workflows`
+
+**侧边栏**：加 "Chat Agent" 菜单项。
+
+---
+
+## 4. 多 OAuth + 主题切换
+
+- 调用 `supabase--configure_social_auth` 启用 Apple（Google 已启用）
+- `login.tsx` / `signup.tsx` 加 "用 Apple 登录" 按钮（用 `lovable.auth.signInWithOAuth("apple", ...)`）
+- **主题切换组件**：`src/components/theme-toggle.tsx` —— 切换 `<html class="dark">` + 写入 localStorage
+- 在 `dashboard-shell.tsx` 顶部 header 放置切换按钮
+- `__root.tsx` 启动时根据 localStorage 设置初始主题
+
+---
+
+## 5. Billing 矩阵改造
+
+**数据库迁移**：
+```sql
+create table prompt_usage_daily (
+  user_id uuid not null,
+  day date not null,
+  prompts int not null default 0,
+  primary key (user_id, day)
+);
+create function increment_prompt_usage(_user_id uuid, _n int default 1) ...
+create function get_today_prompt_usage(_user_id uuid) returns int ...
+-- RLS: 仅本人可读
+```
+
+**`src/lib/tiers.ts`** 改为矩阵：
+```ts
+{
+  free:    { prompts_day: 5,   calls_day: 100,    rpm: 50,  features: [...] },
+  pro:     { prompts_day: 200, calls_day: 100000, rpm: 100, features: [...chat-agent] },
+  enterprise: { prompts_day: -1, calls_day: -1, rpm: 1000, features: [...] },
+}
+```
+
+**`src/routes/_authenticated/billing.tsx`**：把当前的 daily-only 卡片改为 4 维矩阵表格 + 当前用量进度条（prompts/day、calls/day、rpm、features 解锁列表）。
+
+**Chat Agent edge function** 调用 `increment_prompt_usage`，并在超限时返回 429 + 提示升级。
+
+**MCP 端点**（`src/routes/api/public/mcp.ts`）加滚动窗口 RPM 限制（用内存 Map 即可，单 worker 实例足够）。
+
+---
+
+## 实施顺序与文件清单
+
+1. 多 OAuth + 主题切换（最快、最直观）
+2. Connect Client 预设页 + 侧边栏
+3. Onboarding 步骤条
+4. 数据库迁移（chat_conversations、chat_messages、prompt_usage_daily + functions）
+5. Billing 矩阵改造（tiers + billing 页 + MCP 限流）
+6. Chat Agent（edge function + 路由 + apply-to-n8n）
+
+预计修改/新增 ~15 个文件 + 2 次数据库迁移 + 1 个 edge function + 1 次 social auth 配置。
+
+---
+
+## 用户可见入口（侧边栏菜单变化）
+
+```
+Dashboard
+Instances
+API Keys
+Connect Client   ← 新
+Chat Agent       ← 新
+Usage
+Billing
+Settings
+```
