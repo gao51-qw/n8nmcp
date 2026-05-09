@@ -433,7 +433,15 @@ function AdminAnnouncements() {
       await logAudit(editing.id, action, summary, { changes });
     },
     onSuccess: () => {
-      toast.success("Updated");
+      const wasRepublish =
+        editing?.status === "published" &&
+        editStatus === "published" &&
+        republish;
+      notify(
+        wasRepublish ? "republish" : "update",
+        editTitle.trim() || editing?.title || "(untitled)",
+        wasRepublish ? "bumped to top of What's New" : undefined,
+      );
       setEditing(null);
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
