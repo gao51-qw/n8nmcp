@@ -41,6 +41,7 @@ import {
   Loader2,
   Megaphone,
   Pencil,
+  Search,
   Send,
   Trash2,
 } from "lucide-react";
