@@ -19,7 +19,8 @@ function AuthGate() {
 
   if (loading || !user) {
     return (
-      <div className="grid min-h-screen place-items-center">
+      <div className="relative grid min-h-screen place-items-center">
+        <div className="absolute right-4 top-4"><ThemeToggle /></div>
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
