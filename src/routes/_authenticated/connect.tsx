@@ -203,8 +203,8 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
   };
   return (
     <div className="relative">
-      <pre className="overflow-x-auto rounded-md bg-muted/60 p-3 text-xs leading-relaxed">
-        <code className={`language-${lang}`}>{code}</code>
+      <pre className="max-h-80 overflow-y-auto rounded-md bg-muted/60 p-3 pr-10 text-xs leading-relaxed scrollbar-thin">
+        <code className={`language-${lang} whitespace-pre-wrap break-all`}>{code}</code>
       </pre>
       <Button
         size="sm"
