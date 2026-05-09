@@ -470,7 +470,7 @@ function AdminAnnouncements() {
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => publishNow.mutate(a.id)}
+            onClick={() => publishNow.mutate(a)}
             disabled={publishNow.isPending}
             title="Publish now"
           >
