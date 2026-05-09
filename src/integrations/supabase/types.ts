@@ -258,12 +258,17 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_today_mcp_usage: { Args: { _user_id: string }; Returns: number }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_mcp_usage: {
+        Args: { _n?: number; _user_id: string }
+        Returns: undefined
       }
     }
     Enums: {
