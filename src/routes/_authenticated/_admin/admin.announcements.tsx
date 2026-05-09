@@ -437,14 +437,35 @@ function AdminAnnouncements() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="body">Body</Label>
-            <Textarea
-              id="body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder="What changed and why it matters."
-              rows={6}
-              maxLength={BODY_MAX}
-            />
+            <Tabs defaultValue="write">
+              <TabsList>
+                <TabsTrigger value="write">
+                  <Pencil className="mr-1 h-3 w-3" /> Write
+                </TabsTrigger>
+                <TabsTrigger value="preview">
+                  <Eye className="mr-1 h-3 w-3" /> Preview
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="write" className="mt-2">
+                <Textarea
+                  id="body"
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  placeholder="What changed and why it matters."
+                  rows={6}
+                  maxLength={BODY_MAX}
+                />
+              </TabsContent>
+              <TabsContent value="preview" className="mt-2">
+                <WhatsNewPreview
+                  title={title}
+                  body={body}
+                  publishAt={
+                    mode === "scheduled" ? localInputToIso(scheduledFor) : null
+                  }
+                />
+              </TabsContent>
+            </Tabs>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
