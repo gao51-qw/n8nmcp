@@ -100,6 +100,12 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="en" className="dark">
       <head>
         <HeadContent />
+        <script
+          // Apply persisted theme before paint to avoid FOUC
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('n8n-mcp-theme')||'dark';if(t==='light')document.documentElement.classList.remove('dark');else document.documentElement.classList.add('dark');}catch(e){}`,
+          }}
+        />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
         {children}
