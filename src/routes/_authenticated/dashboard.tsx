@@ -3,6 +3,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Server, KeyRound, BarChart3, Sparkles } from "lucide-react";
+import { QuotaCard } from "@/components/quota-card";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({ meta: [{ title: "Dashboard — n8n-mcp" }] }),
