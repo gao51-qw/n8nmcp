@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, Megaphone, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
+import { formatLocal, formatLocalLong } from "@/lib/format-datetime";
 
 const PAGE_SIZE = 5;
 
