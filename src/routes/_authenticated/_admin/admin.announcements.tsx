@@ -519,8 +519,8 @@ function AdminAnnouncements() {
         },
       );
     },
-    onSuccess: () => {
-      toast.success("Schedule canceled — moved to Draft");
+    onSuccess: (_, a) => {
+      notify("cancel_schedule", a.title, "moved back to Draft");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
     },
