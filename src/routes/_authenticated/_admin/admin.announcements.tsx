@@ -706,6 +706,84 @@ function AdminAnnouncements() {
         );
       })}
 
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <History className="h-4 w-4" /> Audit log
+            <span className="text-muted-foreground">
+              ({auditData?.entries.length ?? 0})
+            </span>
+          </CardTitle>
+          <CardDescription>
+            Last 50 actions on announcements — who did what, when, and which fields
+            changed. Auto-publish runs by the system are not captured here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {auditLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </div>
+          ) : !auditData?.entries.length ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No activity yet — your next edit will appear here.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border">
+              {auditData.entries.map((e) => {
+                const actor = e.actor_id ? auditData.actors[e.actor_id] : null;
+                const actorName =
+                  actor?.display_name || actor?.email || "Unknown admin";
+                const announcement = e.announcement_id
+                  ? data?.find((a) => a.id === e.announcement_id)
+                  : null;
+                const changes = (e.changes ?? {}) as {
+                  changes?: Record<string, { from: unknown; to: unknown }>;
+                  before?: Record<string, unknown>;
+                  after?: Record<string, unknown>;
+                };
+                return (
+                  <li key={e.id} className="py-3">
+                    <details className="group">
+                      <summary className="flex cursor-pointer items-center justify-between gap-3 list-none">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 text-xs">
+                            <Badge variant="outline" className="font-mono">
+                              {e.action}
+                            </Badge>
+                            <span className="font-medium">{actorName}</span>
+                            <span className="text-muted-foreground">
+                              · {new Date(e.created_at).toLocaleString()}
+                            </span>
+                          </div>
+                          <div className="mt-1 truncate text-sm">
+                            {e.summary || "—"}
+                            {announcement && (
+                              <span className="ml-1 text-muted-foreground">
+                                — "{announcement.title}"
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground group-open:hidden">
+                          Show
+                        </span>
+                        <span className="hidden shrink-0 text-xs text-muted-foreground group-open:inline">
+                          Hide
+                        </span>
+                      </summary>
+                      <pre className="mt-2 max-h-64 overflow-auto rounded bg-muted p-3 text-[11px] leading-relaxed">
+                        {JSON.stringify(changes, null, 2)}
+                      </pre>
+                    </details>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
+
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
