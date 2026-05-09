@@ -274,8 +274,15 @@ function AdminAnnouncements() {
         };
       }
 
-      const { error } = await supabase.from("announcements").insert(row);
+      const { data: inserted, error } = await supabase
+        .from("announcements")
+        .insert(row)
+        .select("id")
+        .single();
       if (error) throw error;
+      await logAudit(inserted?.id ?? null, "create", `Created (${row.status})`, {
+        after: row,
+      });
     },
     onSuccess: () => {
       toast.success(
