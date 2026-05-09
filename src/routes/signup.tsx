@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({ meta: [{ title: "Sign up — n8n-mcp" }] }),
