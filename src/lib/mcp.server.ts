@@ -3,17 +3,12 @@
 // Rate limit: in-memory token bucket per user + daily quota check via usage_daily.
 import { hashPlatformApiKey, decryptSecret } from "./crypto.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { TIER_DAILY_LIMITS, type Tier } from "./tiers";
 
 export type AuthedKey = {
   user_id: string;
   key_id: string;
-  tier: string; // free | pro | enterprise
-};
-
-const TIER_DAILY_LIMITS: Record<string, number> = {
-  free: 1000,
-  pro: 100_000,
-  enterprise: 1_000_000,
+  tier: Tier;
 };
 
 // In-memory short-window throttle (per Worker isolate). 60 req / 10s per user.
