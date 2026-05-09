@@ -494,8 +494,8 @@ function AdminAnnouncements() {
         }),
       });
     },
-    onSuccess: () => {
-      toast.success("Published");
+    onSuccess: (_, a) => {
+      notify("publish", a.title, "now live on What's New");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
       qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
