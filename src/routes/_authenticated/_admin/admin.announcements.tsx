@@ -914,8 +914,8 @@ function AdminAnnouncements() {
               No activity yet — your next edit will appear here.
             </p>
           ) : (
-            <ul className="divide-y divide-border">
-              {auditData.entries.map((e) => {
+            (() => {
+              const entries = auditData.entries.map((e) => {
                 const actor = e.actor_id ? auditData.actors[e.actor_id] : null;
                 const actorName =
                   actor?.display_name || actor?.email || "Unknown admin";
@@ -927,46 +927,93 @@ function AdminAnnouncements() {
                   before?: Record<string, unknown>;
                   after?: Record<string, unknown>;
                 };
-                return (
-                  <li key={e.id} className="py-3">
-                    <details className="group">
-                      <summary className="flex cursor-pointer items-center justify-between gap-3 list-none">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2 text-xs">
-                            <Badge variant="outline" className="font-mono">
-                              {e.action}
-                            </Badge>
-                            <span className="font-medium">{actorName}</span>
-                            <span
-                              className="text-muted-foreground"
-                              title={formatLocalLong(e.created_at)}
-                            >
-                              · {formatLocal(e.created_at)}
-                            </span>
-                          </div>
-                          <div className="mt-1 truncate text-sm">
-                            {e.summary || "—"}
-                            {announcement && (
-                              <span className="ml-1 text-muted-foreground">
-                                — "{announcement.title}"
+                return { e, actorName, announcement, changes };
+              });
+              const q = auditQuery.trim().toLowerCase();
+              const filtered = q
+                ? entries.filter(({ e, actorName, announcement, changes }) => {
+                    const haystack: string[] = [
+                      e.action,
+                      e.summary ?? "",
+                      actorName,
+                      announcement?.title ?? "",
+                      announcement?.body ?? "",
+                    ];
+                    const diff = changes.changes ?? {};
+                    for (const [field, { from, to }] of Object.entries(diff)) {
+                      haystack.push(field);
+                      if (from != null) haystack.push(String(from));
+                      if (to != null) haystack.push(String(to));
+                    }
+                    return haystack.join(" \u0001 ").toLowerCase().includes(q);
+                  })
+                : entries;
+              return (
+                <>
+                  <div className="relative mb-3">
+                    <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      value={auditQuery}
+                      onChange={(ev) => setAuditQuery(ev.target.value)}
+                      placeholder="Search by title, summary, action, actor, or field changes…"
+                      className="pl-8"
+                      aria-label="Search audit log"
+                    />
+                    {auditQuery && (
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {filtered.length} of {entries.length} matching
+                      </div>
+                    )}
+                  </div>
+                  {filtered.length === 0 ? (
+                    <p className="py-4 text-center text-sm text-muted-foreground">
+                      No entries match "{auditQuery}".
+                    </p>
+                  ) : (
+                    <ul className="divide-y divide-border">
+                      {filtered.map(({ e, actorName, announcement, changes }) => (
+                        <li key={e.id} className="py-3">
+                          <details className="group">
+                            <summary className="flex cursor-pointer items-center justify-between gap-3 list-none">
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 text-xs">
+                                  <Badge variant="outline" className="font-mono">
+                                    {e.action}
+                                  </Badge>
+                                  <span className="font-medium">{actorName}</span>
+                                  <span
+                                    className="text-muted-foreground"
+                                    title={formatLocalLong(e.created_at)}
+                                  >
+                                    · {formatLocal(e.created_at)}
+                                  </span>
+                                </div>
+                                <div className="mt-1 truncate text-sm">
+                                  {e.summary || "—"}
+                                  {announcement && (
+                                    <span className="ml-1 text-muted-foreground">
+                                      — "{announcement.title}"
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                              <span className="shrink-0 text-xs text-muted-foreground group-open:hidden">
+                                Show
                               </span>
-                            )}
-                          </div>
-                        </div>
-                        <span className="shrink-0 text-xs text-muted-foreground group-open:hidden">
-                          Show
-                        </span>
-                        <span className="hidden shrink-0 text-xs text-muted-foreground group-open:inline">
-                          Hide
-                        </span>
-                      </summary>
-                      <ChangesDiff changes={changes} />
-
-                    </details>
-                  </li>
-                );
-              })}
-            </ul>
+                              <span className="hidden shrink-0 text-xs text-muted-foreground group-open:inline">
+                                Hide
+                              </span>
+                            </summary>
+                            <ChangesDiff changes={changes} />
+                          </details>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              );
+            })()
           )}
         </CardContent>
       </Card>
