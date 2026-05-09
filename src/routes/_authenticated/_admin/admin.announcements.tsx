@@ -486,14 +486,21 @@ function AdminAnnouncements() {
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <StatusBadge a={a} />
           {a.status === "scheduled" && a.scheduled_for ? (
-            <span className="inline-flex items-center gap-1">
+            <span
+              className="inline-flex items-center gap-1"
+              title={formatLocalLong(a.scheduled_for)}
+            >
               <Clock className="h-3 w-3" />
-              Publishes {new Date(a.scheduled_for).toLocaleString()}
+              Publishes {formatLocal(a.scheduled_for)}
             </span>
           ) : a.status === "published" ? (
-            <span>Published {new Date(a.published_at).toLocaleString()}</span>
+            <span title={formatLocalLong(a.published_at)}>
+              Published {formatLocal(a.published_at)}
+            </span>
           ) : (
-            <span>Draft · saved {new Date(a.published_at).toLocaleString()}</span>
+            <span title={formatLocalLong(a.published_at)}>
+              Draft · saved {formatLocal(a.published_at)}
+            </span>
           )}
         </div>
         <div className="mt-1 font-semibold">{a.title}</div>
