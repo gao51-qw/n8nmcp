@@ -20,6 +20,8 @@ export type Database = {
           created_by: string | null
           id: string
           published_at: string
+          scheduled_for: string | null
+          status: string
           title: string
         }
         Insert: {
@@ -27,6 +29,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           published_at?: string
+          scheduled_for?: string | null
+          status?: string
           title: string
         }
         Update: {
@@ -34,6 +38,8 @@ export type Database = {
           created_by?: string | null
           id?: string
           published_at?: string
+          scheduled_for?: string | null
+          status?: string
           title?: string
         }
         Relationships: []
@@ -270,6 +276,7 @@ export type Database = {
         Args: { _n?: number; _user_id: string }
         Returns: undefined
       }
+      publish_due_announcements: { Args: never; Returns: number }
     }
     Enums: {
       app_role: "admin" | "user"
