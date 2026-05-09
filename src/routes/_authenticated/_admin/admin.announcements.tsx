@@ -96,8 +96,9 @@ function AdminAnnouncements() {
       if (!t || !b) throw new Error("Title and body are required");
       if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
       if (b.length > BODY_MAX) throw new Error(`Body must be under ${BODY_MAX} chars`);
-      const patch: Record<string, unknown> = { title: t, body: b };
-      if (republish) patch.published_at = new Date().toISOString();
+      const patch = republish
+        ? { title: t, body: b, published_at: new Date().toISOString() }
+        : { title: t, body: b };
       const { error } = await supabase
         .from("announcements")
         .update(patch)
