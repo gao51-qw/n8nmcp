@@ -358,48 +358,78 @@ function AdminAnnouncements() {
   });
 
   const remove = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("announcements").delete().eq("id", id);
+    mutationFn: async (a: Announcement) => {
+      const { error } = await supabase.from("announcements").delete().eq("id", a.id);
       if (error) throw error;
+      await logAudit(a.id, "delete", `Deleted "${a.title}"`, {
+        before: {
+          title: a.title,
+          body: a.body,
+          status: a.status,
+          scheduled_for: a.scheduled_for,
+          published_at: a.published_at,
+        },
+      });
     },
     onSuccess: () => {
       toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
+      qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const publishNow = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (a: Announcement) => {
+      const nowIso = new Date().toISOString();
       const { error } = await supabase
         .from("announcements")
         .update({
           status: "published",
           scheduled_for: null,
-          published_at: new Date().toISOString(),
+          published_at: nowIso,
         })
-        .eq("id", id);
+        .eq("id", a.id);
       if (error) throw error;
+      await logAudit(a.id, "publish", `Published "${a.title}"`, {
+        changes: diffFields(a, {
+          ...a,
+          status: "published",
+          scheduled_for: null,
+          published_at: nowIso,
+        }),
+      });
     },
     onSuccess: () => {
       toast.success("Published");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
       qc.invalidateQueries({ queryKey: ["whats-new"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   const cancelSchedule = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (a: Announcement) => {
       const { error } = await supabase
         .from("announcements")
         .update({ status: "draft", scheduled_for: null })
-        .eq("id", id);
+        .eq("id", a.id);
       if (error) throw error;
+      await logAudit(
+        a.id,
+        "cancel_schedule",
+        `Canceled schedule for "${a.title}"`,
+        {
+          changes: diffFields(a, { ...a, status: "draft", scheduled_for: null }),
+        },
+      );
     },
     onSuccess: () => {
       toast.success("Schedule canceled — moved to Draft");
       qc.invalidateQueries({ queryKey: ["admin-announcements"] });
+      qc.invalidateQueries({ queryKey: ["announcement-audit"] });
     },
     onError: (e: Error) => toast.error(e.message),
   });
