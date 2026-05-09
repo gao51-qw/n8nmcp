@@ -481,7 +481,7 @@ function AdminAnnouncements() {
           <Button
             size="icon"
             variant="ghost"
-            onClick={() => cancelSchedule.mutate(a.id)}
+            onClick={() => cancelSchedule.mutate(a)}
             disabled={cancelSchedule.isPending}
             title="Cancel schedule (move to Draft)"
           >
