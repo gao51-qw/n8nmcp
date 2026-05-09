@@ -1,0 +1,159 @@
+// Lovable AI-powered chat agent for n8n workflow generation.
+// Auth: requires user JWT. Increments prompt_usage_daily and enforces tier limits.
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const TIER_PROMPTS_DAY: Record<string, number> = {
+  free: 5,
+  pro: 200,
+  enterprise: -1,
+};
+
+const SYSTEM = `You are an expert n8n workflow architect. When the user describes an automation, respond conversationally explaining your plan, and when appropriate include a complete valid n8n workflow JSON inside a fenced \`\`\`json code block. Use real n8n node types (e.g. n8n-nodes-base.webhook, n8n-nodes-base.httpRequest, n8n-nodes-base.set, etc.). Keep responses focused.`;
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method !== "POST") {
+    return new Response(JSON.stringify({ error: "Method not allowed" }), {
+      status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const auth = req.headers.get("Authorization") ?? "";
+    const token = auth.replace(/^Bearer\s+/i, "");
+    if (!token) return jsonErr(401, "Missing auth");
+
+    const supaUrl = Deno.env.get("SUPABASE_URL")!;
+    const anon = Deno.env.get("SUPABASE_PUBLISHABLE_KEY") ?? Deno.env.get("SUPABASE_ANON_KEY")!;
+    const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    if (!lovableKey) return jsonErr(500, "LOVABLE_API_KEY not configured");
+
+    const userClient = createClient(supaUrl, anon, {
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
+    const admin = createClient(supaUrl, service);
+
+    const { data: userData, error: uErr } = await userClient.auth.getUser();
+    if (uErr || !userData.user) return jsonErr(401, "Unauthorized");
+    const user = userData.user;
+
+    const body = await req.json();
+    const message = String(body?.message ?? "").trim();
+    let conversationId: string | null = body?.conversation_id ?? null;
+    if (!message) return jsonErr(400, "Message required");
+    if (message.length > 4000) return jsonErr(400, "Message too long (max 4000 chars)");
+
+    // Tier check
+    const { data: sub } = await admin
+      .from("subscriptions")
+      .select("tier")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    const tier = sub?.tier ?? "free";
+    const limit = TIER_PROMPTS_DAY[tier] ?? 5;
+    if (limit !== -1) {
+      const { data: usage } = await admin
+        .from("prompt_usage_daily")
+        .select("prompts")
+        .eq("user_id", user.id)
+        .eq("day", new Date().toISOString().slice(0, 10))
+        .maybeSingle();
+      const used = usage?.prompts ?? 0;
+      if (used >= limit) {
+        return jsonErr(429, `Daily prompt limit reached (${used}/${limit}). Upgrade for more.`);
+      }
+    }
+
+    // Ensure conversation
+    if (!conversationId) {
+      const { data: conv, error } = await userClient
+        .from("chat_conversations")
+        .insert({ user_id: user.id, title: message.slice(0, 60) })
+        .select("id")
+        .single();
+      if (error) return jsonErr(500, error.message);
+      conversationId = conv.id;
+    }
+
+    // Load history (last 20)
+    const { data: history } = await userClient
+      .from("chat_messages")
+      .select("role,content")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: true })
+      .limit(20);
+
+    // Insert user message
+    await userClient
+      .from("chat_messages")
+      .insert({
+        conversation_id: conversationId,
+        user_id: user.id,
+        role: "user",
+        content: message,
+      });
+
+    // Call Lovable AI Gateway
+    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${lovableKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "google/gemini-2.5-flash",
+        messages: [
+          { role: "system", content: SYSTEM },
+          ...(history ?? []).map((m) => ({ role: m.role, content: m.content })),
+          { role: "user", content: message },
+        ],
+      }),
+    });
+
+    if (!aiRes.ok) {
+      const errText = await aiRes.text();
+      if (aiRes.status === 429) return jsonErr(429, "AI rate limit, try again shortly");
+      if (aiRes.status === 402) return jsonErr(402, "AI credits exhausted — top up Lovable workspace");
+      return jsonErr(502, `AI error: ${errText.slice(0, 200)}`);
+    }
+
+    const aiJson = await aiRes.json();
+    const reply: string = aiJson?.choices?.[0]?.message?.content ?? "(empty response)";
+
+    // Persist assistant message
+    await userClient
+      .from("chat_messages")
+      .insert({
+        conversation_id: conversationId,
+        user_id: user.id,
+        role: "assistant",
+        content: reply,
+      });
+
+    // Bump usage
+    await admin.rpc("increment_prompt_usage", { _user_id: user.id, _n: 1 });
+
+    return new Response(
+      JSON.stringify({ conversation_id: conversationId, reply }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  } catch (e) {
+    console.error("chat-agent error", e);
+    return jsonErr(500, e instanceof Error ? e.message : "Internal error");
+  }
+});
+
+function jsonErr(status: number, error: string) {
+  return new Response(JSON.stringify({ error }), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
