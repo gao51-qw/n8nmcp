@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { DashboardShell } from "@/components/dashboard-shell";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated")({
