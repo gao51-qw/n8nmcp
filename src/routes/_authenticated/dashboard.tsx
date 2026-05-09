@@ -51,6 +51,8 @@ function Dashboard() {
         <StatCard icon={BarChart3} label="MCP calls today" value={stats.callsToday} />
       </div>
 
+      <QuotaCard />
+
       <div className="rounded-xl border border-border bg-card p-6">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Sparkles className="h-4 w-4 text-primary" /> Quick start
