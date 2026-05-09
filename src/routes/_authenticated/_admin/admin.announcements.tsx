@@ -875,6 +875,15 @@ function AdminAnnouncements() {
                     value={editScheduledFor}
                     onChange={(e) => setEditScheduledFor(e.target.value)}
                   />
+                  <p className="text-[11px] text-muted-foreground">
+                    {localTimeZone}
+                    {editScheduledFor && (
+                      <>
+                        {" "}
+                        · <span className="font-mono">{formatUtc(localInputToIso(editScheduledFor))}</span>
+                      </>
+                    )}
+                  </p>
                 </div>
               )}
             </div>
