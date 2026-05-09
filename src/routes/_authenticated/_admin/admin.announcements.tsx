@@ -363,12 +363,17 @@ function AdminAnnouncements() {
       });
     },
     onSuccess: () => {
-      toast.success(
-        mode === "draft"
-          ? "Saved as draft"
-          : mode === "scheduled"
-            ? "Scheduled"
-            : "Published",
+      const t = title.trim();
+      const detail =
+        mode === "scheduled" && scheduledFor
+          ? `publishes ${formatLocal(localInputToIso(scheduledFor))}`
+          : mode === "published"
+            ? `now live`
+            : undefined;
+      notify(
+        mode === "draft" ? "draft" : mode === "scheduled" ? "schedule" : "create",
+        t,
+        detail,
       );
       setTitle("");
       setBody("");
