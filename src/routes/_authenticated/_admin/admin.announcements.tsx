@@ -40,6 +40,7 @@ import {
   History,
   Loader2,
   Megaphone,
+  Download,
   Pencil,
   Search,
   Send,
