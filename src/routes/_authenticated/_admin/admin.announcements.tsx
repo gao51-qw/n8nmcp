@@ -180,6 +180,46 @@ function AdminAnnouncements() {
     };
   }, [data]);
 
+  type AuditEntry = {
+    id: string;
+    announcement_id: string | null;
+    actor_id: string | null;
+    action: string;
+    summary: string | null;
+    changes: Record<string, unknown> | null;
+    created_at: string;
+  };
+
+  const { data: auditData, isLoading: auditLoading } = useQuery({
+    queryKey: ["announcement-audit"],
+    queryFn: async (): Promise<{
+      entries: AuditEntry[];
+      actors: Record<string, { display_name: string | null; email: string | null }>;
+    }> => {
+      const { data: entries, error } = await supabase
+        .from("announcement_audit_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      const list = (entries ?? []) as AuditEntry[];
+      const ids = Array.from(
+        new Set(list.map((e) => e.actor_id).filter((v): v is string => !!v)),
+      );
+      let actors: Record<string, { display_name: string | null; email: string | null }> = {};
+      if (ids.length) {
+        const { data: profs } = await supabase
+          .from("profiles")
+          .select("id, display_name, email")
+          .in("id", ids);
+        for (const p of profs ?? []) {
+          actors[p.id] = { display_name: p.display_name, email: p.email };
+        }
+      }
+      return { entries: list, actors };
+    },
+  });
+
   const validateBase = (t: string, b: string) => {
     if (!t || !b) throw new Error("Title and body are required");
     if (t.length > TITLE_MAX) throw new Error(`Title must be under ${TITLE_MAX} chars`);
