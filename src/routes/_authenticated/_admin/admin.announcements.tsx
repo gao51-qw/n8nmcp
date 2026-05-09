@@ -1142,24 +1142,45 @@ function AdminAnnouncements() {
                       />
                     </div>
                     <div className="flex shrink-0 gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => exportAudit(filtered, "csv")}
-                        disabled={!filtered.length}
-                      >
-                        <Download className="mr-1.5 h-4 w-4" /> CSV
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => exportAudit(filtered, "json")}
-                        disabled={!filtered.length}
-                      >
-                        <Download className="mr-1.5 h-4 w-4" /> JSON
-                      </Button>
+                      {(["csv", "json"] as const).map((fmt) => (
+                        <DropdownMenu key={fmt}>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={exportingAll}
+                            >
+                              {exportingAll ? (
+                                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                              ) : (
+                                <Download className="mr-1.5 h-4 w-4" />
+                              )}
+                              {fmt.toUpperCase()}
+                              <ChevronDown className="ml-1 h-3.5 w-3.5 opacity-70" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-56">
+                            <DropdownMenuLabel>Export as {fmt.toUpperCase()}</DropdownMenuLabel>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              disabled={!filtered.length}
+                              onSelect={() => exportAudit(filtered, fmt)}
+                            >
+                              Current view ({filtered.length})
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={exportingAll}
+                              onSelect={(ev) => {
+                                ev.preventDefault();
+                                void handleExportAll(fmt);
+                              }}
+                            >
+                              All history (paginated)
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ))}
                     </div>
                   </div>
                   {auditQuery && (
