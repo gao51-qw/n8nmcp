@@ -751,8 +751,11 @@ function AdminAnnouncements() {
                               {e.action}
                             </Badge>
                             <span className="font-medium">{actorName}</span>
-                            <span className="text-muted-foreground">
-                              · {new Date(e.created_at).toLocaleString()}
+                            <span
+                              className="text-muted-foreground"
+                              title={formatLocalLong(e.created_at)}
+                            >
+                              · {formatLocal(e.created_at)}
                             </span>
                           </div>
                           <div className="mt-1 truncate text-sm">
