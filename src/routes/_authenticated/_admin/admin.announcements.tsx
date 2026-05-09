@@ -66,22 +66,14 @@ type Announcement = {
 const TITLE_MAX = 200;
 const BODY_MAX = 5000;
 
-// Convert local datetime-input value to ISO; empty -> null.
-function localInputToIso(v: string): string | null {
-  if (!v) return null;
-  const d = new Date(v);
-  return isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-// Convert ISO -> "YYYY-MM-DDTHH:mm" for <input type="datetime-local">.
-function isoToLocalInput(iso: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
-}
+import {
+  formatLocal,
+  formatLocalLong,
+  formatUtc,
+  isoToLocalInput,
+  localInputToIso,
+  localTimeZone,
+} from "@/lib/format-datetime";
 
 function StatusBadge({ a }: { a: Announcement }) {
   if (a.status === "draft") return <Badge variant="secondary">Draft</Badge>;
