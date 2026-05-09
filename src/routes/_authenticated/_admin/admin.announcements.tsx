@@ -511,7 +511,7 @@ function AdminAnnouncements() {
     },
   });
 
-  const handleExportAll = async (format: "csv" | "json") => {
+  const handleExportAll = async (format: "csv" | "json" | "xlsx") => {
     if (exportingAll) return;
     setExportingAll(true);
     const t = toast.loading("Loading full audit history…");
