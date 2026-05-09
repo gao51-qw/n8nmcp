@@ -134,6 +134,42 @@ function WhatsNewPreview({
 function AdminAnnouncements() {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const router = useRouter();
+  // Tracks audit-log row IDs we already toasted in this session, so realtime
+  // echoes from our own writes (or duplicate events) never produce dup toasts.
+  const seenAuditIds = useRef<Set<string>>(new Set());
+
+  const goToWhatsNew = () => router.navigate({ to: "/whats-new" });
+
+  /**
+   * Rich notification for high-impact actions. Includes a description with
+   * the announcement title + the relevant timestamp, and (where useful) a
+   * "View on What's New" action so the admin can confirm immediately.
+   */
+  const notify = (
+    kind: "create" | "publish" | "republish" | "delete" | "cancel_schedule" | "schedule" | "draft" | "update",
+    title: string,
+    detail?: string,
+  ) => {
+    const headlines: Record<typeof kind, string> = {
+      create: "Announcement created",
+      publish: "Published to What's New",
+      republish: "Republished — bumped to top",
+      delete: "Announcement deleted",
+      cancel_schedule: "Schedule canceled",
+      schedule: "Announcement scheduled",
+      draft: "Saved as draft",
+      update: "Announcement updated",
+    };
+    const showAction = kind === "publish" || kind === "republish" || kind === "create";
+    toast(headlines[kind], {
+      description: detail ? `"${title}" — ${detail}` : `"${title}"`,
+      action: showAction
+        ? { label: "View on What's New", onClick: goToWhatsNew }
+        : undefined,
+    });
+  };
+
 
   // Create form
   const [title, setTitle] = useState("");
