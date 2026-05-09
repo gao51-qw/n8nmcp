@@ -155,3 +155,49 @@ html:not(.dark) {
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 }
+
+/* Unified, theme-aware thin scrollbars for code/preview blocks. */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--color-foreground) 22%, transparent) transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--color-foreground) 18%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    transition: background-color 150ms ease;
+  }
+  .scrollbar-thin:hover::-webkit-scrollbar-thumb,
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--color-foreground) 36%, transparent);
+  }
+  .scrollbar-thin::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  /* Auto-apply to native <pre> blocks for consistency across pages. */
+  pre {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--color-foreground) 22%, transparent) transparent;
+  }
+  pre::-webkit-scrollbar { width: 8px; height: 8px; }
+  pre::-webkit-scrollbar-track { background: transparent; }
+  pre::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--color-foreground) 18%, transparent);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  pre:hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--color-foreground) 36%, transparent);
+  }
+}
+
