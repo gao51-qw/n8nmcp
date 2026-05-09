@@ -582,13 +582,40 @@ function AdminAnnouncements() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-body">Body</Label>
-              <Textarea
-                id="edit-body"
-                value={editBody}
-                onChange={(e) => setEditBody(e.target.value)}
-                rows={8}
-                maxLength={BODY_MAX}
-              />
+              <Tabs defaultValue="write">
+                <TabsList>
+                  <TabsTrigger value="write">
+                    <Pencil className="mr-1 h-3 w-3" /> Write
+                  </TabsTrigger>
+                  <TabsTrigger value="preview">
+                    <Eye className="mr-1 h-3 w-3" /> Preview
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="write" className="mt-2">
+                  <Textarea
+                    id="edit-body"
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={8}
+                    maxLength={BODY_MAX}
+                  />
+                </TabsContent>
+                <TabsContent value="preview" className="mt-2">
+                  <WhatsNewPreview
+                    title={editTitle}
+                    body={editBody}
+                    publishAt={
+                      editStatus === "scheduled"
+                        ? localInputToIso(editScheduledFor)
+                        : editStatus === "published" &&
+                            !republish &&
+                            editing?.published_at
+                          ? editing.published_at
+                          : null
+                    }
+                  />
+                </TabsContent>
+              </Tabs>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
