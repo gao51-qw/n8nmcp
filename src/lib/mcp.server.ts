@@ -175,6 +175,8 @@ type Inst = NonNullable<Awaited<ReturnType<typeof getDefaultInstance>>>;
 
 async function n8n(inst: Inst, path: string, init?: RequestInit) {
   const url = `${inst.base_url}${path}`;
+  const { assertPublicUrl } = await import("./ssrf-guard.server");
+  await assertPublicUrl(url);
   const res = await fetch(url, {
     ...init,
     headers: {
