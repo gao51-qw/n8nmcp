@@ -135,6 +135,7 @@ export type Database = {
       }
       mcp_call_logs: {
         Row: {
+          category: string | null
           created_at: string
           error_message: string | null
           id: string
@@ -142,9 +143,11 @@ export type Database = {
           latency_ms: number | null
           status: string
           tool_name: string | null
+          upstream: boolean
           user_id: string
         }
         Insert: {
+          category?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -152,9 +155,11 @@ export type Database = {
           latency_ms?: number | null
           status: string
           tool_name?: string | null
+          upstream?: boolean
           user_id: string
         }
         Update: {
+          category?: string | null
           created_at?: string
           error_message?: string | null
           id?: string
@@ -162,6 +167,7 @@ export type Database = {
           latency_ms?: number | null
           status?: string
           tool_name?: string | null
+          upstream?: boolean
           user_id?: string
         }
         Relationships: [
