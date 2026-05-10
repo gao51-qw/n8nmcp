@@ -123,6 +123,7 @@ export const testInstance = createServerFn({ method: "POST" })
     let status: "online" | "offline" | "unauthorized" | "error" = "error";
     let detail = "";
     try {
+      await assertPublicUrl(row.base_url);
       const res = await fetch(`${row.base_url}/api/v1/workflows?limit=1`, {
         method: "GET",
         headers: { "X-N8N-API-KEY": apiKey, Accept: "application/json" },
@@ -134,7 +135,10 @@ export const testInstance = createServerFn({ method: "POST" })
       detail = `HTTP ${res.status}`;
     } catch (e) {
       status = "offline";
-      detail = e instanceof Error ? e.message : "fetch failed";
+      // Don't echo full network error details (may include internal addresses).
+      detail = e instanceof Error && /allowed|private|internal|Invalid URL|verify/.test(e.message)
+        ? e.message
+        : "connection failed";
     }
 
     await context.supabase
