@@ -39,6 +39,7 @@ export const createInstance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => createSchema.parse(d))
   .handler(async ({ context, data }) => {
+    await assertPublicUrl(data.base_url);
     const enc = encryptSecret(data.api_key);
     const { data: row, error } = await context.supabase
       .from("n8n_instances")
