@@ -4,6 +4,14 @@
 import { hashPlatformApiKey, decryptSecret } from "./crypto.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { TIER_DAILY_LIMITS, type Tier } from "./tiers";
+import {
+  callUpstreamTool,
+  categorize,
+  isManagementTool,
+  isUpstreamConfigured,
+  listUpstreamTools,
+  type UpstreamTool,
+} from "./mcp-upstream.server";
 
 export type AuthedKey = {
   user_id: string;
