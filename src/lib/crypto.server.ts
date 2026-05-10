@@ -27,6 +27,15 @@ export function getMasterKey(): Buffer {
   }
   const seed = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!seed) throw new Error("No encryption key material available");
+  if (process.env.NODE_ENV === "production") {
+    // Loud warning so operators notice they're running on the derived fallback key.
+    // This couples ciphertext lifetime to SUPABASE_SERVICE_ROLE_KEY rotation.
+    console.warn(
+      "[crypto] APP_ENCRYPTION_KEY is not set — falling back to a key derived from " +
+        "SUPABASE_SERVICE_ROLE_KEY. Set APP_ENCRYPTION_KEY in production to decouple " +
+        "ciphertext from service-role rotation.",
+    );
+  }
   return createHash("sha256").update(`n8n-mcp-v1::${seed}`).digest();
 }
 
