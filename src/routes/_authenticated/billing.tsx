@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   TIER_LIMITS,
@@ -10,9 +12,11 @@ import {
   type Feature,
   tierOf,
 } from "@/lib/tiers";
+import { createBillingPortalSession, createCheckoutSession } from "@/lib/billing.functions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, CreditCard, Sparkles } from "lucide-react";
+import { Check, X, CreditCard, Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({ meta: [{ title: "Billing — n8n-mcp" }] }),
@@ -37,6 +41,31 @@ function BillingPage() {
   });
 
   const current = tierOf(sub.data?.tier);
+  const checkout = useServerFn(createCheckoutSession);
+  const portal = useServerFn(createBillingPortalSession);
+  const [busy, setBusy] = useState<Tier | "portal" | null>(null);
+
+  const handleUpgrade = async (tier: "pro" | "enterprise") => {
+    setBusy(tier);
+    try {
+      const { url } = await checkout({ data: { tier } });
+      if (url) window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start checkout");
+      setBusy(null);
+    }
+  };
+
+  const handleManage = async () => {
+    setBusy("portal");
+    try {
+      const { url } = await portal();
+      if (url) window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open portal");
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
@@ -114,16 +143,37 @@ function BillingPage() {
               </ul>
               <div className="mt-6">
                 {isCurrent ? (
-                  <Button variant="secondary" disabled className="w-full">
-                    Current plan
-                  </Button>
-                ) : t === "enterprise" ? (
-                  <Button variant="outline" className="w-full" asChild>
-                    <a href="mailto:sales@n8n-mcp.dev?subject=Enterprise%20plan">Contact sales</a>
+                  current === "free" ? (
+                    <Button variant="secondary" disabled className="w-full">
+                      Current plan
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onClick={handleManage}
+                      disabled={busy !== null}
+                    >
+                      {busy === "portal" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Manage subscription"}
+                    </Button>
+                  )
+                ) : t === "free" ? (
+                  <Button variant="outline" disabled className="w-full">
+                    Downgrade in portal
                   </Button>
                 ) : (
-                  <Button className="w-full" disabled>
-                    Upgrade — coming soon
+                  <Button
+                    className="w-full"
+                    onClick={() => handleUpgrade(t as "pro" | "enterprise")}
+                    disabled={busy !== null}
+                  >
+                    {busy === t ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : t === "enterprise" ? (
+                      "Upgrade to Enterprise"
+                    ) : (
+                      "Upgrade"
+                    )}
                   </Button>
                 )}
               </div>
