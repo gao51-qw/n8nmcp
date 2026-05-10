@@ -148,7 +148,7 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     console.error("chat-agent error", e);
-    return jsonErr(500, e instanceof Error ? e.message : "Internal error");
+    return jsonErr(500, "Internal server error");
   }
 });
 
