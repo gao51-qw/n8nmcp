@@ -41,6 +41,31 @@ function BillingPage() {
   });
 
   const current = tierOf(sub.data?.tier);
+  const checkout = useServerFn(createCheckoutSession);
+  const portal = useServerFn(createBillingPortalSession);
+  const [busy, setBusy] = useState<Tier | "portal" | null>(null);
+
+  const handleUpgrade = async (tier: "pro" | "enterprise") => {
+    setBusy(tier);
+    try {
+      const { url } = await checkout({ data: { tier } });
+      if (url) window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not start checkout");
+      setBusy(null);
+    }
+  };
+
+  const handleManage = async () => {
+    setBusy("portal");
+    try {
+      const { url } = await portal();
+      if (url) window.location.href = url;
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not open portal");
+      setBusy(null);
+    }
+  };
 
   return (
     <div className="space-y-8">
