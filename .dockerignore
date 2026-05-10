@@ -1,0 +1,14 @@
+node_modules
+.output
+.tmp
+.git
+.github
+tools
+**/dist
+**/.cache
+**/coverage
+**/*.log
+.lovable
+.vscode
+.idea
+.DS_Store

@@ -1,0 +1,56 @@
+# VPS docker-compose — main app + n8n-knowledge-mcp behind host nginx.
+# Place this file (and .env) on the VPS, e.g. /opt/n8nworkflow/.
+# Pull-and-restart:
+#   docker compose pull && docker compose up -d
+#
+# Required env (in /opt/n8nworkflow/.env):
+#   GHCR_OWNER=your-github-username-or-org
+#   APP_IMAGE_TAG=latest
+#   MCP_IMAGE_TAG=latest
+#   MCP_AUTH_TOKEN=<openssl rand -hex 32>
+# Plus a separate .env.app file with all backend secrets used by the main app.
+
+services:
+  app:
+    image: ghcr.io/${GHCR_OWNER}/n8nworkflow-app:${APP_IMAGE_TAG:-latest}
+    container_name: n8nworkflow-app
+    restart: unless-stopped
+    env_file:
+      - .env.app
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  mcp:
+    image: ghcr.io/${GHCR_OWNER}/n8n-knowledge-mcp:${MCP_IMAGE_TAG:-latest}
+    container_name: n8n-knowledge-mcp
+    restart: unless-stopped
+    environment:
+      AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+      PORT: "3000"
+      TRUST_PROXY: "1"
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
+
+  # Optional: auto-pull updated images every 5 min.
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${HOME}/.docker/config.json:/config.json:ro
+    command: --cleanup --interval 300 n8nworkflow-app n8n-knowledge-mcp
