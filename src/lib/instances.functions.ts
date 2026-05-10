@@ -72,7 +72,10 @@ export const updateInstance = createServerFn({ method: "POST" })
       status?: string;
     } = { updated_at: new Date().toISOString() };
     if (data.name) patch.name = data.name;
-    if (data.base_url) patch.base_url = data.base_url.replace(/\/+$/, "");
+    if (data.base_url) {
+      await assertPublicUrl(data.base_url);
+      patch.base_url = data.base_url.replace(/\/+$/, "");
+    }
     if (data.api_key) {
       const enc = encryptSecret(data.api_key);
       patch.api_key_encrypted = enc.ciphertext;
