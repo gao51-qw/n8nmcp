@@ -83,6 +83,8 @@ export async function recordCall(opts: {
   status: "ok" | "error" | "rate_limited";
   latency_ms: number;
   error_message?: string | null;
+  upstream?: boolean;
+  category?: "local" | "knowledge" | "management" | null;
 }) {
   await Promise.allSettled([
     supabaseAdmin.from("mcp_call_logs").insert({
@@ -92,6 +94,8 @@ export async function recordCall(opts: {
       status: opts.status,
       latency_ms: opts.latency_ms,
       error_message: opts.error_message ?? null,
+      upstream: opts.upstream ?? false,
+      category: opts.category ?? null,
     }),
     supabaseAdmin.rpc("increment_mcp_usage", { _user_id: opts.user_id, _n: 1 }),
   ]);
