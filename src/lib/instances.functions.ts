@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { encryptSecret, decryptSecret } from "./crypto.server";
+import { assertPublicUrl } from "./ssrf-guard.server";
 
 const baseUrlSchema = z
   .string()
