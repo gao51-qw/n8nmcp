@@ -143,16 +143,37 @@ function BillingPage() {
               </ul>
               <div className="mt-6">
                 {isCurrent ? (
-                  <Button variant="secondary" disabled className="w-full">
-                    Current plan
-                  </Button>
-                ) : t === "enterprise" ? (
-                  <Button variant="outline" className="w-full" asChild>
-                    <a href="mailto:sales@n8n-mcp.dev?subject=Enterprise%20plan">Contact sales</a>
+                  current === "free" ? (
+                    <Button variant="secondary" disabled className="w-full">
+                      Current plan
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="secondary"
+                      className="w-full"
+                      onClick={handleManage}
+                      disabled={busy !== null}
+                    >
+                      {busy === "portal" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Manage subscription"}
+                    </Button>
+                  )
+                ) : t === "free" ? (
+                  <Button variant="outline" disabled className="w-full">
+                    Downgrade in portal
                   </Button>
                 ) : (
-                  <Button className="w-full" disabled>
-                    Upgrade — coming soon
+                  <Button
+                    className="w-full"
+                    onClick={() => handleUpgrade(t as "pro" | "enterprise")}
+                    disabled={busy !== null}
+                  >
+                    {busy === t ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : t === "enterprise" ? (
+                      "Upgrade to Enterprise"
+                    ) : (
+                      "Upgrade"
+                    )}
                   </Button>
                 )}
               </div>
