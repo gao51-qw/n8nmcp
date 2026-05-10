@@ -1,0 +1,7 @@
+node_modules
+dist
+data/nodes.db
+data/nodes.db-*
+.tmp
+/tmp-pkgs
+*.log

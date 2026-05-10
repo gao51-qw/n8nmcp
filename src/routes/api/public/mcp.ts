@@ -79,8 +79,8 @@ async function handleRpc(
           name: "n8n-mcp-gateway",
           version: "0.2.0",
           notes: isUpstreamConfigured()
-            ? "local + upstream knowledge base (czlonkowski/n8n-mcp)"
-            : "local-only (upstream not configured)",
+            ? "local management + self-hosted n8n-knowledge-mcp upstream"
+            : "local-only (upstream knowledge base not configured)",
         },
       });
 
