@@ -226,7 +226,7 @@ export async function runTool(
   }
 }
 
-const LOCAL_NAMES = new Set(LOCAL_TOOLS.map((t) => t.name));
+const LOCAL_NAMES: Set<string> = new Set(LOCAL_TOOLS.map((t) => t.name));
 
 /** Backwards-compatible alias used by tests. */
 export const TOOLS = LOCAL_TOOLS;
