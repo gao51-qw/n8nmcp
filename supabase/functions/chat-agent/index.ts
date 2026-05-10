@@ -122,7 +122,8 @@ Deno.serve(async (req) => {
       const errText = await aiRes.text();
       if (aiRes.status === 429) return jsonErr(429, "AI rate limit, try again shortly");
       if (aiRes.status === 402) return jsonErr(402, "AI credits exhausted — top up Lovable workspace");
-      return jsonErr(502, `AI error: ${errText.slice(0, 200)}`);
+      console.error("AI gateway error", aiRes.status, errText.slice(0, 500));
+      return jsonErr(502, "AI service temporarily unavailable");
     }
 
     const aiJson = await aiRes.json();
