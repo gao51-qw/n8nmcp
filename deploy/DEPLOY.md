@@ -161,20 +161,33 @@ cp .env.app.example .env.app
 nano .env.app
 ```
 
-| 变量 | 来源 |
+| 变量 | 来源 / 说明 |
 |---|---|
 | `SUPABASE_URL` / `VITE_SUPABASE_URL` | Lovable 项目 `.env`（`https://vgmnndaoxbjsnvqhvuhf.supabase.co`） |
 | `SUPABASE_PUBLISHABLE_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` | Lovable 项目 `.env` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Lovable 后台 → Cloud → API Keys |
+| `APP_ENCRYPTION_KEY` | **生产必填**。`openssl rand -base64 32` 生成一次后永不更改，并在密码管理器里另存一份。丢失会导致所有用户的 n8n 凭据无法解密。未设置时 app 在 `NODE_ENV=production` 下会拒绝启动。 |
+| `APP_PUBLIC_URL` | 例如 `https://app.n8nworkflow.com`，Stripe checkout / webhook 会回到这个域名。 |
 | `LOVABLE_API_KEY` | Lovable 后台 → Connectors → AI Gateway |
+| `STRIPE_SECRET_KEY` | Stripe Dashboard → Developers → API keys。如不上线计费可暂留空，会自动禁用付费按钮。 |
+| `STRIPE_WEBHOOK_SECRET` | Stripe Dashboard → Webhooks → 新建 endpoint `https://app.n8nworkflow.com/api/public/stripe-webhook`，订阅 `checkout.session.completed`、`customer.subscription.*`、`invoice.payment_failed`，把 Signing secret 填到这里。 |
+| `STRIPE_PRICE_PRO` / `STRIPE_PRICE_ENTERPRISE` | Stripe → Products 创建对应订阅产品后拿到的 `price_...` ID。 |
 | `MCP_UPSTREAM_URL` | 保持 `http://mcp:3000/mcp` |
-| `MCP_UPSTREAM_TOKEN` | **必须等于** `.env` 里的 `MCP_AUTH_TOKEN` |
+| `MCP_UPSTREAM_TOKEN` | **必须等于** `.env` 里的 `MCP_AUTH_TOKEN`（这是 app ↔ mcp 容器间内网通信的 token；终端用户不接触它）|
+| `LOG_FORMAT` / `LOG_LEVEL` | 生产留默认 `json` / `info`，配合 `docker logs` + 任意采集器（promtail / vector / journald）即可结构化收集 |
 
 权限收紧：
 
 ```bash
 chmod 600 .env .env.app
 ```
+
+> **MCP 多租户鉴权说明**
+> 终端用户的 MCP 客户端永远访问 `https://app.n8nworkflow.com/api/public/mcp`，
+> 用自己控制台里生成的 `nmcp_…` 平台 API key 作 Bearer。app 容器在该路由内
+> 校验 `platform_api_keys`、做配额/限流，再以全局 `MCP_UPSTREAM_TOKEN` 调上游
+> mcp 容器。`mcp.n8nworkflow.com` vhost 仅暴露上游知识库本身，**不应**暴露给
+> 普通用户——可以删掉对应 server block 或加 IP 白名单。
 
 ---
 
