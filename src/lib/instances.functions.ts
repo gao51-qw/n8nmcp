@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { encryptSecret, decryptSecret } from "./crypto.server";
+import { assertPublicUrl } from "./ssrf-guard.server";
 
 const baseUrlSchema = z
   .string()
@@ -38,6 +39,7 @@ export const createInstance = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) => createSchema.parse(d))
   .handler(async ({ context, data }) => {
+    await assertPublicUrl(data.base_url);
     const enc = encryptSecret(data.api_key);
     const { data: row, error } = await context.supabase
       .from("n8n_instances")
@@ -70,7 +72,10 @@ export const updateInstance = createServerFn({ method: "POST" })
       status?: string;
     } = { updated_at: new Date().toISOString() };
     if (data.name) patch.name = data.name;
-    if (data.base_url) patch.base_url = data.base_url.replace(/\/+$/, "");
+    if (data.base_url) {
+      await assertPublicUrl(data.base_url);
+      patch.base_url = data.base_url.replace(/\/+$/, "");
+    }
     if (data.api_key) {
       const enc = encryptSecret(data.api_key);
       patch.api_key_encrypted = enc.ciphertext;
@@ -118,6 +123,7 @@ export const testInstance = createServerFn({ method: "POST" })
     let status: "online" | "offline" | "unauthorized" | "error" = "error";
     let detail = "";
     try {
+      await assertPublicUrl(row.base_url);
       const res = await fetch(`${row.base_url}/api/v1/workflows?limit=1`, {
         method: "GET",
         headers: { "X-N8N-API-KEY": apiKey, Accept: "application/json" },
@@ -129,7 +135,10 @@ export const testInstance = createServerFn({ method: "POST" })
       detail = `HTTP ${res.status}`;
     } catch (e) {
       status = "offline";
-      detail = e instanceof Error ? e.message : "fetch failed";
+      // Don't echo full network error details (may include internal addresses).
+      detail = e instanceof Error && /allowed|private|internal|Invalid URL|verify/.test(e.message)
+        ? e.message
+        : "connection failed";
     }
 
     await context.supabase
