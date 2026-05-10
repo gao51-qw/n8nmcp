@@ -358,14 +358,44 @@ docker compose pull app && docker compose up -d app
 
 ---
 
-## 12. 安全加固建议（可选）
+## 12. 安全加固建议
 
 - SSH：禁用密码登录，仅留 key；改非默认端口并 `ufw allow <port>`。
 - `fail2ban`：`sudo apt install fail2ban`，默认规则即可。
 - `unattended-upgrades`：`sudo dpkg-reconfigure -plow unattended-upgrades`。
-- nginx 加 `add_header Strict-Transport-Security "max-age=31536000" always;`（certbot 默认未加）。
+- nginx 安全头（HSTS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy）已写在 `nginx/n8nworkflow.conf` 默认配置里。
 - 定期 `openssl rand -hex 32` 轮换 `MCP_AUTH_TOKEN`，同步改 `.env` + `.env.app` 后 `docker compose up -d`。
+- **永远不要**轮换或丢失 `APP_ENCRYPTION_KEY`；它解密所有用户的 n8n API key。
+- 异地备份建议：每天 `pg_dump` 仅 `n8n_instances`（含加密 `base_url` / `api_key_*`）+ `platform_api_keys` + `subscriptions` + `user_roles` 到 S3 / B2。Lovable Cloud 自带每日快照，但敏感表自留一份更稳。
 
 ---
 
-完成。`https://app.n8nworkflow.com` 是你的主站，`https://mcp.n8nworkflow.com/mcp` 是对外的 MCP 端点。
+## 13. 可观测性 / 日志收集
+
+app 容器使用结构化 JSON 日志（`src/lib/logger.server.ts`），每行一条 JSON。最简方案——`docker logs` + logrotate 即可：
+
+```bash
+sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{ "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "5" } }
+EOF
+sudo systemctl restart docker
+```
+
+进阶：跑一个 promtail / vector 容器把 `/var/lib/docker/containers/*/*.log` 推到 Loki / VictoriaLogs / Elastic。日志字段固定：`{ts, level, msg, ...}`，按 `level=error` 或 `msg=stripe.webhook.invalid_signature` 报警。
+
+---
+
+## 14. Stripe 计费上线 Checklist
+
+1. 在 Stripe Dashboard 创建两个 Recurring Product：Pro / Enterprise，记下 `price_...` ID。
+2. `.env.app` 填入 `STRIPE_SECRET_KEY` + `STRIPE_PRICE_PRO` + `STRIPE_PRICE_ENTERPRISE`。
+3. Webhooks → Add endpoint：
+   - URL: `https://app.n8nworkflow.com/api/public/stripe-webhook`
+   - Events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
+4. 把 endpoint Signing secret 填入 `STRIPE_WEBHOOK_SECRET`，`docker compose up -d` 重启 app。
+5. 用 test mode 跑一遍：`/billing` → Upgrade → Checkout → 回到 `/billing?upgraded=1`，DB 里 `subscriptions.tier` 应该已经变成 `pro`。
+6. 切回 live key 上线。
+
+---
+
+完成。`https://app.n8nworkflow.com` 是主站；普通用户通过 `https://app.n8nworkflow.com/api/public/mcp` + 自己的 `nmcp_…` key 接入 MCP。
