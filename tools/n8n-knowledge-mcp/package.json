@@ -1,0 +1,32 @@
+{
+  "name": "n8n-knowledge-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/server.ts",
+    "start": "node dist/server.js",
+    "build:db": "tsx scripts/1-fetch-packages.ts && tsx scripts/2-parse-nodes.ts && tsx scripts/3-parse-docs.ts && tsx scripts/4-build-db.ts",
+    "fetch": "tsx scripts/1-fetch-packages.ts",
+    "parse:nodes": "tsx scripts/2-parse-nodes.ts",
+    "parse:docs": "tsx scripts/3-parse-docs.ts",
+    "build:sqlite": "tsx scripts/4-build-db.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.5.0",
+    "express": "^4.21.2",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.0",
+    "tar": "^7.4.3",
+    "ts-morph": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": { "node": ">=20" }
+}

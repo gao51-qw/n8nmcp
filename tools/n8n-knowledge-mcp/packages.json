@@ -1,0 +1,15 @@
+{
+  "official": [
+    "n8n-nodes-base",
+    "@n8n/n8n-nodes-langchain"
+  ],
+  "community": {
+    "search_keyword": "n8n-community-node-package",
+    "min_monthly_downloads": 100,
+    "max_packages": 250,
+    "blacklist": [
+      "n8n-nodes-test",
+      "n8n-nodes-example"
+    ]
+  }
+}
