@@ -27,15 +27,20 @@ export function getMasterKey(): Buffer {
   }
   const seed = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!seed) throw new Error("No encryption key material available");
-  if (process.env.NODE_ENV === "production") {
-    // Loud warning so operators notice they're running on the derived fallback key.
-    // This couples ciphertext lifetime to SUPABASE_SERVICE_ROLE_KEY rotation.
-    console.warn(
-      "[crypto] APP_ENCRYPTION_KEY is not set — falling back to a key derived from " +
-        "SUPABASE_SERVICE_ROLE_KEY. Set APP_ENCRYPTION_KEY in production to decouple " +
-        "ciphertext from service-role rotation.",
+  // In production, refuse to silently derive a key from SERVICE_ROLE_KEY —
+  // rotating that secret would permanently corrupt all stored ciphertext.
+  // Operators MUST set APP_ENCRYPTION_KEY (32 random bytes, base64 or hex).
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_DERIVED_ENCRYPTION_KEY !== "1") {
+    throw new Error(
+      "APP_ENCRYPTION_KEY is required in production. Generate one with " +
+        "`openssl rand -base64 32` and set it in .env.app. To explicitly opt in to " +
+        "the derived fallback (NOT recommended), set ALLOW_DERIVED_ENCRYPTION_KEY=1.",
     );
   }
+  console.warn(
+    "[crypto] APP_ENCRYPTION_KEY not set — using key derived from SUPABASE_SERVICE_ROLE_KEY. " +
+      "Rotating service-role would invalidate ciphertext.",
+  );
   return createHash("sha256").update(`n8n-mcp-v1::${seed}`).digest();
 }
 
