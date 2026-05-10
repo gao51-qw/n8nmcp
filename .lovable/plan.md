@@ -1,148 +1,88 @@
-## 范围
+# 完整融入 czlonkowski/n8n-mcp 能力到本网关
 
-按差异分析，把 5 块功能全部补齐：
+## 背景与目标
 
-1. **Connect Client 预设页**（前端）
-2. **Onboarding 步骤条**（前端）
-3. **Chat Agent**（前端 + 后端 + AI Gateway + 数据库）
-4. **多 OAuth + 主题切换**（前端 + 配置）
-5. **Billing 矩阵改造**（前端 + 后端 + 数据库）
+czlonkowski/n8n-mcp 是一个独立 MCP 服务器，自带：
+- **SQLite 节点知识库**：1,650 个 n8n 节点（820 核心 + 830 社区）的 schema、属性、文档、示例
+- **39 个 MCP 工具**：分两类
+  - **知识类（无需 n8n 实例）**：`list_nodes`、`search_nodes`、`get_node_essentials`、`get_node_info`、`get_node_documentation`、`search_node_properties`、`get_node_as_tool_info`、`list_ai_tools`、`get_node_for_task`、`list_tasks`、`get_database_statistics`、`get_property_dependencies`、`validate_node_minimal`、`validate_node_operation`、`validate_workflow`、`validate_workflow_connections`、`validate_workflow_expressions`、`get_templates_for_task`、`search_templates`、`get_template`、`list_node_templates`、`tools_documentation` 等约 22 个
+  - **管理类（需 n8n API Key）**：`n8n_create_workflow`、`n8n_update_partial_workflow`、`n8n_get_workflow`、`n8n_list_workflows`、`n8n_validate_workflow`、`n8n_trigger_webhook_workflow`、`n8n_list_executions`、`n8n_get_execution`、`n8n_delete_execution`、`n8n_health_check`、`n8n_diagnostic`、`n8n_autofix_workflow` 等约 17 个
 
----
+"不要轻量融入" → **全部 39 个工具都要可用**，且节点知识库要完整可查（不只是把 4 个工具列在 TOOLS 里）。
 
-## 1. Connect Client 预设页
+## 方案：上游代理 + 工具命名空间合并
 
-**新文件**：`src/routes/_authenticated/connect.tsx`
+由于 SQLite 数据库（n8n 文档+节点 schema）有数百 MB、构建时需要克隆 n8n 仓库抓取，**不可能直接打包进 Cloudflare Worker**。最稳健的做法是把 czlonkowski/n8n-mcp 部署成一个独立 upstream，本网关做 MCP-over-MCP 代理，把它的全部工具透传给客户端，同时保留本网关原有的 4 个工具与计费/配额。
 
-- 网格卡片展示：Claude.ai、ChatGPT、Cursor、Claude Code、Codex CLI、Warp、Gemini CLI、Continue、Cline、Windsurf、Zed、VS Code、Mistral Le Chat、Raycast 等 14+ 客户端
-- 每张卡片：图标 + 名称 + "推荐配置" 代码块 + 复制按钮
-- 顶部下拉选择当前 API Key（从 `platform_api_keys` 读取），把 Bearer token 自动注入到所有片段
-- MCP 端点 URL = `${origin}/api/public/mcp`
-- 配置形态分两类：
-  - **JSON 客户端**（Claude Desktop、Cursor、VS Code、Cline、Continue、Windsurf、Zed）→ `mcpServers` 配置块
-  - **CLI 客户端**（Codex、Claude Code、Gemini CLI、Warp）→ shell 命令
-  - **网页客户端**（Claude.ai、ChatGPT、Mistral）→ "添加 Custom Connector" 引导文案 + URL/Token 字段
+### 架构
 
-**侧边栏**：在 `dashboard-shell.tsx` 加 "Connect Client" 菜单项。
-
----
-
-## 2. Onboarding 步骤条
-
-**新组件**：`src/components/onboarding-steps.tsx`
-
-- 4 步：
-  1. 添加 n8n 实例（查 `n8n_instances` 数量 > 0）
-  2. 生成 API Key（查 `platform_api_keys` 未撤销数量 > 0）
-  3. 连接客户端（前端 localStorage 标记，访问 /connect 后置 1）
-  4. 首次 MCP 调用（查 `mcp_call_logs` 总数 > 0）
-- 顶部 progress bar + checklist，全部完成后显示"完成"提示且 7 天内可关闭（localStorage）
-- 嵌入 `dashboard.tsx` 顶部
-
-新增 server function `getOnboardingStatus`，单次返回 4 个布尔。
-
----
-
-## 3. Chat Agent
-
-**数据库迁移**：
-```sql
-create table chat_conversations (
-  id uuid pk default gen_random_uuid(),
-  user_id uuid not null,
-  title text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-create table chat_messages (
-  id uuid pk default gen_random_uuid(),
-  conversation_id uuid not null references chat_conversations on delete cascade,
-  role text not null check (role in ('user','assistant','system')),
-  content text not null,
-  created_at timestamptz default now()
-);
--- RLS: 仅本人可读写
+```text
+MCP Client
+   │  Bearer nmcp_xxx                       (本网关认证 + 配额)
+   ▼
+/api/public/mcp  (本项目 Worker)
+   ├─ tools/list   → 合并 [本网关 4 工具] + [上游 39 工具]
+   └─ tools/call
+        ├─ 本地 4 个 → 走原有 runTool(inst)
+        └─ 上游 39 个 → POST 到 czlonkowski upstream
+                           注入 N8N_API_URL / N8N_API_KEY
 ```
 
-**Edge Function**：`supabase/functions/chat-agent/index.ts`
-- 使用 Lovable AI Gateway，模型 `google/gemini-3-flash-preview`
-- 系统提示词：你是 n8n workflow 生成助手，输出 JSON workflow 时使用代码块
-- SSE 流式返回
-- 处理 429/402
+### 上游部署（一次性）
 
-**新路由**：`src/routes/_authenticated/chat.tsx`
-- 左侧会话列表，右侧消息流
-- markdown 渲染（已有 `markdown.tsx`）
-- "应用到 n8n" 按钮：检测 assistant 消息中的 ```json workflow 代码块，POST 到用户选中的 n8n 实例 `/api/v1/workflows`
+`czlonkowski/n8n-mcp` 提供官方 Docker 镜像 `ghcr.io/czlonkowski/n8n-mcp:latest`，开箱包含构建好的 SQLite。两种部署任选其一：
 
-**侧边栏**：加 "Chat Agent" 菜单项。
+1. **推荐**：用户在自己的服务器/Fly.io/Railway 跑一个 Docker 实例，启用 `MCP_MODE=http`、设 `AUTH_TOKEN`、`N8N_API_URL`、`N8N_API_KEY`
+2. **或者**：本平台统一托管一个共享只读知识库实例（仅暴露**知识类**工具，管理类工具仍用每用户的 n8n 凭据由网关注入）
 
----
+我会让 `UPSTREAM_N8N_MCP_URL`、`UPSTREAM_N8N_MCP_TOKEN` 作为可配置 secret，方案 1/2 都兼容。
 
-## 4. 多 OAuth + 主题切换
+## 实施步骤
 
-- 调用 `supabase--configure_social_auth` 启用 Apple（Google 已启用）
-- `login.tsx` / `signup.tsx` 加 "用 Apple 登录" 按钮（用 `lovable.auth.signInWithOAuth("apple", ...)`）
-- **主题切换组件**：`src/components/theme-toggle.tsx` —— 切换 `<html class="dark">` + 写入 localStorage
-- 在 `dashboard-shell.tsx` 顶部 header 放置切换按钮
-- `__root.tsx` 启动时根据 localStorage 设置初始主题
+1. **新增 secret**
+   - `UPSTREAM_N8N_MCP_URL`（如 `https://n8n-mcp.example.com/mcp`）
+   - `UPSTREAM_N8N_MCP_TOKEN`（上游的 `AUTH_TOKEN`）
 
----
+2. **新建 `src/lib/mcp-upstream.server.ts`**
+   - `upstreamRpc(method, params)`：用 fetch 转发 JSON-RPC 到上游，带 `Authorization: Bearer <UPSTREAM_TOKEN>`、`Accept: application/json, text/event-stream`
+   - `listUpstreamTools()`：调用上游 `tools/list`，缓存 5 分钟
+   - `callUpstreamTool(name, args, n8nCreds)`：管理类工具自动注入用户的 n8n base_url + api_key（通过 `_n8n_config` 参数或上游约定的 header）
 
-## 5. Billing 矩阵改造
+3. **改 `src/lib/mcp.server.ts`**
+   - `TOOLS` 改为 `getMergedTools()`：本地 4 个 + 上游 N 个（去重，本地优先）
+   - `runTool` 增加分支：未知工具名 → 转给 `callUpstreamTool`
+   - 工具名加可选前缀 `n8n.` 供上游工具，避免与未来本地工具命名冲突（默认透传不加前缀，保留与上游 README 一致的名字）
 
-**数据库迁移**：
-```sql
-create table prompt_usage_daily (
-  user_id uuid not null,
-  day date not null,
-  prompts int not null default 0,
-  primary key (user_id, day)
-);
-create function increment_prompt_usage(_user_id uuid, _n int default 1) ...
-create function get_today_prompt_usage(_user_id uuid) returns int ...
--- RLS: 仅本人可读
-```
+4. **改 `src/routes/api/public/mcp.ts`**
+   - `tools/list` 改成 `await getMergedTools()`
+   - `tools/call` 不再要求一定有本地 n8n_instance（知识类工具不需要）；只在调用本地 4 工具或上游管理类工具时才解密用户实例
 
-**`src/lib/tiers.ts`** 改为矩阵：
-```ts
-{
-  free:    { prompts_day: 5,   calls_day: 100,    rpm: 50,  features: [...] },
-  pro:     { prompts_day: 200, calls_day: 100000, rpm: 100, features: [...chat-agent] },
-  enterprise: { prompts_day: -1, calls_day: -1, rpm: 1000, features: [...] },
-}
-```
+5. **配额与日志**
+   - `recordCall` 增加字段：`upstream: boolean`、`category: 'local' | 'knowledge' | 'management'`
+   - 迁移：给 `mcp_call_logs` 加两列（nullable）
 
-**`src/routes/_authenticated/billing.tsx`**：把当前的 daily-only 卡片改为 4 维矩阵表格 + 当前用量进度条（prompts/day、calls/day、rpm、features 解锁列表）。
+6. **错误降级**
+   - 上游不可达 → `tools/list` 仍返回本地 4 工具，并在 `serverInfo.notes` 写入 "upstream knowledge base offline"
+   - 上游超时 30s → 返回标准 JSON-RPC error，不影响本地工具
 
-**Chat Agent edge function** 调用 `increment_prompt_usage`，并在超限时返回 429 + 提示升级。
+7. **文档与 UI**
+   - `src/routes/docs.tsx` 加一节 "Knowledge tools (1,650 nodes)" 列出主要工具
+   - `src/routes/_authenticated/dashboard.tsx` 显示 "Tools available: 4 local + N upstream"
 
-**MCP 端点**（`src/routes/api/public/mcp.ts`）加滚动窗口 RPM 限制（用内存 Map 即可，单 worker 实例足够）。
+## 技术细节
 
----
+- **MCP 协议透传**：上游 czlonkowski/n8n-mcp 自身就是 Streamable HTTP MCP，我们做的只是 JSON-RPC 包一层 + 改写 `tools/call` 时按需注入 n8n 凭据
+- **上游版本检测**：启动时调上游 `initialize`，记录 `serverInfo.version` 用于诊断
+- **并发**：合并 `tools/list` 时本地与上游并行 fetch，整体 P95 仍 < 200ms（缓存命中时 < 5ms）
+- **类型**：上游工具的 inputSchema 直接透传，不做二次校验（由上游自己 zod 校验）
 
-## 实施顺序与文件清单
+## 不在本次范围
 
-1. 多 OAuth + 主题切换（最快、最直观）
-2. Connect Client 预设页 + 侧边栏
-3. Onboarding 步骤条
-4. 数据库迁移（chat_conversations、chat_messages、prompt_usage_daily + functions）
-5. Billing 矩阵改造（tiers + billing 页 + MCP 限流）
-6. Chat Agent（edge function + 路由 + apply-to-n8n）
+- 把 czlonkowski 的 SQLite 数据库重写成本项目内嵌（数百 MB + Worker 限制，技术上不可行）
+- 自研节点文档抓取（重复造轮子）
+- 重写 39 个工具的逻辑（直接复用上游成熟实现）
 
-预计修改/新增 ~15 个文件 + 2 次数据库迁移 + 1 个 edge function + 1 次 social auth 配置。
+## 给用户的两个决策点（实施前确认）
 
----
-
-## 用户可见入口（侧边栏菜单变化）
-
-```
-Dashboard
-Instances
-API Keys
-Connect Client   ← 新
-Chat Agent       ← 新
-Usage
-Billing
-Settings
-```
+1. **上游部署位置**：自托管 Docker（你掌控） vs 让我在文档里给出一键部署模板？
+2. **管理类工具凭据**：用每用户在 `n8n_instances` 里存的凭据自动注入（推荐） vs 让上游用全局共享凭据？

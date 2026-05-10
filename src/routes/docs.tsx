@@ -46,6 +46,22 @@ function Docs() {
   }
 }`}
         </pre>
+
+        <h2 className="mt-10 text-2xl font-semibold">Available tools</h2>
+        <p className="mt-2 text-muted-foreground">
+          The gateway exposes <strong>4 runtime tools</strong> against your own n8n instance
+          (<code>list_workflows</code>, <code>get_workflow</code>, <code>execute_workflow</code>,
+          <code>list_executions</code>) <strong>plus the full czlonkowski/n8n-mcp toolbelt</strong> when
+          an upstream knowledge base is configured — covering ~1,650 nodes (820 core + 830 community).
+        </p>
+        <p className="mt-2 text-muted-foreground">
+          That includes knowledge tools (<code>search_nodes</code>, <code>get_node_essentials</code>,
+          <code>get_node_documentation</code>, <code>validate_workflow</code>,
+          <code>list_ai_tools</code>, <code>search_templates</code>, …) and management tools
+          (<code>n8n_create_workflow</code>, <code>n8n_update_partial_workflow</code>,
+          <code>n8n_trigger_webhook_workflow</code>, …). Management tools automatically use your stored
+          n8n credentials; knowledge tools work without an instance.
+        </p>
       </article>
     </div>
   );

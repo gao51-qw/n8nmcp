@@ -4,6 +4,14 @@
 import { hashPlatformApiKey, decryptSecret } from "./crypto.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { TIER_DAILY_LIMITS, type Tier } from "./tiers";
+import {
+  callUpstreamTool,
+  categorize,
+  isManagementTool,
+  isUpstreamConfigured,
+  listUpstreamTools,
+  type UpstreamTool,
+} from "./mcp-upstream.server";
 
 export type AuthedKey = {
   user_id: string;
@@ -75,6 +83,8 @@ export async function recordCall(opts: {
   status: "ok" | "error" | "rate_limited";
   latency_ms: number;
   error_message?: string | null;
+  upstream?: boolean;
+  category?: "local" | "knowledge" | "management" | null;
 }) {
   await Promise.allSettled([
     supabaseAdmin.from("mcp_call_logs").insert({
@@ -84,6 +94,8 @@ export async function recordCall(opts: {
       status: opts.status,
       latency_ms: opts.latency_ms,
       error_message: opts.error_message ?? null,
+      upstream: opts.upstream ?? false,
+      category: opts.category ?? null,
     }),
     supabaseAdmin.rpc("increment_mcp_usage", { _user_id: opts.user_id, _n: 1 }),
   ]);
@@ -113,7 +125,7 @@ export async function getDefaultInstance(userId: string) {
 
 // ---- MCP tool definitions ---------------------------------------------------
 
-export const TOOLS = [
+export const LOCAL_TOOLS = [
   {
     name: "list_workflows",
     description: "List workflows from the user's n8n instance.",
@@ -212,4 +224,86 @@ export async function runTool(
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+const LOCAL_NAMES: Set<string> = new Set(LOCAL_TOOLS.map((t) => t.name));
+
+/** Backwards-compatible alias used by tests. */
+export const TOOLS = LOCAL_TOOLS;
+
+/**
+ * Merge local tools with upstream knowledge/management tools (czlonkowski/n8n-mcp).
+ * Local definitions win on name collisions.
+ */
+export async function getMergedTools(): Promise<
+  Array<{ name: string; description?: string; inputSchema?: unknown }>
+> {
+  const upstream: UpstreamTool[] = await listUpstreamTools();
+  const merged: Array<{ name: string; description?: string; inputSchema?: unknown }> = [
+    ...LOCAL_TOOLS,
+  ];
+  for (const t of upstream) {
+    if (!t?.name || LOCAL_NAMES.has(t.name)) continue;
+    merged.push(t);
+  }
+  return merged;
+}
+
+export type DispatchResult = {
+  output: unknown;
+  upstream: boolean;
+  category: "local" | "knowledge" | "management";
+  needsInstance: boolean;
+};
+
+/**
+ * Route a tool call to local handler or upstream proxy.
+ * `inst` is required for local tools and for upstream `n8n_*` management tools;
+ * upstream knowledge tools work without it.
+ */
+export async function dispatchTool(
+  name: string,
+  args: Record<string, unknown>,
+  inst: Inst | null,
+): Promise<DispatchResult> {
+  if (LOCAL_NAMES.has(name)) {
+    if (!inst) {
+      return {
+        output: null,
+        upstream: false,
+        category: "local",
+        needsInstance: true,
+      };
+    }
+    const out = await runTool(inst, name, args);
+    return { output: out, upstream: false, category: "local", needsInstance: false };
+  }
+
+  if (!isUpstreamConfigured()) {
+    throw new Error(
+      `Unknown tool: ${name} (upstream knowledge base is not configured on this gateway)`,
+    );
+  }
+
+  const management = isManagementTool(name);
+  if (management && !inst) {
+    return {
+      output: null,
+      upstream: true,
+      category: "management",
+      needsInstance: true,
+    };
+  }
+
+  const out = await callUpstreamTool(
+    name,
+    args,
+    management && inst ? { base_url: inst.base_url, api_key: inst.api_key } : null,
+  );
+  return {
+    output: out,
+    upstream: true,
+    category: categorize(name),
+    needsInstance: false,
+  };
 }

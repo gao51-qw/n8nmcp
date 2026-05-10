@@ -5,14 +5,15 @@
 // - Returns SSE stream (one `message` event with the JSON-RPC response, then `[DONE]`)
 import { createFileRoute } from "@tanstack/react-router";
 import {
-  TOOLS,
   authenticateBearer,
   checkDailyQuota,
-  shortWindowAllow,
+  dispatchTool,
   getDefaultInstance,
+  getMergedTools,
   recordCall,
-  runTool,
+  shortWindowAllow,
 } from "@/lib/mcp.server";
+import { isUpstreamConfigured } from "@/lib/mcp-upstream.server";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -74,15 +75,23 @@ async function handleRpc(
       return rpcResult(req.id, {
         protocolVersion: "2025-06-18",
         capabilities: { tools: {} },
-        serverInfo: { name: "n8n-mcp-gateway", version: "0.1.0" },
+        serverInfo: {
+          name: "n8n-mcp-gateway",
+          version: "0.2.0",
+          notes: isUpstreamConfigured()
+            ? "local + upstream knowledge base (czlonkowski/n8n-mcp)"
+            : "local-only (upstream not configured)",
+        },
       });
 
     case "ping":
     case "notifications/initialized":
       return rpcResult(req.id, {});
 
-    case "tools/list":
-      return rpcResult(req.id, { tools: TOOLS });
+    case "tools/list": {
+      const tools = await getMergedTools();
+      return rpcResult(req.id, { tools });
+    }
 
     case "tools/call": {
       const params = req.params ?? {};
@@ -90,36 +99,48 @@ async function handleRpc(
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const started = Date.now();
 
+      // Lazily resolve the user's n8n instance — knowledge-only tools don't need one.
       const inst = await getDefaultInstance(ctx.user_id);
-      if (!inst) {
-        await recordCall({
-          user_id: ctx.user_id,
-          tool_name: name,
-          status: "error",
-          latency_ms: Date.now() - started,
-          error_message: "no n8n instance configured",
-        });
-        return rpcError(req.id, -32002, "No n8n instance configured for this user");
-      }
 
       try {
-        const out = await runTool(inst, name, args);
+        const result = await dispatchTool(name, args, inst);
+
+        if (result.needsInstance) {
+          await recordCall({
+            user_id: ctx.user_id,
+            tool_name: name,
+            status: "error",
+            latency_ms: Date.now() - started,
+            error_message: "no n8n instance configured",
+            upstream: result.upstream,
+            category: result.category,
+          });
+          return rpcError(req.id, -32002, "No n8n instance configured for this user");
+        }
+
         await recordCall({
           user_id: ctx.user_id,
-          instance_id: inst.id,
+          instance_id: inst?.id ?? null,
           tool_name: name,
           status: "ok",
           latency_ms: Date.now() - started,
+          upstream: result.upstream,
+          category: result.category,
         });
+
+        // Upstream already returns MCP-shaped { content, isError }. Pass through verbatim.
+        if (result.upstream && result.output && typeof result.output === "object") {
+          return rpcResult(req.id, result.output);
+        }
         return rpcResult(req.id, {
-          content: [{ type: "text", text: JSON.stringify(out, null, 2) }],
+          content: [{ type: "text", text: JSON.stringify(result.output, null, 2) }],
           isError: false,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "tool failed";
         await recordCall({
           user_id: ctx.user_id,
-          instance_id: inst.id,
+          instance_id: inst?.id ?? null,
           tool_name: name,
           status: "error",
           latency_ms: Date.now() - started,
