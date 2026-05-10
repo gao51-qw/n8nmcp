@@ -1,5 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import {
   TIER_LIMITS,
@@ -10,9 +12,11 @@ import {
   type Feature,
   tierOf,
 } from "@/lib/tiers";
+import { createBillingPortalSession, createCheckoutSession } from "@/lib/billing.functions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, X, CreditCard, Sparkles } from "lucide-react";
+import { Check, X, CreditCard, Sparkles, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/_authenticated/billing")({
   head: () => ({ meta: [{ title: "Billing — n8n-mcp" }] }),
