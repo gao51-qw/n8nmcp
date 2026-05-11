@@ -50,12 +50,35 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
     try {
       let customerId = sub?.billing_customer_id ?? undefined;
       if (!customerId && profile?.email) {
-        // Create or fetch a Paddle customer keyed by email so future checkouts reuse it.
-        const created = await paddle.customers.create({
-          email: profile.email,
-          customData: { user_id: context.userId },
-        });
-        customerId = created.id;
+        // Try create; if Paddle already has one with that email, look it up and reuse.
+        try {
+          const created = await paddle.customers.create({
+            email: profile.email,
+            customData: { user_id: context.userId },
+          });
+          customerId = created.id;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const m = msg.match(/ctm_[a-z0-9]+/i);
+          if (m) {
+            customerId = m[0];
+          } else {
+            // Fallback: list customers by email
+            const list = paddle.customers.list({ email: [profile.email] });
+            const first = await list.next();
+            if (first?.id) customerId = first.id;
+            else throw e;
+          }
+        }
+        // Persist for future checkouts so we never hit the conflict again.
+        if (customerId) {
+          await supabaseAdmin
+            .from("subscriptions")
+            .upsert(
+              { user_id: context.userId, billing_customer_id: customerId },
+              { onConflict: "user_id" },
+            );
+        }
       }
 
       const tx = await paddle.transactions.create({
