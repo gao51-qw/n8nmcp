@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { getPaddle, isPaddleConfigured, priceIdForTier } from "./paddle.server";
+import { getPaddle, isPaddleConfigured, priceIdForTier, paddleClientToken } from "./paddle.server";
 import { log } from "./logger.server";
 import type { Tier } from "./tiers";
 
@@ -130,3 +130,14 @@ export const createBillingPortalSession = createServerFn({ method: "POST" })
       throw new Error("Could not open billing portal");
     }
   });
+
+/** Public Paddle.js config (client token + environment). Safe to expose. */
+export const getPaddleClientConfig = createServerFn({ method: "GET" }).handler(async () => {
+  return {
+    token: paddleClientToken(),
+    environment:
+      (process.env.PADDLE_ENV ?? "sandbox").toLowerCase() === "production"
+        ? ("production" as const)
+        : ("sandbox" as const),
+  };
+});
