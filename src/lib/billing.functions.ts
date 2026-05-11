@@ -65,7 +65,8 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
           } else {
             // Fallback: list customers by email
             const list = paddle.customers.list({ email: [profile.email] });
-            const first = await list.next();
+            const page = await list.next();
+            const first = Array.isArray(page) ? page[0] : undefined;
             if (first?.id) customerId = first.id;
             else throw e;
           }
