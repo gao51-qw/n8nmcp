@@ -1,6 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
+import { AiLogoWall } from "@/components/marketing/ai-logo-wall";
+import { EvolutionSection } from "@/components/marketing/evolution-section";
+import { CacheSection } from "@/components/marketing/cache-section";
+import { CommunitySection } from "@/components/marketing/community-section";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -28,6 +32,31 @@ export const Route = createFileRoute("/")({
     const DESC =
       "Hosted MCP gateway for n8n. Connect Claude, ChatGPT, Cursor, Windsurf and any MCP-compatible client to your self-hosted n8n in seconds. Free tier with 100 calls/day.";
     const URL = "https://n8nmcp.lovable.app/";
+
+    const softwareSchema = {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "n8n-mcp",
+      description: DESC,
+      applicationCategory: "DeveloperApplication",
+      operatingSystem: "Web",
+      url: URL,
+      offers: [
+        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
+        { "@type": "Offer", name: "Supporter", price: "19", priceCurrency: "USD" },
+      ],
+    };
+
+    const faqSchema = {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQ.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    };
+
     return {
       meta: [
         { title: TITLE },
@@ -40,25 +69,20 @@ export const Route = createFileRoute("/")({
         { name: "twitter:description", content: DESC },
       ],
       links: [{ rel: "canonical", href: URL }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(softwareSchema),
+        },
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(faqSchema),
+        },
+      ],
     };
   },
   component: Landing,
 });
-
-const AI_TOOLS = [
-  "Claude",
-  "ChatGPT",
-  "Cursor",
-  "Windsurf",
-  "VS Code",
-  "Gemini CLI",
-  "Claude Code",
-  "Codex CLI",
-  "LM Studio",
-  "Continue",
-  "Cline",
-  "Zed",
-];
 
 const FAQ = [
   {
@@ -147,22 +171,7 @@ function Landing() {
         </div>
       </section>
 
-      {/* AI tools strip */}
-      <section className="mx-auto max-w-6xl px-6 pb-12">
-        <p className="text-center text-xs uppercase tracking-widest text-muted-foreground">
-          Works with your favorite AI tools
-        </p>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          {AI_TOOLS.map((t) => (
-            <span
-              key={t}
-              className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      </section>
+      <AiLogoWall />
 
       {/* Two ways */}
       <section className="mx-auto max-w-6xl px-6 py-20">
@@ -259,7 +268,11 @@ function Landing() {
         </div>
       </section>
 
-      {/* Pricing teaser */}
+      <EvolutionSection />
+
+      <CacheSection />
+
+      <CommunitySection />
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="text-center">
           <p className="text-xs uppercase tracking-widest text-primary">

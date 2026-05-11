@@ -1,126 +1,70 @@
 ## 目标
 
-把整个项目（主站 TanStack Start + n8n-knowledge-mcp）都跑在你自己的 VPS 上，不再依赖 Cloudflare Workers / Lovable 托管。最终架构：
+把首页与法务/SEO 补齐到对标 n8n-mcp.com 的水平。**不抄袭虚假的客户 logo 墙**，其余结构性板块逐步补全。当前首页已有 Hero+Stats、AI 工具条、Two Ways、Features、Pricing、FAQ、Final CTA，所以重点是补"对比叙事 / 集体知识 / 社区 / 元数据 / 视觉升级"。
 
-```text
-                ┌────────────── VPS (Ubuntu + Docker + nginx) ──────────────┐
-Internet ──▶ nginx ─┬─▶ app  容器  (主站 TanStack Start, :3001) ──▶ Supabase
-                    │
-                    └─▶ mcp  容器  (n8n-knowledge-mcp,    :3000) ──▶ SQLite
-                  443 TLS (Let's Encrypt)
-                  域名:
-                    n8nworkflow.com / app.n8nworkflow.com → app
-                    mcp.n8nworkflow.com                   → mcp
-```
+## 分步实施（每步一次提交，可独立验收）
 
-数据库依然用 Lovable Cloud (Supabase)，不迁。VPS 只跑无状态服务。
+### Step 1 — AI 工具条升级为 Logo 墙
+- 把 `src/routes/index.tsx` 里 `AI_TOOLS` 文字胶囊改为 logo 行
+- 用 `simple-icons` CDN（`https://cdn.simpleicons.org/{slug}/white`）或本地 SVG 渲染 Claude / OpenAI / Cursor / VS Code / Gemini / Windsurf 等图标
+- 移动端横向滚动、桌面端自动换行、统一灰度 + hover 上色
+- 验收：12+ 个工具图标，浅/深色主题下都清晰
 
----
+### Step 2 — 新增"From Frustration to Flow"对比板块
+- 新建 `src/components/marketing/evolution-section.tsx`
+- 4 组痛点 vs 解法卡片左右对照：
+  1. Copy-Pasting JSON ↔ Direct Deployment
+  2. Screenshotting Workflows ↔ Live Workflow Access
+  3. Outdated Node Configs ↔ Always Current
+  4. Blind Debugging ↔ Smart Self-Correction
+- 左红/右绿语义色，桌面端 grid-cols-2，移动端堆叠
+- 在 `index.tsx` 的 Features 与 Pricing 之间挂载
 
-## 1. 主站改造：从 Workers 切到 Node 运行时
+### Step 3 — 新增"Collective Knowledge / 缓存命中"板块
+- 新建 `src/components/marketing/cache-section.tsx`
+- 标题 "Every workflow makes everyone faster"
+- 一段叙事 + 5 步流程动画占位（CSS-only：Request → Search cache → Match → Deploy → Customize）
+- 强调 privacy-first 三个 badge：Patterns only / Self-hosted screening / Nothing leaves n8n-MCP
+- 挂在 Step 2 之后
 
-`vite.config.ts` 当前用的是 `@tanstack/start` 的 Cloudflare Workers preset (见 `wrangler.jsonc`)。要在 VPS 跑，切成 Node 输出：
+### Step 4 — 新增 Community 板块
+- 新建 `src/components/marketing/community-section.tsx`
+- 左：GitHub Star History 卡片 — 用 `https://api.star-history.com/svg?repos=czlonkowski/n8n-mcp&type=Date` 作 `<img>`，带 GitHub repo 链接
+- 右：3 张 YouTube 教程卡片（封面图 + 标题 + 作者 + 跳转 youtube.com 搜索）
+- 挂在 Cache 板块之后、Pricing 之前
 
-- `vite.config.ts`：把 TanStack Start preset 从 `cloudflare-module` 改成 `node-server`
-- 删除 / 不再使用 `wrangler.jsonc`（保留也不影响）
-- `package.json` 增加 `start: node .output/server/index.mjs`
-- 验证 `process.env.*`（Supabase service role 等）在 Node 下读取正常（已经是 `process.env`，无需改代码）
-- 所有 `/api/public/*` 路由原样工作
+### Step 5 — 页脚补 Imprint 与 GitHub
+- `src/components/marketing-footer.tsx` Legal 列加 `Imprint`（指向新建 `/imprint` 路由，最简公司主体信息占位）
+- Resources 列加 `GitHub`（外链 czlonkowski/n8n-mcp）和 `Star History`
+- 新建 `src/routes/imprint.tsx`，head meta + 页脚 + 占位主体信息
 
-构建产物：`.output/`（standalone Node 服务），监听 `PORT=3001`。
+### Step 6 — SEO 结构化数据（JSON-LD）
+- 在 `src/routes/index.tsx` 的 `head()` 注入：
+  - `SoftwareApplication` schema（name / description / offers / aggregateRating 暂留空）
+  - `FAQPage` schema，从现有 `FAQ` 数组生成
+- 在 `src/routes/__root.tsx` 注入 `Organization` schema（name / url / logo / sameAs:[github]）
+- 用 TanStack Router `head().scripts` 字段，type=`application/ld+json`
+- 验收：`view-source:` 能搜到 `application/ld+json`，Google Rich Results Test 通过
 
-## 2. 主站 Dockerfile
+## 不做的事（明确排除）
 
-新建 `Dockerfile`（项目根）：
+- **不**伪造 PayPal / Intercom / MIT 等"Trusted by"客户 logo 墙 — 没真实客户授权属虚假宣传
+- **不**编造 87,915+ Users / 19M Actions 等统计数字 — 当前 stats 用的是技术指标（节点数、客户端数、延迟），保持真实
+- **不**改动 Pricing 价格结构（已与竞品基本对齐：Free + $19）
 
-```text
-FROM node:22-alpine AS build
-WORKDIR /app
-COPY package*.json ./
-RUN npm ci
-COPY . .
-RUN npm run build               # 产出 .output/
+## 技术细节
 
-FROM node:22-alpine AS run
-WORKDIR /app
-COPY --from=build /app/.output ./.output
-COPY --from=build /app/package*.json ./
-ENV NODE_ENV=production PORT=3001
-EXPOSE 3001
-CMD ["node", ".output/server/index.mjs"]
-```
+- 所有外链必须 `target="_blank" rel="noreferrer"`
+- 所有图片懒加载 `loading="lazy"` + `decoding="async"`
+- 颜色一律走 `src/styles.css` 的 oklch 语义 token，禁止硬编码
+- 新组件放 `src/components/marketing/` 目录便于聚合
+- `head().scripts` 的 JSON-LD 必须 `JSON.stringify` 安全转义
+- 不改 `src/integrations/supabase/*`、`src/routeTree.gen.ts`（自动生成）
 
-`.dockerignore` 排除 `node_modules`、`.tmp`、`tools/`（mcp 单独构建）。
+## 完成顺序与验收
 
-## 3. MCP 服务沿用已有 Dockerfile
-
-`tools/n8n-knowledge-mcp/Dockerfile` 已经写好，无改动。
-
-## 4. VPS 编排：docker-compose
-
-新建 `deploy/docker-compose.yml`：
-
-```text
-services:
-  app:
-    image: ghcr.io/<you>/n8nworkflow-app:latest
-    restart: unless-stopped
-    env_file: .env.app          # SUPABASE_URL / SERVICE_ROLE / LOVABLE_API_KEY...
-    ports: ["127.0.0.1:3001:3001"]
-
-  mcp:
-    image: ghcr.io/<you>/n8n-knowledge-mcp:latest
-    restart: unless-stopped
-    environment:
-      AUTH_TOKEN: ${MCP_AUTH_TOKEN}
-    ports: ["127.0.0.1:3000:3000"]
-```
-
-`.env.app`（VPS 上手动放，不入仓库）包含所有 runtime secret：`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`、`LOVABLE_API_KEY`、`STRIPE_SECRET_KEY`（如启用）等。
-
-## 5. nginx 反代
-
-新建 `deploy/nginx/n8nworkflow.conf`：
-
-- `n8nworkflow.com` → `proxy_pass http://127.0.0.1:3001`（含 SSE 友好配置：`proxy_buffering off`、`proxy_read_timeout 3600s`）
-- `mcp.n8nworkflow.com` → `proxy_pass http://127.0.0.1:3000`（同样关 buffering）
-- TLS 用 certbot 自动签发，HTTP→HTTPS 301
-
-## 6. CI：GitHub Actions 同时构建两个镜像
-
-扩展现有 `.github/workflows/n8n-knowledge-mcp.yml`，新增 `app-image.yml`：
-
-- push to `main` 时构建主站镜像，推 `ghcr.io/<you>/n8nworkflow-app:latest` + commit sha tag
-- mcp workflow 保持 weekly + manual dispatch
-
-VPS 端用 `watchtower` 或简单 cron `docker compose pull && docker compose up -d` 实现自动更新。
-
-## 7. 部署流程（首次）
-
-在 VPS 上一次性：
-
-```text
-# 1. 装 docker / docker compose / nginx / certbot
-# 2. 拉仓库或只拷 deploy/ 目录到 /opt/n8nworkflow/
-# 3. 写 /opt/n8nworkflow/.env.app + 设置 MCP_AUTH_TOKEN
-# 4. docker login ghcr.io  (个人 PAT)
-# 5. docker compose -f deploy/docker-compose.yml up -d
-# 6. 拷 nginx 配置 → systemctl reload nginx
-# 7. certbot --nginx -d n8nworkflow.com -d mcp.n8nworkflow.com
-```
-
-## 8. Lovable / Cloudflare 端处理
-
-- Lovable 预览仍可用（用于开发），但生产入口指向 VPS。
-- 不要再点 Lovable 的 Publish 作为正式发布渠道；正式版本以 VPS 容器为准。
-- `wrangler.jsonc` 可保留（Lovable 预览仍走 Workers），不影响 VPS。
-
----
-
-## 需要你确认的点
-
-1. **GHCR 用户名**：用哪个 GitHub 账号 / org 来推 `ghcr.io/<NAME>/...`？
-2. **域名拆分**：主站走根域 `n8nworkflow.com` 还是子域 `app.n8nworkflow.com`？（你之前说根域被其他项目占用，如果还在占用就用 `app.` 子域，我会按这个改 nginx 配置。）
-3. **Supabase 是否也要自建**：默认继续用 Lovable Cloud 托管的 Supabase（推荐，省运维）。如要把数据库也搬到 VPS（self-hosted Supabase），是另一个大工程，需明确告诉我。
-
-确认后我就开始落地：改 `vite.config.ts`、加根 `Dockerfile` / `.dockerignore`、写 `deploy/docker-compose.yml` + nginx 配置 + 新 CI workflow。
+按 Step 1 → 6 顺序提交。每步完成后我会：
+1. 编辑/新增对应文件
+2. 检查 build 输出无错
+3. 浏览器预览对应板块视觉与响应式
+4. 报告完成并等你确认再进入下一步
