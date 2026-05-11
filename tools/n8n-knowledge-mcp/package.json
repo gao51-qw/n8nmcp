@@ -8,6 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build:db": "tsx scripts/1-fetch-packages.ts && tsx scripts/2-parse-nodes.ts && tsx scripts/3-parse-docs.ts && tsx scripts/4-build-db.ts",
+    "build:templates": "tsx scripts/5-build-templates.ts",
     "fetch": "tsx scripts/1-fetch-packages.ts",
     "parse:nodes": "tsx scripts/2-parse-nodes.ts",
     "parse:docs": "tsx scripts/3-parse-docs.ts",

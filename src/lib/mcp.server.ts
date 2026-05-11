@@ -169,6 +169,22 @@ export const LOCAL_TOOLS = [
       },
     },
   },
+  {
+    name: "import_workflow_template",
+    description:
+      "Import a workflow template (by template id from search_workflow_templates / get_workflow_template) " +
+      "into the user's n8n instance. Fetches the workflow JSON from the knowledge base and POSTs it to " +
+      "/api/v1/workflows. Returns the created workflow id. Set activate=true to also activate it.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "number", description: "Template id" },
+        name: { type: "string", description: "Override workflow name on import" },
+        activate: { type: "boolean", default: false },
+      },
+    },
+  },
 ] as const;
 
 type Inst = NonNullable<Awaited<ReturnType<typeof getDefaultInstance>>>;
@@ -222,6 +238,47 @@ export async function runTool(
       if (args.workflowId) qs.set("workflowId", String(args.workflowId));
       qs.set("limit", String(args.limit ?? 20));
       return n8n(inst, `/api/v1/executions?${qs}`);
+    }
+    case "import_workflow_template": {
+      const id = Number(args.id);
+      if (!Number.isFinite(id)) throw new Error("id (template id) is required");
+      if (!isUpstreamConfigured()) {
+        throw new Error("Knowledge base is not configured on this gateway; cannot resolve template.");
+      }
+      // 1) fetch template JSON from the upstream knowledge base
+      const tpl = (await callUpstreamTool("get_workflow_template", { id }, null)) as {
+        content?: Array<{ type: string; text: string }>;
+      };
+      const raw = tpl?.content?.[0]?.text;
+      if (!raw) throw new Error("template not found in knowledge base");
+      const parsed = JSON.parse(raw) as {
+        name?: string;
+        workflow?: { name?: string; nodes?: unknown[]; connections?: unknown; settings?: unknown };
+        error?: string;
+      };
+      if (parsed.error) throw new Error(parsed.error);
+      const wf = parsed.workflow;
+      if (!wf?.nodes) throw new Error("template has no workflow body");
+      // 2) build n8n create payload (only fields the n8n REST API accepts on create)
+      const payload = {
+        name: String(args.name ?? wf.name ?? parsed.name ?? `template-${id}`),
+        nodes: wf.nodes,
+        connections: wf.connections ?? {},
+        settings: wf.settings ?? {},
+      };
+      const created = (await n8n(inst, "/api/v1/workflows", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })) as { id?: string | number };
+      // 3) optionally activate
+      if (args.activate && created?.id != null) {
+        await n8n(inst, `/api/v1/workflows/${encodeURIComponent(String(created.id))}/activate`, {
+          method: "POST",
+        }).catch((e) => {
+          console.warn("[import_workflow_template] activate failed:", (e as Error).message);
+        });
+      }
+      return { ok: true, workflow_id: created?.id, name: payload.name, template_id: id };
     }
     default:
       throw new Error(`Unknown tool: ${name}`);

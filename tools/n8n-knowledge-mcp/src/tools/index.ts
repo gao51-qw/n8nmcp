@@ -275,7 +275,7 @@ export function registerAllTools(server: McpServer) {
     },
   );
 
-  // ───────────────────── Templates (placeholder; CI may populate) ─────
+  // ───────────────────── Templates ─────────────────────
 
   server.tool(
     "list_node_templates",
@@ -284,8 +284,10 @@ export function registerAllTools(server: McpServer) {
     async ({ node_type, limit }) => {
       const rows = db
         .prepare(
-          `SELECT id, name, description, tags_json FROM templates
-            WHERE nodes_json LIKE ? LIMIT ?`,
+          `SELECT id, name, description, categories_json, node_types_json, views, node_count
+             FROM templates
+            WHERE node_types_json LIKE ?
+            ORDER BY views DESC LIMIT ?`,
         )
         .all(`%${node_type}%`, limit);
       return text({ count: rows.length, templates: rows });
@@ -293,28 +295,115 @@ export function registerAllTools(server: McpServer) {
   );
 
   server.tool(
-    "search_templates",
-    "Search workflow templates by keyword.",
-    { query: z.string().min(1), limit: z.number().int().min(1).max(50).default(10) },
-    async ({ query, limit }) => {
+    "search_workflow_templates",
+    "Full-text search across template name/description/categories/node_types. " +
+      "Optional category filter (case-insensitive substring) and node_type filter.",
+    {
+      query: z.string().min(1),
+      category: z.string().optional(),
+      node_type: z.string().optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+    },
+    async ({ query, category, node_type, limit }) => {
+      const fts = ftsEscape(query);
+      const where: string[] = ["templates_fts MATCH ?"];
+      const params: any[] = [fts];
+      if (category) {
+        where.push("LOWER(t.categories_json) LIKE ?");
+        params.push(`%${category.toLowerCase()}%`);
+      }
+      if (node_type) {
+        where.push("t.node_types_json LIKE ?");
+        params.push(`%${node_type}%`);
+      }
+      params.push(limit);
       const rows = db
         .prepare(
-          `SELECT id, name, description, tags_json FROM templates
-            WHERE name LIKE ? OR description LIKE ? LIMIT ?`,
+          `SELECT t.id, t.name, t.description, t.categories_json, t.node_types_json,
+                  t.author_name, t.views, t.node_count, t.source_url
+             FROM templates_fts f JOIN templates t ON t.id = f.rowid
+            WHERE ${where.join(" AND ")}
+            ORDER BY rank, t.views DESC LIMIT ?`,
         )
-        .all(`%${query}%`, `%${query}%`, limit);
+        .all(...params);
+      return text({ query, count: rows.length, results: rows });
+    },
+  );
+
+  // legacy alias kept for backwards compat
+  server.tool(
+    "search_templates",
+    "Alias for search_workflow_templates.",
+    { query: z.string().min(1), limit: z.number().int().min(1).max(50).default(10) },
+    async ({ query, limit }) => {
+      const fts = ftsEscape(query);
+      const rows = db
+        .prepare(
+          `SELECT t.id, t.name, t.description, t.views, t.node_count
+             FROM templates_fts f JOIN templates t ON t.id = f.rowid
+            WHERE templates_fts MATCH ? ORDER BY rank, t.views DESC LIMIT ?`,
+        )
+        .all(fts, limit);
       return text({ count: rows.length, templates: rows });
     },
   );
 
   server.tool(
+    "get_workflow_template",
+    "Fetch a template's full importable n8n workflow JSON plus metadata.",
+    { id: z.number().int() },
+    async ({ id }) => {
+      const r = db.prepare("SELECT * FROM templates WHERE id = ?").get(id) as any;
+      if (!r) return text({ error: `template not found: ${id}` });
+      return text({
+        id: r.id,
+        name: r.name,
+        description: r.description,
+        categories: JSON.parse(r.categories_json || "[]"),
+        node_types: JSON.parse(r.node_types_json || "[]"),
+        author: { name: r.author_name, username: r.author_username, avatar: r.author_avatar },
+        views: r.views,
+        node_count: r.node_count,
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+        source_url: r.source_url,
+        workflow: r.workflow_json ? JSON.parse(r.workflow_json) : null,
+      });
+    },
+  );
+
+  // legacy alias
+  server.tool(
     "get_template",
-    "Fetch a template's full workflow JSON.",
+    "Alias for get_workflow_template.",
     { id: z.number().int() },
     async ({ id }) => {
       const r = db.prepare("SELECT * FROM templates WHERE id = ?").get(id) as any;
       if (!r) return text({ error: `template not found: ${id}` });
       return text({ ...r, workflow: r.workflow_json ? JSON.parse(r.workflow_json) : null });
+    },
+  );
+
+  server.tool(
+    "list_template_categories",
+    "List all categories used by templates with counts.",
+    { limit: z.number().int().min(1).max(500).default(100) },
+    async ({ limit }) => {
+      const rows = db
+        .prepare(`SELECT categories_json FROM templates WHERE categories_json != '[]'`)
+        .all() as Array<{ categories_json: string }>;
+      const counts = new Map<string, number>();
+      for (const r of rows) {
+        try {
+          const cats = JSON.parse(r.categories_json) as string[];
+          for (const c of cats) counts.set(c, (counts.get(c) ?? 0) + 1);
+        } catch {}
+      }
+      const out = [...counts.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, limit)
+        .map(([name, count]) => ({ name, count }));
+      return text({ count: out.length, categories: out });
     },
   );
 
@@ -327,7 +416,10 @@ export function registerAllTools(server: McpServer) {
       if (!t) return text({ error: `unknown task: ${task}` });
       const like = "%" + t.node_types[0] + "%";
       const rows = db
-        .prepare(`SELECT id, name, description FROM templates WHERE nodes_json LIKE ? LIMIT ?`)
+        .prepare(
+          `SELECT id, name, description, views FROM templates
+            WHERE node_types_json LIKE ? ORDER BY views DESC LIMIT ?`,
+        )
         .all(like, limit);
       return text({ task, count: rows.length, templates: rows });
     },
@@ -468,7 +560,8 @@ export function registerAllTools(server: McpServer) {
         "get_node_info", "get_node_essentials", "get_node_documentation",
         "get_node_as_tool_info", "get_property_dependencies",
         "list_tasks", "get_node_for_task",
-        "list_node_templates", "search_templates", "get_template", "get_templates_for_task",
+        "list_node_templates", "search_workflow_templates", "search_templates",
+        "get_workflow_template", "get_template", "list_template_categories", "get_templates_for_task",
         "validate_node_minimal", "validate_node_operation",
         "validate_workflow", "validate_workflow_connections", "validate_workflow_expressions",
         "tools_documentation", "n8n_diagnostic",
