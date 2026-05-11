@@ -48,12 +48,46 @@ function BillingPage() {
   const current = tierOf(sub.data?.tier);
   const checkout = useServerFn(createCheckoutSession);
   const portal = useServerFn(createBillingPortalSession);
+  const getCfg = useServerFn(getPaddleClientConfig);
   const [busy, setBusy] = useState<Tier | "portal" | null>(null);
+  const paddleRef = useRef<Paddle | null>(null);
+
+  // Initialize Paddle.js once. If the URL already contains ?_ptxn=..., open it.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cfg = await getCfg();
+        if (cancelled || !cfg.token) return;
+        const p = await initializePaddle({
+          environment: cfg.environment,
+          token: cfg.token,
+        });
+        if (!p || cancelled) return;
+        paddleRef.current = p;
+        const params = new URLSearchParams(window.location.search);
+        const txn = params.get("_ptxn");
+        if (txn) {
+          p.Checkout.open({ transactionId: txn });
+        }
+      } catch (e) {
+        console.error("Paddle.js init failed", e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getCfg]);
 
   const handleUpgrade = async (tier: "pro" | "enterprise") => {
     setBusy(tier);
     try {
-      const { url } = await checkout({ data: { tier } });
+      const { transaction_id, url } = await checkout({ data: { tier } });
+      if (paddleRef.current && transaction_id) {
+        paddleRef.current.Checkout.open({ transactionId: transaction_id });
+        setBusy(null);
+        return;
+      }
       if (url) window.location.href = url;
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not start checkout");
