@@ -140,11 +140,6 @@ function RootComponent() {
     applyTheme(getStoredTheme());
   }, [pathname]);
 
-  // Install fetch interceptor that attaches Supabase token to /_serverFn/* calls
-  useEffect(() => {
-    void import("@/lib/server-fn-auth.client").then((m) => m.installServerFnAuth());
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
