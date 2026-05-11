@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
+import { MarketingFooter } from "@/components/marketing-footer";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 
@@ -76,6 +77,7 @@ function Pricing() {
           ))}
         </div>
       </section>
+      <MarketingFooter />
     </div>
   );
 }

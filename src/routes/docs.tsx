@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
+import { MarketingFooter } from "@/components/marketing-footer";
 
 export const Route = createFileRoute("/docs")({
   head: () => ({
@@ -63,6 +64,7 @@ function Docs() {
           n8n credentials; knowledge tools work without an instance.
         </p>
       </article>
+      <MarketingFooter />
     </div>
   );
 }
