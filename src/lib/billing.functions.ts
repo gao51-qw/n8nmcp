@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { getPaddle, isPaddleConfigured, priceIdForTier } from "./paddle.server";
+import { getPaddle, isPaddleConfigured, priceIdForTier, paddleClientToken } from "./paddle.server";
 import { log } from "./logger.server";
 import type { Tier } from "./tiers";
 
