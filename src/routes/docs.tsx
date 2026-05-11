@@ -2,12 +2,24 @@ import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 
+const TITLE = "Docs — Connect any MCP client to n8n";
+const DESC =
+  "Step-by-step guide for connecting Claude, ChatGPT, Cursor, Windsurf and any MCP-compatible client to your self-hosted n8n instance via n8n-mcp.";
+const URL = "https://n8nmcp.lovable.app/docs";
+
 export const Route = createFileRoute("/docs")({
   head: () => ({
     meta: [
-      { title: "Docs — n8n-mcp" },
-      { name: "description", content: "Connect any MCP client to your n8n instance." },
+      { title: TITLE },
+      { name: "description", content: DESC },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESC },
+      { property: "og:url", content: URL },
+      { property: "og:type", content: "article" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESC },
     ],
+    links: [{ rel: "canonical", href: URL }],
   }),
   component: Docs,
 });

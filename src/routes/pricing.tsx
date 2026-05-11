@@ -4,12 +4,24 @@ import { MarketingFooter } from "@/components/marketing-footer";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 
+const TITLE = "Pricing — n8n-mcp";
+const DESC =
+  "Simple per-month pricing for the n8n-mcp gateway. Free tier with 100 MCP calls/day, paid plans from $19/mo. No seats, cancel anytime.";
+const URL = "https://n8nmcp.lovable.app/pricing";
+
 export const Route = createFileRoute("/pricing")({
   head: () => ({
     meta: [
-      { title: "Pricing — n8n-mcp" },
-      { name: "description", content: "Simple per-month pricing. Free tier with 100 MCP calls/day." },
+      { title: TITLE },
+      { name: "description", content: DESC },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESC },
+      { property: "og:url", content: URL },
+      { property: "og:type", content: "website" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESC },
     ],
+    links: [{ rel: "canonical", href: URL }],
   }),
   component: Pricing,
 });

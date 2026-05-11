@@ -2,16 +2,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 
+const TITLE = "Privacy Policy — n8n-mcp";
+const DESC =
+  "How n8n-mcp collects, uses and protects your data, n8n credentials and workflow metadata. AES-256-GCM at rest, no third-party trackers.";
+const URL = "https://n8nmcp.lovable.app/privacy";
+
 export const Route = createFileRoute("/privacy")({
   head: () => ({
     meta: [
-      { title: "Privacy Policy — n8n-mcp" },
-      {
-        name: "description",
-        content:
-          "How n8n-mcp collects, uses and protects your data, credentials and workflow metadata.",
-      },
+      { title: TITLE },
+      { name: "description", content: DESC },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESC },
+      { property: "og:url", content: URL },
+      { property: "og:type", content: "article" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESC },
+      { name: "robots", content: "index,follow" },
     ],
+    links: [{ rel: "canonical", href: URL }],
   }),
   component: Privacy,
 });

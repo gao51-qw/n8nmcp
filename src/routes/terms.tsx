@@ -2,16 +2,25 @@ import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 
+const TITLE = "Terms of Service — n8n-mcp";
+const DESC =
+  "Terms of Service for n8n-mcp, the hosted Model Context Protocol gateway for n8n workflows. Account, billing, acceptable use and liability.";
+const URL = "https://n8nmcp.lovable.app/terms";
+
 export const Route = createFileRoute("/terms")({
   head: () => ({
     meta: [
-      { title: "Terms of Service — n8n-mcp" },
-      {
-        name: "description",
-        content:
-          "Terms of Service for n8n-mcp, the hosted MCP gateway for n8n workflows.",
-      },
+      { title: TITLE },
+      { name: "description", content: DESC },
+      { property: "og:title", content: TITLE },
+      { property: "og:description", content: DESC },
+      { property: "og:url", content: URL },
+      { property: "og:type", content: "article" },
+      { name: "twitter:title", content: TITLE },
+      { name: "twitter:description", content: DESC },
+      { name: "robots", content: "index,follow" },
     ],
+    links: [{ rel: "canonical", href: URL }],
   }),
   component: Terms,
 });
