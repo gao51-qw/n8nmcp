@@ -52,9 +52,9 @@ export function MarketingFooter() {
           </div>
 
           {SECTIONS.map((s) => (
-            <div key={s.title}>
+            <div key={s.title} className="min-w-0">
               <h4 className="text-sm font-semibold text-foreground">{s.title}</h4>
-              <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+              <ul className="mt-4 space-y-2 text-sm text-muted-foreground break-words">
                 {s.links.map((l) => (
                   <li key={l.label}>
                     {"to" in l ? (
