@@ -1,7 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { initializePaddle, type Paddle } from "@paddle/paddle-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
   TIER_LIMITS,
@@ -12,7 +13,11 @@ import {
   type Feature,
   tierOf,
 } from "@/lib/tiers";
-import { createBillingPortalSession, createCheckoutSession } from "@/lib/billing.functions";
+import {
+  createBillingPortalSession,
+  createCheckoutSession,
+  getPaddleClientConfig,
+} from "@/lib/billing.functions";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Check, X, CreditCard, Sparkles, Loader2 } from "lucide-react";
