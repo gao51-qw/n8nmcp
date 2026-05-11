@@ -169,6 +169,22 @@ export const LOCAL_TOOLS = [
       },
     },
   },
+  {
+    name: "import_workflow_template",
+    description:
+      "Import a workflow template (by template id from search_workflow_templates / get_workflow_template) " +
+      "into the user's n8n instance. Fetches the workflow JSON from the knowledge base and POSTs it to " +
+      "/api/v1/workflows. Returns the created workflow id. Set activate=true to also activate it.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "number", description: "Template id" },
+        name: { type: "string", description: "Override workflow name on import" },
+        activate: { type: "boolean", default: false },
+      },
+    },
+  },
 ] as const;
 
 type Inst = NonNullable<Awaited<ReturnType<typeof getDefaultInstance>>>;
