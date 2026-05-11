@@ -305,31 +305,34 @@ export type Database = {
       }
       subscriptions: {
         Row: {
+          billing_customer_id: string | null
+          billing_provider: string
+          billing_subscription_id: string | null
           created_at: string
           current_period_end: string | null
           status: string
-          stripe_customer_id: string | null
-          stripe_subscription_id: string | null
           tier: string
           updated_at: string
           user_id: string
         }
         Insert: {
+          billing_customer_id?: string | null
+          billing_provider?: string
+          billing_subscription_id?: string | null
           created_at?: string
           current_period_end?: string | null
           status?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
           tier?: string
           updated_at?: string
           user_id: string
         }
         Update: {
+          billing_customer_id?: string | null
+          billing_provider?: string
+          billing_subscription_id?: string | null
           created_at?: string
           current_period_end?: string | null
           status?: string
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
           tier?: string
           updated_at?: string
           user_id?: string

@@ -25,7 +25,7 @@ import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/c
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
-import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe-webhook'
+import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/paddle-webhook'
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminAnnouncementsRouteImport } from './routes/_authenticated/_admin/admin.announcements'
@@ -108,9 +108,9 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/_admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
-  id: '/api/public/stripe-webhook',
-  path: '/api/public/stripe-webhook',
+const ApiPublicPaddleWebhookRoute = ApiPublicPaddleWebhookRouteImport.update({
+  id: '/api/public/paddle-webhook',
+  path: '/api/public/paddle-webhook',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiPublicMcpRoute = ApiPublicMcpRouteImport.update({
@@ -147,7 +147,7 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
-  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -167,7 +167,7 @@ export interface FileRoutesByTo {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
-  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -190,7 +190,7 @@ export interface FileRoutesById {
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
-  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
+  '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -212,7 +212,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/api/public/mcp'
-    | '/api/public/stripe-webhook'
+    | '/api/public/paddle-webhook'
     | '/admin/announcements'
     | '/admin/users'
   fileRoutesByTo: FileRoutesByTo
@@ -232,7 +232,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/api/public/mcp'
-    | '/api/public/stripe-webhook'
+    | '/api/public/paddle-webhook'
     | '/admin/announcements'
     | '/admin/users'
   id:
@@ -254,7 +254,7 @@ export interface FileRouteTypes {
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/api/public/mcp'
-    | '/api/public/stripe-webhook'
+    | '/api/public/paddle-webhook'
     | '/_authenticated/_admin/admin/announcements'
     | '/_authenticated/_admin/admin/users'
   fileRoutesById: FileRoutesById
@@ -267,7 +267,7 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   SignupRoute: typeof SignupRoute
   ApiPublicMcpRoute: typeof ApiPublicMcpRoute
-  ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
+  ApiPublicPaddleWebhookRoute: typeof ApiPublicPaddleWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -384,11 +384,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/api/public/stripe-webhook': {
-      id: '/api/public/stripe-webhook'
-      path: '/api/public/stripe-webhook'
-      fullPath: '/api/public/stripe-webhook'
-      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
+    '/api/public/paddle-webhook': {
+      id: '/api/public/paddle-webhook'
+      path: '/api/public/paddle-webhook'
+      fullPath: '/api/public/paddle-webhook'
+      preLoaderRoute: typeof ApiPublicPaddleWebhookRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/public/mcp': {
@@ -467,7 +467,7 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   SignupRoute: SignupRoute,
   ApiPublicMcpRoute: ApiPublicMcpRoute,
-  ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
+  ApiPublicPaddleWebhookRoute: ApiPublicPaddleWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
