@@ -16,9 +16,12 @@ export function MarketingHeader() {
           <span className="text-base">n8n-mcp</span>
         </Link>
         <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
+          <Link to="/" hash="features" className="hover:text-foreground">Features</Link>
           <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
           <Link to="/docs" className="hover:text-foreground">Docs</Link>
-          <a href="https://github.com" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
+          <Link to="/" hash="community" className="hover:text-foreground">Community</Link>
+          <Link to="/" hash="faq" className="hover:text-foreground">FAQ</Link>
+          <a href="https://github.com/czlonkowski/n8n-mcp" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
         </nav>
         <div className="flex items-center gap-2">
           <ThemeToggle />

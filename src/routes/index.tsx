@@ -246,7 +246,7 @@ function Landing() {
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 py-12">
+      <section id="features" className="mx-auto max-w-6xl px-6 py-12 scroll-mt-20">
         <div className="grid gap-6 md:grid-cols-3">
           {[
             { icon: Bot, title: "Universal MCP", body: "Streamable HTTP MCP server compatible with every major AI client." },
@@ -272,7 +272,7 @@ function Landing() {
 
       <CacheSection />
 
-      <CommunitySection />
+      <div id="community" className="scroll-mt-20"><CommunitySection /></div>
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="text-center">
           <p className="text-xs uppercase tracking-widest text-primary">
@@ -351,7 +351,7 @@ function Landing() {
       </section>
 
       {/* FAQ */}
-      <section className="mx-auto max-w-3xl px-6 py-20">
+      <section id="faq" className="mx-auto max-w-3xl px-6 py-20 scroll-mt-20">
         <div className="text-center">
           <p className="text-xs uppercase tracking-widest text-primary">FAQ</p>
           <h2 className="mt-3 text-3xl font-bold md:text-4xl">Got questions?</h2>
