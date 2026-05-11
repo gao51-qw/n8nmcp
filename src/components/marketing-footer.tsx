@@ -58,7 +58,16 @@ export function MarketingFooter() {
                 {s.links.map((l) => (
                   <li key={l.label}>
                     {"to" in l ? (
-                      <Link to={l.to} className="hover:text-foreground">
+                      <Link to={l.to} className="hover:text-foreground inline-block">
+                        {l.label}
+                      </Link>
+                    ) : (
+                      <a
+                        href={l.href}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:text-foreground inline-block break-all"
+                      >
                         {l.label}
                       </Link>
                     ) : (
