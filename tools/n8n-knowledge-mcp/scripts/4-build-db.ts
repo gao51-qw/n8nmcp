@@ -96,9 +96,28 @@ async function main() {
       id INTEGER PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT,
+      categories_json TEXT NOT NULL DEFAULT '[]',
+      node_types_json TEXT NOT NULL DEFAULT '[]',
       tags_json TEXT NOT NULL DEFAULT '[]',
       nodes_json TEXT NOT NULL DEFAULT '[]',
+      author_name TEXT,
+      author_username TEXT,
+      author_avatar TEXT,
+      views INTEGER NOT NULL DEFAULT 0,
+      node_count INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT,
+      updated_at TEXT,
+      source_url TEXT,
       workflow_json TEXT
+    );
+
+    CREATE INDEX idx_templates_views ON templates(views DESC);
+    CREATE INDEX idx_templates_node_count ON templates(node_count);
+
+    CREATE VIRTUAL TABLE templates_fts USING fts5(
+      name, description, categories, node_types,
+      content='templates', content_rowid='id',
+      tokenize='unicode61'
     );
   `);
 
