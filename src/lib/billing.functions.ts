@@ -2,11 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import {
-  getPaddle,
-  isPaddleConfigured,
-  priceIdForTier,
-} from "./paddle.server";
+import { getPaddle, isPaddleConfigured, priceIdForTier } from "./paddle.server";
 import { log } from "./logger.server";
 import type { Tier } from "./tiers";
 
@@ -19,9 +15,7 @@ import type { Tier } from "./tiers";
  */
 export const createCheckoutSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) =>
-    z.object({ tier: z.enum(["pro", "enterprise"]) }).parse(d),
-  )
+  .inputValidator((d) => z.object({ tier: z.enum(["pro", "enterprise"]) }).parse(d))
   .handler(async ({ context, data }) => {
     if (!isPaddleConfigured()) {
       throw new Error("Billing is not configured on this deployment");
