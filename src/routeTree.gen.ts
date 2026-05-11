@@ -17,6 +17,7 @@ import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImprintRouteImport } from './routes/imprint'
+import { Route as FaqRouteImport } from './routes/faq'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
@@ -73,6 +74,11 @@ const LoginRoute = LoginRouteImport.update({
 const ImprintRoute = ImprintRouteImport.update({
   id: '/imprint',
   path: '/imprint',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FaqRoute = FaqRouteImport.update({
+  id: '/faq',
+  path: '/faq',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DocsRoute = DocsRouteImport.update({
@@ -164,6 +170,7 @@ const AuthenticatedAdminAdminAnnouncementsRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/docs': typeof DocsRoute
+  '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/docs': typeof DocsRoute
+  '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
@@ -216,6 +224,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/docs': typeof DocsRoute
+  '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
@@ -244,6 +253,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/docs'
+    | '/faq'
     | '/imprint'
     | '/login'
     | '/pricing'
@@ -269,6 +279,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/docs'
+    | '/faq'
     | '/imprint'
     | '/login'
     | '/pricing'
@@ -295,6 +306,7 @@ export interface FileRouteTypes {
     | '/'
     | '/_authenticated'
     | '/docs'
+    | '/faq'
     | '/imprint'
     | '/login'
     | '/pricing'
@@ -323,6 +335,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   DocsRoute: typeof DocsRoute
+  FaqRoute: typeof FaqRoute
   ImprintRoute: typeof ImprintRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
@@ -391,6 +404,13 @@ declare module '@tanstack/react-router' {
       path: '/imprint'
       fullPath: '/imprint'
       preLoaderRoute: typeof ImprintRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/faq': {
+      id: '/faq'
+      path: '/faq'
+      fullPath: '/faq'
+      preLoaderRoute: typeof FaqRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/docs': {
@@ -563,6 +583,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   DocsRoute: DocsRoute,
+  FaqRoute: FaqRoute,
   ImprintRoute: ImprintRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,

@@ -20,7 +20,7 @@ export function MarketingHeader() {
           <Link to="/pricing" className="hover:text-foreground">Pricing</Link>
           <Link to="/docs" className="hover:text-foreground">Docs</Link>
           <Link to="/" hash="community" className="hover:text-foreground">Community</Link>
-          <Link to="/" hash="faq" className="hover:text-foreground">FAQ</Link>
+          <Link to="/faq" className="hover:text-foreground">FAQ</Link>
           <a href="https://github.com/czlonkowski/n8n-mcp" target="_blank" rel="noreferrer" className="hover:text-foreground">GitHub</a>
         </nav>
         <div className="flex items-center gap-2">
