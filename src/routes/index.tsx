@@ -1,6 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
+import { AiLogoWall } from "@/components/marketing/ai-logo-wall";
+import { EvolutionSection } from "@/components/marketing/evolution-section";
+import { CacheSection } from "@/components/marketing/cache-section";
+import { CommunitySection } from "@/components/marketing/community-section";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,

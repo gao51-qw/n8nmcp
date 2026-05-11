@@ -16,7 +16,8 @@ const SECTIONS = [
     links: [
       { label: "MCP protocol", href: "https://modelcontextprotocol.io" },
       { label: "n8n", href: "https://n8n.io" },
-      { label: "GitHub", href: "https://github.com" },
+      { label: "GitHub", href: "https://github.com/czlonkowski/n8n-mcp" },
+      { label: "Star history", href: "https://star-history.com/#czlonkowski/n8n-mcp&Date" },
       { label: "Status", href: "https://status.lovable.app" },
     ],
   },
@@ -26,6 +27,7 @@ const SECTIONS = [
       { label: "Terms of Service", to: "/terms" as const },
       { label: "Privacy Policy", to: "/privacy" as const },
       { label: "Cookies", to: "/privacy" as const, hash: "cookies" },
+      { label: "Imprint", to: "/imprint" as const },
       { label: "Contact", href: "mailto:hello@n8nmcp.app" },
     ],
   },
