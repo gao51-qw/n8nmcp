@@ -35,8 +35,8 @@ export function MarketingFooter() {
   return (
     <footer className="border-t border-border/60 bg-background">
       <div className="mx-auto max-w-7xl px-6 py-14">
-        <div className="grid gap-10 md:grid-cols-4">
-          <div>
+        <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 md:grid-cols-4 md:gap-10">
+          <div className="col-span-2 sm:col-span-3 md:col-span-1">
             <Link to="/" className="flex items-center gap-2 font-semibold">
               <span
                 className="grid h-8 w-8 place-items-center rounded-md"
@@ -52,13 +52,13 @@ export function MarketingFooter() {
           </div>
 
           {SECTIONS.map((s) => (
-            <div key={s.title}>
+            <div key={s.title} className="min-w-0">
               <h4 className="text-sm font-semibold text-foreground">{s.title}</h4>
-              <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
+              <ul className="mt-4 space-y-2 text-sm text-muted-foreground break-words">
                 {s.links.map((l) => (
                   <li key={l.label}>
                     {"to" in l ? (
-                      <Link to={l.to} className="hover:text-foreground">
+                      <Link to={l.to} className="hover:text-foreground inline-block">
                         {l.label}
                       </Link>
                     ) : (
@@ -66,7 +66,7 @@ export function MarketingFooter() {
                         href={l.href}
                         target="_blank"
                         rel="noreferrer"
-                        className="hover:text-foreground"
+                        className="hover:text-foreground inline-block break-all"
                       >
                         {l.label}
                       </a>
