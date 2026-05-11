@@ -69,15 +69,6 @@ export function MarketingFooter() {
                         className="hover:text-foreground inline-block break-all"
                       >
                         {l.label}
-                      </Link>
-                    ) : (
-                      <a
-                        href={l.href}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="hover:text-foreground"
-                      >
-                        {l.label}
                       </a>
                     )}
                   </li>
