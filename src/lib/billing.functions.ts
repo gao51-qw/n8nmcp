@@ -2,12 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import {
-  appPublicUrl,
-  getPaddle,
-  isPaddleConfigured,
-  priceIdForTier,
-} from "./paddle.server";
+import { getPaddle, isPaddleConfigured, priceIdForTier } from "./paddle.server";
 import { log } from "./logger.server";
 import type { Tier } from "./tiers";
 
@@ -20,9 +15,7 @@ import type { Tier } from "./tiers";
  */
 export const createCheckoutSession = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) =>
-    z.object({ tier: z.enum(["pro", "enterprise"]) }).parse(d),
-  )
+  .inputValidator((d) => z.object({ tier: z.enum(["pro", "enterprise"]) }).parse(d))
   .handler(async ({ context, data }) => {
     if (!isPaddleConfigured()) {
       throw new Error("Billing is not configured on this deployment");
@@ -32,7 +25,6 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
       throw new Error(`No Paddle price configured for tier=${data.tier}`);
     }
     const paddle = getPaddle();
-    const base = appPublicUrl();
 
     // Reuse customer id if we already have one for this user.
     const { data: sub } = await supabaseAdmin
@@ -86,9 +78,6 @@ export const createCheckoutSession = createServerFn({ method: "POST" })
         items: [{ priceId, quantity: 1 }],
         customerId,
         customData: { user_id: context.userId, tier: data.tier },
-        checkout: {
-          url: `${base}/billing?upgraded=1`,
-        },
       });
 
       log.info("paddle.checkout.created", {
