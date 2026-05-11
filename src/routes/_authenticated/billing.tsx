@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useRef, useState } from "react";
-import { initializePaddle, type Paddle } from "@paddle/paddle-js";
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { Paddle } from "@paddle/paddle-js";
 import { supabase } from "@/integrations/supabase/client";
 import {
   TIER_LIMITS,
@@ -51,45 +51,89 @@ function BillingPage() {
   const getCfg = useServerFn(getPaddleClientConfig);
   const [busy, setBusy] = useState<Tier | "portal" | null>(null);
   const paddleRef = useRef<Paddle | null>(null);
+  const paddlePromiseRef = useRef<Promise<Paddle> | null>(null);
 
-  // Initialize Paddle.js once. If the URL already contains ?_ptxn=..., open it.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
+  const getPaddle = useCallback(async () => {
+    if (paddleRef.current) return paddleRef.current;
+
+    if (!paddlePromiseRef.current) {
+      paddlePromiseRef.current = (async () => {
         const cfg = await getCfg();
-        if (cancelled || !cfg.token) return;
-        const p = await initializePaddle({
+        if (!cfg.token) throw new Error("Billing checkout is missing its client token");
+
+        const { initializePaddle } = await import("@paddle/paddle-js");
+        const paddle = await initializePaddle({
           environment: cfg.environment,
           token: cfg.token,
         });
-        if (!p || cancelled) return;
-        paddleRef.current = p;
-        const params = new URLSearchParams(window.location.search);
-        const txn = params.get("_ptxn");
-        if (txn) {
-          p.Checkout.open({ transactionId: txn });
-        }
-      } catch (e) {
-        console.error("Paddle.js init failed", e);
-      }
-    })();
+        if (!paddle) throw new Error("Paddle checkout did not load");
+
+        paddleRef.current = paddle;
+        return paddle;
+      })().catch((error) => {
+        paddlePromiseRef.current = null;
+        throw error;
+      });
+    }
+
+    return paddlePromiseRef.current;
+  }, [getCfg]);
+
+  const openCheckout = useCallback(
+    async (transactionId: string) => {
+      const paddle = await getPaddle();
+      paddle.Checkout.open({ transactionId });
+    },
+    [getPaddle],
+  );
+
+  // If Paddle redirects back with ?_ptxn=..., open the overlay once Paddle.js is ready.
+  useEffect(() => {
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const txn = params.get("_ptxn");
+    if (!txn) return () => {
+      cancelled = true;
+    };
+
+    void openCheckout(txn)
+      .then(() => {
+        if (cancelled) return;
+        params.delete("_ptxn");
+        const search = params.toString();
+        window.history.replaceState(
+          null,
+          "",
+          `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`,
+        );
+      })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error("Paddle checkout open failed", e);
+        toast.error("Checkout could not load. Please refresh and try again.");
+      });
+
     return () => {
       cancelled = true;
     };
-  }, [getCfg]);
+  }, [openCheckout]);
 
   const handleUpgrade = async (tier: "pro" | "enterprise") => {
     setBusy(tier);
     try {
       const { transaction_id, url } = await checkout({ data: { tier } });
-      if (paddleRef.current && transaction_id) {
-        paddleRef.current.Checkout.open({ transactionId: transaction_id });
+      if (transaction_id) {
+        await openCheckout(transaction_id);
         setBusy(null);
         return;
       }
-      if (url) window.location.href = url;
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+      throw new Error("Could not start checkout");
     } catch (e) {
+      console.error("Paddle checkout open failed", e);
       toast.error(e instanceof Error ? e.message : "Could not start checkout");
       setBusy(null);
     }
