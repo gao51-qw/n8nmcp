@@ -48,15 +48,7 @@ export const Route = createFileRoute("/")({
       ],
     };
 
-    const faqSchema = {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      mainEntity: FAQ.map((f) => ({
-        "@type": "Question",
-        name: f.q,
-        acceptedAnswer: { "@type": "Answer", text: f.a },
-      })),
-    };
+    const faqSchema = buildFaqJsonLd(FAQ);
 
     return {
       meta: [
