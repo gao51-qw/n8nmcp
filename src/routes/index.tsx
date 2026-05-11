@@ -23,6 +23,25 @@ import {
 } from "lucide-react";
 
 export const Route = createFileRoute("/")({
+  head: () => {
+    const TITLE = "n8n-mcp — Plug your n8n workflows into any AI client";
+    const DESC =
+      "Hosted MCP gateway for n8n. Connect Claude, ChatGPT, Cursor, Windsurf and any MCP-compatible client to your self-hosted n8n in seconds. Free tier with 100 calls/day.";
+    const URL = "https://n8nmcp.lovable.app/";
+    return {
+      meta: [
+        { title: TITLE },
+        { name: "description", content: DESC },
+        { property: "og:title", content: TITLE },
+        { property: "og:description", content: DESC },
+        { property: "og:url", content: URL },
+        { property: "og:type", content: "website" },
+        { name: "twitter:title", content: TITLE },
+        { name: "twitter:description", content: DESC },
+      ],
+      links: [{ rel: "canonical", href: URL }],
+    };
+  },
   component: Landing,
 });
 
