@@ -171,22 +171,7 @@ function Landing() {
         </div>
       </section>
 
-      {/* AI tools strip */}
-      <section className="mx-auto max-w-6xl px-6 pb-12">
-        <p className="text-center text-xs uppercase tracking-widest text-muted-foreground">
-          Works with your favorite AI tools
-        </p>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-          {AI_TOOLS.map((t) => (
-            <span
-              key={t}
-              className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              {t}
-            </span>
-          ))}
-        </div>
-      </section>
+      <AiLogoWall />
 
       {/* Two ways */}
       <section className="mx-auto max-w-6xl px-6 py-20">
@@ -283,7 +268,11 @@ function Landing() {
         </div>
       </section>
 
-      {/* Pricing teaser */}
+      <EvolutionSection />
+
+      <CacheSection />
+
+      <CommunitySection />
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="text-center">
           <p className="text-xs uppercase tracking-widest text-primary">
