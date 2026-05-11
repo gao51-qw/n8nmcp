@@ -1,11 +1,72 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
+import { MarketingFooter } from "@/components/marketing-footer";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Bot, Workflow, ShieldCheck, Zap, Code2, Globe } from "lucide-react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
+  ArrowRight,
+  Bot,
+  Workflow,
+  ShieldCheck,
+  Zap,
+  Code2,
+  Globe,
+  Check,
+  Sparkles,
+  Terminal,
+  MessageSquare,
+} from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Landing,
 });
+
+const AI_TOOLS = [
+  "Claude",
+  "ChatGPT",
+  "Cursor",
+  "Windsurf",
+  "VS Code",
+  "Gemini CLI",
+  "Claude Code",
+  "Codex CLI",
+  "LM Studio",
+  "Continue",
+  "Cline",
+  "Zed",
+];
+
+const FAQ = [
+  {
+    q: "How is n8n-mcp different from running n8n's MCP node myself?",
+    a: "We host a multi-tenant MCP gateway in front of your n8n instance. You get a stable URL, per-tool routing, encrypted credential storage, usage quotas and observability — without exposing your n8n API key to AI clients.",
+  },
+  {
+    q: "Which AI clients are supported?",
+    a: "Anything that speaks the Model Context Protocol over Streamable HTTP — Claude, Claude Code, ChatGPT, Cursor, Windsurf, VS Code, Gemini CLI, Codex CLI, LM Studio, Continue, Cline, Zed and more.",
+  },
+  {
+    q: "Is my n8n API key safe?",
+    a: "Yes. Keys are encrypted at rest with AES-256-GCM before they touch the database. Decryption only happens in memory inside the gateway when forwarding a request to your instance.",
+  },
+  {
+    q: "Do I need a paid plan to start?",
+    a: "No. The Free tier includes 100 MCP calls per day and one n8n instance. No credit card required.",
+  },
+  {
+    q: "Can I use this with a self-hosted n8n behind a private network?",
+    a: "The gateway needs to reach your n8n HTTPS endpoint. If your n8n is on a private network you can expose it via a tunnel (Cloudflare Tunnel, Tailscale Funnel) or run the gateway inside the same network.",
+  },
+  {
+    q: "Is the source available?",
+    a: "The MCP knowledge server we use is open source. The hosted gateway code is closed for now but we publish detailed docs and the wire protocol is the official MCP spec — no lock-in.",
+  },
+];
 
 function Landing() {
   return (
@@ -20,21 +81,22 @@ function Landing() {
         />
         <div className="relative mx-auto max-w-5xl px-6 py-24 text-center md:py-32">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-            <span className="h-1.5 w-1.5 rounded-full bg-primary" /> Hosted MCP gateway for n8n
+            <Sparkles className="h-3 w-3 text-primary" /> Free to use
           </div>
-          <h1 className="text-balance text-5xl font-bold tracking-tight md:text-6xl">
-            Plug your{" "}
+          <h1 className="text-balance text-5xl font-bold leading-tight tracking-tight md:text-6xl">
+            Plug your n8n workflows
+            <br />
             <span
               className="bg-clip-text text-transparent"
               style={{ backgroundImage: "var(--gradient-primary)" }}
             >
-              n8n workflows
-            </span>{" "}
-            into any AI client
+              into any AI client
+            </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
-            n8n-mcp turns your self-hosted n8n into a Model Context Protocol server. Connect
-            Claude, ChatGPT, Cursor, Gemini CLI and any MCP client with one URL and one API key.
+            n8n-mcp turns your self-hosted n8n into a Model Context Protocol
+            server. Connect Claude, ChatGPT, Cursor and any MCP-compatible
+            client with one URL and one API key — no drag-and-drop required.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="h-12 px-6">
@@ -46,12 +108,117 @@ function Landing() {
               <Link to="/docs">Read the docs</Link>
             </Button>
           </div>
-          <p className="mt-4 text-xs text-muted-foreground">No credit card required · 100 calls/day on Free</p>
+          <p className="mt-4 text-xs text-muted-foreground">
+            No credit card required · 100 calls/day on Free
+          </p>
+
+          {/* Stats */}
+          <div className="mx-auto mt-16 grid max-w-3xl grid-cols-3 gap-6">
+            {[
+              { v: "1,084", l: "n8n nodes covered" },
+              { v: "20+", l: "supported AI clients" },
+              { v: "<200ms", l: "median tool call" },
+            ].map((s) => (
+              <div key={s.l}>
+                <div className="text-3xl font-bold md:text-4xl">{s.v}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{s.l}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* AI tools strip */}
+      <section className="mx-auto max-w-6xl px-6 pb-12">
+        <p className="text-center text-xs uppercase tracking-widest text-muted-foreground">
+          Works with your favorite AI tools
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          {AI_TOOLS.map((t) => (
+            <span
+              key={t}
+              className="rounded-full border border-border bg-card/60 px-3 py-1.5 text-xs text-muted-foreground"
+            >
+              {t}
+            </span>
+          ))}
+        </div>
+      </section>
+
+      {/* Two ways */}
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-widest text-primary">
+            Choose your way
+          </p>
+          <h2 className="mt-3 text-3xl font-bold md:text-4xl">
+            Two ways to use n8n-mcp
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
+            Use our Chat Agent to build workflows instantly, or connect your
+            favorite AI tools via MCP for full control.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-6 md:grid-cols-2">
+          <div
+            className="rounded-2xl border border-primary/40 bg-card p-8"
+            style={{ boxShadow: "var(--shadow-glow)" }}
+          >
+            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
+              <MessageSquare className="h-4 w-4" /> Just launched
+            </div>
+            <h3 className="mt-3 text-2xl font-semibold">Chat Agent</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              A full AI agent that builds, validates and deploys
+              production-ready n8n workflows from a single prompt. No setup, no
+              learning curve.
+            </p>
+            <div className="mt-6 rounded-lg border border-border bg-background/60 p-4 text-sm text-muted-foreground">
+              "Send me a Slack summary of my Google Calendar events every
+              morning at 8am"
+            </div>
+            <Button asChild className="mt-6">
+              <Link to="/signup">Try Chat Agent</Link>
+            </Button>
+          </div>
+
+          <div className="rounded-2xl border border-border bg-card p-8">
+            <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
+              <Terminal className="h-4 w-4" /> For power users
+            </div>
+            <h3 className="mt-3 text-2xl font-semibold">MCP Servers</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Connect Claude, Cursor, Windsurf or any MCP-compatible AI tool
+              directly to your n8n instance. Full control from your favorite
+              IDE.
+            </p>
+            <ol className="mt-6 space-y-3 text-sm">
+              {[
+                ["Sign up", "Create a free account on the dashboard"],
+                ["Connect", "Paste your n8n URL + API key, encrypted at rest"],
+                ["Build", "Your AI tool can now create & manage workflows"],
+              ].map(([t, d], i) => (
+                <li key={t} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <div className="font-medium">{t}</div>
+                    <div className="text-muted-foreground">{d}</div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <Button asChild variant="outline" className="mt-6">
+              <Link to="/signup">Get started</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
       {/* Features */}
-      <section className="mx-auto max-w-6xl px-6 py-20">
+      <section className="mx-auto max-w-6xl px-6 py-12">
         <div className="grid gap-6 md:grid-cols-3">
           {[
             { icon: Bot, title: "Universal MCP", body: "Streamable HTTP MCP server compatible with every major AI client." },
@@ -73,25 +240,132 @@ function Landing() {
         </div>
       </section>
 
-      {/* CTA */}
+      {/* Pricing teaser */}
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-widest text-primary">
+            Simple pricing
+          </p>
+          <h2 className="mt-3 text-3xl font-bold md:text-4xl">
+            Start free, upgrade anytime
+          </h2>
+          <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
+            Generous free tier for everyone. Upgrade when you need more calls.
+          </p>
+        </div>
+
+        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
+          {[
+            {
+              name: "Free",
+              price: "$0",
+              cadence: "forever",
+              features: [
+                "100 MCP calls / day",
+                "1 n8n instance",
+                "1 platform API key",
+                "Community support",
+              ],
+              cta: "Start free",
+            },
+            {
+              name: "Supporter",
+              price: "$19",
+              cadence: "per month",
+              features: [
+                "10,000 MCP calls / day",
+                "5 n8n instances",
+                "Unlimited API keys",
+                "Priority email support",
+              ],
+              cta: "Become a Supporter",
+              highlight: true,
+            },
+          ].map((t) => (
+            <div
+              key={t.name}
+              className={`rounded-2xl border p-8 ${t.highlight ? "border-primary bg-card" : "border-border bg-card/50"}`}
+              style={t.highlight ? { boxShadow: "var(--shadow-glow)" } : undefined}
+            >
+              <h3 className="text-lg font-semibold">{t.name}</h3>
+              <div className="mt-4 flex items-baseline gap-1">
+                <span className="text-4xl font-bold">{t.price}</span>
+                <span className="text-sm text-muted-foreground">/{t.cadence}</span>
+              </div>
+              <ul className="mt-6 space-y-2 text-sm">
+                {t.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2">
+                    <Check className="mt-0.5 h-4 w-4 text-primary" />
+                    <span>{f}</span>
+                  </li>
+                ))}
+              </ul>
+              <Button
+                asChild
+                className="mt-8 w-full"
+                variant={t.highlight ? "default" : "outline"}
+              >
+                <Link to="/signup">{t.cta}</Link>
+              </Button>
+            </div>
+          ))}
+        </div>
+        <p className="mt-6 text-center text-xs text-muted-foreground">
+          Need more?{" "}
+          <Link to="/pricing" className="text-primary hover:underline">
+            See full pricing
+          </Link>
+        </p>
+      </section>
+
+      {/* FAQ */}
+      <section className="mx-auto max-w-3xl px-6 py-20">
+        <div className="text-center">
+          <p className="text-xs uppercase tracking-widest text-primary">FAQ</p>
+          <h2 className="mt-3 text-3xl font-bold md:text-4xl">Got questions?</h2>
+          <p className="mt-3 text-muted-foreground">
+            Real questions from real users.
+          </p>
+        </div>
+        <Accordion type="single" collapsible className="mt-10">
+          {FAQ.map((f) => (
+            <AccordionItem key={f.q} value={f.q}>
+              <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
+              <AccordionContent className="text-muted-foreground">
+                {f.a}
+              </AccordionContent>
+            </AccordionItem>
+          ))}
+        </Accordion>
+      </section>
+
+      {/* Final CTA */}
       <section className="mx-auto max-w-4xl px-6 pb-24">
         <div
           className="rounded-2xl border border-border p-10 text-center"
           style={{ boxShadow: "var(--shadow-glow)" }}
         >
-          <h2 className="text-3xl font-bold">Ready to ship AI-powered workflows?</h2>
+          <p className="text-xs uppercase tracking-widest text-primary">
+            Free tier available
+          </p>
+          <h2 className="mt-3 text-3xl font-bold md:text-4xl">
+            Your next workflow is one prompt away
+          </h2>
           <p className="mt-3 text-muted-foreground">
             Connect your first n8n instance in under 60 seconds.
           </p>
-          <Button asChild size="lg" className="mt-6 h-12 px-8">
-            <Link to="/signup">Create your account</Link>
-          </Button>
+          <div className="mt-6 flex flex-wrap justify-center gap-3">
+            <Button asChild size="lg" className="h-12 px-8">
+              <Link to="/signup">Create your account</Link>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="h-12 px-8">
+              <Link to="/docs">Read the docs</Link>
+            </Button>
+          </div>
         </div>
       </section>
 
-      <footer className="border-t border-border py-8 text-center text-xs text-muted-foreground">
-        © 2026 n8n-mcp. Not affiliated with n8n GmbH.
-      </footer>
+      <MarketingFooter />
     </div>
   );
 }
