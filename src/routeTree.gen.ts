@@ -25,7 +25,6 @@ import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/c
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
-import { Route as ApiPublicStripeWebhookRouteImport } from './routes/api/public/stripe-webhook'
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminAnnouncementsRouteImport } from './routes/_authenticated/_admin/admin.announcements'
@@ -108,11 +107,6 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/_admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const ApiPublicStripeWebhookRoute = ApiPublicStripeWebhookRouteImport.update({
-  id: '/api/public/stripe-webhook',
-  path: '/api/public/stripe-webhook',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const ApiPublicMcpRoute = ApiPublicMcpRouteImport.update({
   id: '/api/public/mcp',
   path: '/api/public/mcp',
@@ -147,7 +141,6 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
-  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -167,7 +160,6 @@ export interface FileRoutesByTo {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
-  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -190,7 +182,6 @@ export interface FileRoutesById {
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
-  '/api/public/stripe-webhook': typeof ApiPublicStripeWebhookRoute
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -212,7 +203,6 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/api/public/mcp'
-    | '/api/public/stripe-webhook'
     | '/admin/announcements'
     | '/admin/users'
   fileRoutesByTo: FileRoutesByTo
@@ -232,7 +222,6 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/api/public/mcp'
-    | '/api/public/stripe-webhook'
     | '/admin/announcements'
     | '/admin/users'
   id:
@@ -254,7 +243,6 @@ export interface FileRouteTypes {
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/api/public/mcp'
-    | '/api/public/stripe-webhook'
     | '/_authenticated/_admin/admin/announcements'
     | '/_authenticated/_admin/admin/users'
   fileRoutesById: FileRoutesById
@@ -267,7 +255,6 @@ export interface RootRouteChildren {
   PricingRoute: typeof PricingRoute
   SignupRoute: typeof SignupRoute
   ApiPublicMcpRoute: typeof ApiPublicMcpRoute
-  ApiPublicStripeWebhookRoute: typeof ApiPublicStripeWebhookRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -384,13 +371,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/api/public/stripe-webhook': {
-      id: '/api/public/stripe-webhook'
-      path: '/api/public/stripe-webhook'
-      fullPath: '/api/public/stripe-webhook'
-      preLoaderRoute: typeof ApiPublicStripeWebhookRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/api/public/mcp': {
       id: '/api/public/mcp'
       path: '/api/public/mcp'
@@ -467,8 +447,17 @@ const rootRouteChildren: RootRouteChildren = {
   PricingRoute: PricingRoute,
   SignupRoute: SignupRoute,
   ApiPublicMcpRoute: ApiPublicMcpRoute,
-  ApiPublicStripeWebhookRoute: ApiPublicStripeWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
