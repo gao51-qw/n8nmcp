@@ -16,6 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
+import { installServerFnAuth } from "@/lib/server-fn-auth.client";
 
 function NotFoundComponent() {
   return (
@@ -139,6 +140,11 @@ function RootComponent() {
   useEffect(() => {
     applyTheme(getStoredTheme());
   }, [pathname]);
+
+  // Install fetch interceptor that attaches Supabase token to /_serverFn/* calls
+  useEffect(() => {
+    installServerFnAuth();
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
