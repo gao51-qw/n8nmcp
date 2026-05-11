@@ -32,6 +32,31 @@ export const Route = createFileRoute("/")({
     const DESC =
       "Hosted MCP gateway for n8n. Connect Claude, ChatGPT, Cursor, Windsurf and any MCP-compatible client to your self-hosted n8n in seconds. Free tier with 100 calls/day.";
     const URL = "https://n8nmcp.lovable.app/";
+
+    const softwareSchema = {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "n8n-mcp",
+      description: DESC,
+      applicationCategory: "DeveloperApplication",
+      operatingSystem: "Web",
+      url: URL,
+      offers: [
+        { "@type": "Offer", name: "Free", price: "0", priceCurrency: "USD" },
+        { "@type": "Offer", name: "Supporter", price: "19", priceCurrency: "USD" },
+      ],
+    };
+
+    const faqSchema = {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      mainEntity: FAQ.map((f) => ({
+        "@type": "Question",
+        name: f.q,
+        acceptedAnswer: { "@type": "Answer", text: f.a },
+      })),
+    };
+
     return {
       meta: [
         { title: TITLE },
@@ -44,25 +69,20 @@ export const Route = createFileRoute("/")({
         { name: "twitter:description", content: DESC },
       ],
       links: [{ rel: "canonical", href: URL }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(softwareSchema),
+        },
+        {
+          type: "application/ld+json",
+          children: JSON.stringify(faqSchema),
+        },
+      ],
     };
   },
   component: Landing,
 });
-
-const AI_TOOLS = [
-  "Claude",
-  "ChatGPT",
-  "Cursor",
-  "Windsurf",
-  "VS Code",
-  "Gemini CLI",
-  "Claude Code",
-  "Codex CLI",
-  "LM Studio",
-  "Continue",
-  "Cline",
-  "Zed",
-];
 
 const FAQ = [
   {
