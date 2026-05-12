@@ -37,14 +37,45 @@ async function npmDownloads(name: string): Promise<number> {
   return j.downloads ?? 0;
 }
 
+const NAME_RE = /^(?:@[^/]+\/)?n8n-nodes-[a-z0-9._-]+$/i;
+
+async function searchCommunityKeyword(keyword: string, cap: number): Promise<string[]> {
+  const PAGE = 250; // npm search hard limit per request
+  const out: string[] = [];
+  for (let from = 0; from < cap; from += PAGE) {
+    const size = Math.min(PAGE, cap - from);
+    const url = `https://registry.npmjs.org/-/v1/search?text=keywords:${encodeURIComponent(keyword)}&size=${size}&from=${from}`;
+    const r = await fetch(url);
+    if (!r.ok) throw new Error(`npm search ${keyword}@${from}: ${r.status}`);
+    const j = (await r.json()) as {
+      total?: number;
+      objects: Array<{ package: { name: string } }>;
+    };
+    const batch = j.objects.map((o) => o.package.name);
+    out.push(...batch);
+    if (batch.length < size) break;
+    if (typeof j.total === "number" && from + batch.length >= j.total) break;
+  }
+  return out;
+}
+
 async function searchCommunity(): Promise<string[]> {
-  const { search_keyword, max_packages, blacklist } = CFG.community;
-  const url = `https://registry.npmjs.org/-/v1/search?text=keywords:${encodeURIComponent(search_keyword)}&size=${max_packages}`;
-  const r = await fetch(url);
-  if (!r.ok) throw new Error(`npm search: ${r.status}`);
-  const j = (await r.json()) as { objects: Array<{ package: { name: string } }> };
-  const names = j.objects.map((o) => o.package.name).filter((n) => !blacklist.includes(n));
-  return Array.from(new Set(names));
+  const keywords: string[] =
+    CFG.community.search_keywords ??
+    (CFG.community.search_keyword ? [CFG.community.search_keyword] : []);
+  const blacklist: string[] = CFG.community.blacklist ?? [];
+  const cap: number = CFG.community.max_packages ?? 1000;
+
+  const seen = new Set<string>();
+  for (const kw of keywords) {
+    const names = await searchCommunityKeyword(kw, cap);
+    for (const n of names) seen.add(n);
+    console.log(`[fetch]   keyword="${kw}" → ${names.length} hits (running total: ${seen.size})`);
+  }
+
+  return Array.from(seen).filter(
+    (n) => !blacklist.includes(n) && NAME_RE.test(n),
+  );
 }
 
 async function downloadAndExtract(ref: PkgRef): Promise<string> {
@@ -74,20 +105,31 @@ async function main() {
 
   console.log("[fetch] searching community packages...");
   const community = await searchCommunity();
-  console.log(`[fetch] found ${community.length} community candidates, filtering by downloads...`);
+  console.log(`[fetch] ${community.length} community candidates after name filter & blacklist`);
+  const minDl: number = CFG.community.min_monthly_downloads ?? 0;
   let kept = 0;
-  for (const name of community) {
-    try {
-      const dl = await npmDownloads(name);
-      if (dl < CFG.community.min_monthly_downloads) continue;
-      const meta = await npmRegistryMeta(name);
-      refs.push({ name, version: meta.version, tarball: meta.tarball, source: "community" });
-      kept++;
-    } catch (e) {
-      console.warn(`[fetch] skip ${name}: ${(e as Error).message}`);
-    }
+  // Resolve metadata with bounded concurrency so this stays fast at ~1000 pkgs.
+  const downloads: Record<string, number> = {};
+  const CONC = 8;
+  for (let i = 0; i < community.length; i += CONC) {
+    const chunk = community.slice(i, i + CONC);
+    const results = await Promise.all(
+      chunk.map(async (name) => {
+        try {
+          const dl = await npmDownloads(name);
+          if (dl < minDl) return null;
+          const meta = await npmRegistryMeta(name);
+          downloads[name] = dl;
+          return { name, version: meta.version, tarball: meta.tarball, source: "community" as const };
+        } catch (e) {
+          console.warn(`[fetch] skip ${name}: ${(e as Error).message}`);
+          return null;
+        }
+      }),
+    );
+    for (const r of results) if (r) { refs.push(r); kept++; }
   }
-  console.log(`[fetch] kept ${kept} community packages (>=${CFG.community.min_monthly_downloads} dl/month)`);
+  console.log(`[fetch] kept ${kept} community packages (min ${minDl} dl/month)`);
 
   const index: Array<PkgRef & { dir: string }> = [];
   for (const ref of refs) {
@@ -99,7 +141,8 @@ async function main() {
       console.warn(`[fetch] ✗ ${ref.name}: ${(e as Error).message}`);
     }
   }
-  await writeFile(join(TMP, "_index.json"), JSON.stringify(index, null, 2));
+  const enriched = index.map((r) => ({ ...r, monthly_downloads: downloads[r.name] ?? null }));
+  await writeFile(join(TMP, "_index.json"), JSON.stringify(enriched, null, 2));
   console.log(`[fetch] done: ${index.length} packages → ${TMP}/_index.json`);
 }
 

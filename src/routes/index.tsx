@@ -37,6 +37,7 @@ import {
   Search,
 } from "lucide-react";
 import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
+import n8nStats from "@/data/n8n-stats.json";
 
 export const Route = createFileRoute("/")({
   head: () => {
@@ -162,10 +163,10 @@ function Landing() {
           <div className="mx-auto mt-12 grid max-w-3xl grid-cols-3 gap-6">
             {[
               {
-                value: 1650,
+                value: n8nStats.totalNodes,
                 suffix: "",
                 label: "n8n nodes covered",
-                source: "820 core + 830 community nodes",
+                source: `${n8nStats.coreNodes.toLocaleString()} core + ${n8nStats.communityNodes.toLocaleString()} community nodes`,
               },
               {
                 value: 20,
