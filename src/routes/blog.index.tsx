@@ -83,7 +83,7 @@ export const Route = createFileRoute("/blog/")({
             name: TITLE,
             description: DESC,
             url: `${SITE}/blog`,
-            blogPost: posts.map((p) => ({
+            blogPost: posts.map((p: { slug: string; title: string; description: string; date: string }) => ({
               "@type": "BlogPosting",
               headline: p.title,
               description: p.description,
