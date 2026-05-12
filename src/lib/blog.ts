@@ -89,7 +89,13 @@ const POSTS: BlogPost[] = Object.entries(MDX_MODULES)
       Component: mod.default,
     } satisfies BlogPost;
   })
-  .sort((a, b) => (a.date < b.date ? 1 : -1));
+  // Stable order: newest date first, ties broken alphabetically by slug.
+  // This makes the listing deterministic across builds even when two posts
+  // share the same date.
+  .sort((a, b) => {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    return a.slug < b.slug ? -1 : 1;
+  });
 
 export function getAllPosts(): BlogPost[] {
   return POSTS;
