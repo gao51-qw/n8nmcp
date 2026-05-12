@@ -3,7 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useAuth } from "@/hooks/use-auth";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Server, KeyRound, BarChart3, Sparkles, Check, Mail, Plug, MessagesSquare, ArrowRight, X } from "lucide-react";
+import { Server, KeyRound, BarChart3, Sparkles, Check, Plug, MessagesSquare, ArrowRight, X } from "lucide-react";
 import { QuotaCard } from "@/components/quota-card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
