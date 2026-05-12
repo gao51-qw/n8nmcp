@@ -81,14 +81,19 @@ export function MarketingFooter() {
         </div>
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-6 text-xs text-muted-foreground md:flex-row">
-          <p>© {new Date().getFullYear()} n8n-mcp. Not affiliated with n8n GmbH.</p>
+          <p>
+            © {new Date().getFullYear()} n8n-mcp. Not affiliated with n8n GmbH.
+            <span className="ml-2 opacity-70">v{APP_VERSION}</span>
+          </p>
           <div className="flex items-center gap-4">
             <Link to="/terms" className="hover:text-foreground">Terms</Link>
             <Link to="/privacy" className="hover:text-foreground">Privacy</Link>
-            <a href="mailto:hello@n8nmcp.app" className="hover:text-foreground">Contact</a>
+            <a href="mailto:support@n8nmcp.app" className="hover:text-foreground">Support</a>
           </div>
         </div>
       </div>
     </footer>
   );
 }
+
+const APP_VERSION = "1.0.0";
