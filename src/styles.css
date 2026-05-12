@@ -208,53 +208,104 @@ html:not(.dark) {
      an interactive ARIA role, a form control, or an explicit tabindex).
      Purely decorative or layout-only nodes (e.g. a <button> reset by a
      library, a <div role="presentation">, a <label> without `for`) are
-     intentionally excluded. */
-  a[href]:not([aria-disabled="true"]),
-  area[href]:not([aria-disabled="true"]),
-  button[type="button"]:not(:disabled):not([aria-disabled="true"]),
-  button[type="submit"]:not(:disabled):not([aria-disabled="true"]),
-  button[type="reset"]:not(:disabled):not([aria-disabled="true"]),
-  input[type="submit"]:not(:disabled),
-  input[type="button"]:not(:disabled),
-  input[type="reset"]:not(:disabled),
+     intentionally excluded. Loading state is signalled via any of:
+     `aria-busy="true"`, `data-loading="true"`, `data-state="loading"`,
+     or `data-pending` — these are treated like a disabled control. */
+  a[href]:not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  area[href]:not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  button[type="button"]:not(:disabled):not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  button[type="submit"]:not(:disabled):not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  button[type="reset"]:not(:disabled):not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  input[type="submit"]:not(:disabled):not([aria-busy="true"]):not([data-loading="true"]),
+  input[type="button"]:not(:disabled):not([aria-busy="true"]):not([data-loading="true"]),
+  input[type="reset"]:not(:disabled):not([aria-busy="true"]):not([data-loading="true"]),
   input[type="checkbox"]:not(:disabled),
   input[type="radio"]:not(:disabled),
   input[type="file"]:not(:disabled),
   input[type="color"]:not(:disabled),
   select:not(:disabled),
   summary,
-  label[for]:not([aria-disabled="true"]),
-  [role="button"]:not([aria-disabled="true"]),
-  [role="link"]:not([aria-disabled="true"]),
-  [role="tab"]:not([aria-disabled="true"]),
-  [role="menuitem"]:not([aria-disabled="true"]),
-  [role="menuitemcheckbox"]:not([aria-disabled="true"]),
-  [role="menuitemradio"]:not([aria-disabled="true"]),
-  [role="option"]:not([aria-disabled="true"]),
-  [role="switch"]:not([aria-disabled="true"]),
-  [role="checkbox"]:not([aria-disabled="true"]),
-  [role="radio"]:not([aria-disabled="true"]),
-  [tabindex]:not([tabindex="-1"]):not([aria-disabled="true"]) {
+  label[for]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="button"]:not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  [role="link"]:not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]):not([data-state="loading"]):not([data-pending]),
+  [role="tab"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="menuitemcheckbox"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="menuitemradio"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="option"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="switch"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="checkbox"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [role="radio"]:not([aria-disabled="true"]):not([aria-busy="true"]),
+  [tabindex]:not([tabindex="-1"]):not([aria-disabled="true"]):not([aria-busy="true"]):not([data-loading="true"]) {
     cursor: pointer;
   }
 
-  /* Disabled / aria-disabled interactive controls show not-allowed. Scope
-     this to actual controls so we don't paint not-allowed on arbitrary
-     decorative nodes that happen to carry aria-disabled. */
+  /* Disabled, aria-disabled, and loading-state controls all share the same
+     not-allowed affordance. Scoped to real controls so we don't paint
+     not-allowed on arbitrary decorative nodes that happen to carry one of
+     these attributes (e.g. a wrapper marked aria-busy during a fetch). */
   button:disabled,
   input:disabled,
   select:disabled,
   textarea:disabled,
   fieldset:disabled,
   a[aria-disabled="true"],
+  button[aria-busy="true"],
+  button[data-loading="true"],
+  button[data-state="loading"],
+  button[data-pending],
+  a[href][aria-busy="true"],
+  a[href][data-loading="true"],
+  a[href][data-state="loading"],
+  a[href][data-pending],
   [role="button"][aria-disabled="true"],
+  [role="button"][aria-busy="true"],
+  [role="button"][data-loading="true"],
+  [role="button"][data-state="loading"],
+  [role="button"][data-pending],
   [role="link"][aria-disabled="true"],
+  [role="link"][aria-busy="true"],
   [role="tab"][aria-disabled="true"],
+  [role="tab"][aria-busy="true"],
   [role="menuitem"][aria-disabled="true"],
+  [role="menuitem"][aria-busy="true"],
   [role="option"][aria-disabled="true"],
+  [role="option"][aria-busy="true"],
   [role="switch"][aria-disabled="true"],
+  [role="switch"][aria-busy="true"],
   [role="checkbox"][aria-disabled="true"],
   [role="radio"][aria-disabled="true"] {
     cursor: not-allowed;
+  }
+
+  /* Block pointer + keyboard activation for disabled/loading controls so a
+     stray click during an in-flight request can't trigger duplicate work.
+     `pointer-events: none` removes hover/click; we keep focus possible only
+     for true `:disabled` (browser already blocks it) — aria-disabled stays
+     focusable per WAI-ARIA, but cannot be activated. */
+  button:disabled,
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  fieldset:disabled,
+  [aria-disabled="true"],
+  button[aria-busy="true"],
+  button[data-loading="true"],
+  button[data-state="loading"],
+  button[data-pending],
+  a[href][aria-busy="true"],
+  a[href][data-loading="true"],
+  a[href][data-state="loading"],
+  a[href][data-pending],
+  [role="button"][aria-busy="true"],
+  [role="button"][data-loading="true"],
+  [role="button"][data-state="loading"],
+  [role="button"][data-pending],
+  [role="link"][aria-busy="true"],
+  [role="tab"][aria-busy="true"],
+  [role="menuitem"][aria-busy="true"],
+  [role="option"][aria-busy="true"],
+  [role="switch"][aria-busy="true"] {
+    pointer-events: none;
   }
 }
