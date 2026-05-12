@@ -162,10 +162,10 @@ function Landing() {
           <div className="mx-auto mt-12 grid max-w-3xl grid-cols-3 gap-6">
             {[
               {
-                value: 1084,
+                value: 1650,
                 suffix: "",
                 label: "n8n nodes covered",
-                source: "n8n core + community packages",
+                source: "820 core + 830 community nodes",
               },
               {
                 value: 20,
