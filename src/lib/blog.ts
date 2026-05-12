@@ -28,8 +28,11 @@ type MdxModule = {
     title?: string;
     description?: string;
     date?: string;
+    updated?: string;
     author?: string;
     tags?: string[];
+    cover?: string;
+    image?: string;
   };
 };
 
@@ -42,10 +45,14 @@ export type BlogPost = {
   title: string;
   description: string;
   date: string;
+  updated?: string;
   author?: string;
   tags: string[];
+  cover?: string;
   Component: MDXContent;
 };
+
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
 function slugFromPath(p: string): string {
   const file = p.split("/").pop() ?? p;
@@ -56,13 +63,29 @@ const POSTS: BlogPost[] = Object.entries(MDX_MODULES)
   .map(([path, mod]) => {
     const fm = mod.frontmatter ?? {};
     const slug = slugFromPath(path);
+    if (!SLUG_RE.test(slug)) {
+      throw new Error(
+        `Blog post filename "${slug}.mdx" is not a valid URL slug. ` +
+          `Use lowercase letters, numbers and hyphens only (e.g. my-great-post.mdx).`,
+      );
+    }
+    if (!fm.title) {
+      throw new Error(`Blog post "${slug}.mdx" is missing a "title" in frontmatter.`);
+    }
+    if (!fm.description) {
+      throw new Error(
+        `Blog post "${slug}.mdx" is missing a "description" in frontmatter (used for SEO + share previews).`,
+      );
+    }
     return {
       slug,
-      title: fm.title ?? slug,
-      description: fm.description ?? "",
+      title: fm.title,
+      description: fm.description,
       date: fm.date ?? "1970-01-01",
+      updated: fm.updated,
       author: fm.author,
       tags: Array.isArray(fm.tags) ? fm.tags : [],
+      cover: fm.cover ?? fm.image,
       Component: mod.default,
     } satisfies BlogPost;
   })
