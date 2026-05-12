@@ -156,7 +156,7 @@ function BlogIndex() {
     if (query === q) return;
     const id = setTimeout(() => {
       navigate({
-        search: (prev) => ({
+        search: (prev: BlogSearch) => ({
           ...prev,
           q: query,
           page: 1,
