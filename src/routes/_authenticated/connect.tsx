@@ -557,7 +557,15 @@ function ConnectPage() {
                 </li>
                 <li>Copy the MCP URL n8n shows you (ends with <code className="rounded bg-muted px-1">/mcp-server/http</code>).</li>
                 <li>
-                  Add it on the <Link to="/instances" className="font-medium text-primary underline">Instances</Link> page along with an n8n API key.
+                  Add it on the{" "}
+                  <Link
+                    to="/instances"
+                    search={{ setup: "connect" as const }}
+                    className="font-medium text-primary underline"
+                  >
+                    Instances
+                  </Link>{" "}
+                  page along with an n8n API key.
                 </li>
                 <li>
                   In each workflow you want to expose, open <span className="font-medium text-foreground">Workflow Settings</span> and turn on{" "}
@@ -566,10 +574,14 @@ function ConnectPage() {
               </ol>
               <div className="mt-3 flex flex-wrap gap-2">
                 <Button asChild size="sm">
-                  <Link to="/instances">Add instance</Link>
+                  <Link to="/instances" search={{ setup: "connect" as const }}>
+                    Add instance
+                  </Link>
                 </Button>
                 <Button asChild size="sm" variant="outline">
-                  <Link to="/api-keys">Manage API keys</Link>
+                  <Link to="/api-keys" search={{ setup: "connect" as const }}>
+                    Manage API keys
+                  </Link>
                 </Button>
                 <Button asChild size="sm" variant="ghost">
                   <a
@@ -597,7 +609,9 @@ function ConnectPage() {
               </div>
               <div className="mt-3">
                 <Button asChild size="sm">
-                  <Link to="/api-keys">Create API key</Link>
+                  <Link to="/api-keys" search={{ setup: "connect" as const }}>
+                    Create API key
+                  </Link>
                 </Button>
               </div>
             </div>
