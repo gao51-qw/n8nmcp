@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, Plug, KeyRound, ChevronDown } from "lucide-react";
+import { Copy, Check, Plug, KeyRound, ChevronDown, Search, AlertTriangle, Sparkles } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -17,6 +17,7 @@ type Preset = {
   name: string;
   category: "desktop" | "cli" | "web" | "ide";
   description: string;
+  recommended?: boolean;
   build: (url: string, token: string) => { lang: string; code: string; note?: string };
 };
 
@@ -26,6 +27,7 @@ const PRESETS: Preset[] = [
     name: "Claude Desktop",
     category: "desktop",
     description: "claude_desktop_config.json — mcpServers entry",
+    recommended: true,
     build: (url, token) => ({
       lang: "json",
       code: JSON.stringify(
@@ -191,6 +193,138 @@ const PRESETS: Preset[] = [
       code: JSON.stringify({ name: "n8n-mcp", url, headers: { Authorization: `Bearer ${token}` } }, null, 2),
     }),
   },
+  // ---- Newly added clients (Bearer-based) ----
+  {
+    id: "opencode",
+    name: "OpenCode",
+    category: "ide",
+    description: "opencode mcp.json",
+    build: (url, token) => ({
+      lang: "json",
+      code: JSON.stringify({ mcpServers: { "n8n-mcp": { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    }),
+  },
+  {
+    id: "kiro",
+    name: "Kiro",
+    category: "ide",
+    description: "Kiro MCP servers config",
+    build: (url, token) => ({
+      lang: "json",
+      code: JSON.stringify({ mcpServers: { "n8n-mcp": { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    }),
+  },
+  {
+    id: "openhands",
+    name: "OpenHands",
+    category: "cli",
+    description: "OpenHands settings.toml MCP block",
+    build: (url, token) => ({
+      lang: "toml",
+      code: `[mcp.servers.n8n-mcp]\nurl = "${url}"\nheaders = { Authorization = "Bearer ${token}" }`,
+    }),
+  },
+  {
+    id: "genspark",
+    name: "Genspark",
+    category: "web",
+    description: "Settings → Connectors → Custom MCP",
+    build: (url, token) => ({
+      lang: "text",
+      code: `URL:    ${url}\nHeader: Authorization: Bearer ${token}`,
+    }),
+  },
+  {
+    id: "huggingchat",
+    name: "HuggingChat",
+    category: "web",
+    description: "Tools → MCP servers",
+    build: (url, token) => ({
+      lang: "text",
+      code: `URL:    ${url}\nHeader: Authorization: Bearer ${token}`,
+    }),
+  },
+  {
+    id: "trae",
+    name: "Trae IDE",
+    category: "ide",
+    description: "Trae mcp.json",
+    build: (url, token) => ({
+      lang: "json",
+      code: JSON.stringify({ mcpServers: { "n8n-mcp": { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    }),
+  },
+  {
+    id: "antigravity",
+    name: "Google Antigravity",
+    category: "ide",
+    description: "Antigravity MCP config",
+    build: (url, token) => ({
+      lang: "json",
+      code: JSON.stringify({ mcpServers: { "n8n-mcp": { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    }),
+  },
+  {
+    id: "lm-studio",
+    name: "LM Studio",
+    category: "desktop",
+    description: "LM Studio mcp.json",
+    build: (url, token) => ({
+      lang: "json",
+      code: JSON.stringify({ mcpServers: { "n8n-mcp": { url, headers: { Authorization: `Bearer ${token}` } } } }, null, 2),
+    }),
+  },
+  {
+    id: "anythingllm",
+    name: "AnythingLLM",
+    category: "desktop",
+    description: "AnythingLLM MCP servers",
+    build: (url, token) => ({
+      lang: "json",
+      code: JSON.stringify({ "n8n-mcp": { url, headers: { Authorization: `Bearer ${token}` } } }, null, 2),
+    }),
+  },
+  {
+    id: "manus",
+    name: "Manus AI",
+    category: "web",
+    description: "Settings → MCP connectors",
+    build: (url, token) => ({
+      lang: "text",
+      code: `URL:    ${url}\nHeader: Authorization: Bearer ${token}`,
+    }),
+  },
+  {
+    id: "minimax",
+    name: "MiniMax Agent",
+    category: "web",
+    description: "Connectors → Add MCP",
+    build: (url, token) => ({
+      lang: "text",
+      code: `URL:    ${url}\nHeader: Authorization: Bearer ${token}`,
+    }),
+  },
+  {
+    id: "elevenlabs",
+    name: "ElevenLabs Agent",
+    category: "web",
+    description: "Agent settings → MCP",
+    build: (url, token) => ({
+      lang: "text",
+      code: `URL:    ${url}\nHeader: Authorization: Bearer ${token}`,
+    }),
+  },
+  {
+    id: "n8n-ai-agent",
+    name: "n8n AI Agent",
+    category: "web",
+    description: "Use as an MCP Client tool inside n8n",
+    build: (url, token) => ({
+      lang: "text",
+      code: `Endpoint: ${url}\nAuth header: Authorization: Bearer ${token}`,
+      note: "Add an MCP Client node and paste the endpoint + Authorization header.",
+    }),
+  },
 ];
 
 function CodeBlock({ code, lang }: { code: string; lang: string }) {
@@ -223,6 +357,8 @@ function ConnectPage() {
   const [keyId, setKeyId] = useState("");
   const [filter, setFilter] = useState<"all" | "desktop" | "ide" | "cli" | "web">("all");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState("");
+  const [instanceCount, setInstanceCount] = useState<number | null>(null);
 
   useEffect(() => {
     supabase
@@ -234,6 +370,10 @@ function ConnectPage() {
         setKeys(data ?? []);
         if (data?.[0]) setKeyId(data[0].id);
       });
+    supabase
+      .from("n8n_instances")
+      .select("id", { count: "exact", head: true })
+      .then(({ count }) => setInstanceCount(count ?? 0));
   }, []);
 
   const url = useMemo(
@@ -244,7 +384,12 @@ function ConnectPage() {
   // We don't store the plaintext token; instruct the user to paste their saved key.
   const token = selected ? `${selected.key_prefix}…<your-saved-key>` : "<YOUR_API_KEY>";
 
-  const filtered = filter === "all" ? PRESETS : PRESETS.filter((p) => p.category === filter);
+  const q = search.trim().toLowerCase();
+  const filtered = PRESETS.filter((p) => {
+    if (filter !== "all" && p.category !== filter) return false;
+    if (q && !p.name.toLowerCase().includes(q)) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-8">
@@ -256,6 +401,23 @@ function ConnectPage() {
           Drop these snippets into your favorite MCP-compatible client to start calling n8n workflows from AI.
         </p>
       </div>
+
+      {instanceCount === 0 && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div>
+              <div className="font-medium">Add an n8n instance first</div>
+              <div className="mt-0.5 text-muted-foreground">
+                MCP calls need at least one connected n8n instance to route to.
+              </div>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/instances">Add instance</Link>
+          </Button>
+        </div>
+      )}
 
       <div className="rounded-xl border border-border bg-card p-5">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -304,6 +466,16 @@ function ConnectPage() {
             {c === "all" ? "All" : c.toUpperCase()}
           </Button>
         ))}
+        <div className="relative ml-auto w-full max-w-xs">
+          <Search className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search clients…"
+            className="h-8 w-full rounded-md border border-input bg-background pl-7 pr-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring"
+          />
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -319,7 +491,14 @@ function ConnectPage() {
                 aria-expanded={open}
               >
                 <div className="min-w-0">
-                  <div className="text-base font-semibold">{p.name}</div>
+                  <div className="flex items-center gap-2 text-base font-semibold">
+                    {p.name}
+                    {p.recommended && (
+                      <Badge className="bg-primary/15 text-primary hover:bg-primary/15">
+                        <Sparkles className="mr-1 h-2.5 w-2.5" /> Recommended
+                      </Badge>
+                    )}
+                  </div>
                   <div className="mt-0.5 truncate text-xs text-muted-foreground">{p.description}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
@@ -338,6 +517,20 @@ function ConnectPage() {
             </div>
           );
         })}
+        <a
+          href="https://github.com/czlonkowski/n8n-mcp/issues/new?title=Request+integration%3A+&labels=integration"
+          target="_blank"
+          rel="noreferrer"
+          className="flex items-center justify-between rounded-xl border border-dashed border-border bg-card/50 p-5 text-sm transition-colors hover:border-primary/50"
+        >
+          <div>
+            <div className="font-semibold">Don&apos;t see your client?</div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              Open a GitHub issue and we&apos;ll add it.
+            </div>
+          </div>
+          <span className="text-primary">Request integration →</span>
+        </a>
       </div>
     </div>
   );

@@ -1,84 +1,87 @@
 ## 目标
 
-让 `tools/n8n-knowledge-mcp` 真正抓全 n8n 节点（official + 全部 community），与 `czlonkowski/n8n-mcp` 的 1,650 节点对齐；首页统计不再硬编码，而是从构建产物自动注入。
+把本项目 dashboard 与 `dashboard.n8n-mcp.com` 的差距分三阶段补齐。仅做前端/展示层与少量 profile 字段调整，不改动现有计费、MCP runtime、API Key 等业务逻辑。
 
 ---
 
-## 改动列表
+## 阶段 P0 — 合规 & 账户设置（Settings 页扩展）
 
-### 1. 放开社区节点采集上限
-**文件**: `tools/n8n-knowledge-mcp/packages.json`
+**文件**：`src/routes/_authenticated/settings.tsx`、新建 1 条 migration、`src/lib/admin.functions.ts` 增 1 个 server fn
 
-| 字段 | 现在 | 改为 | 原因 |
-|---|---|---|---|
-| `community.max_packages` | 250 | 1000 | npm search 单次上限是 250，需要分页才能拿全 |
-| `community.min_monthly_downloads` | 100 | 0 | czlonkowski 不按下载量过滤；按下载过滤会丢掉冷门但可用的节点 |
-| `community.search_keywords` | 单个 keyword | `["n8n-community-node-package", "n8n-nodes"]` | 大量包只有 `n8n-nodes` 关键字 |
-| `community.blacklist` | 现有 2 项 | 增补 `n8n-nodes-test`/`-example`/`-template`/`-starter` 等模板包 | 避免 fork 模板污染 |
+把现有 Settings 从「Profile + Appearance」扩成 4 块，与对方对齐：
 
-### 2. 重写社区搜索：分页 + 多关键字 + 去重
-**文件**: `tools/n8n-knowledge-mcp/scripts/1-fetch-packages.ts`
+1. **Profile**（已有）— 保留 email + display name
+2. **Email Preferences**（新增）— 两个 switch：
+   - `product_updates`（产品更新邮件）
+   - `security_alerts`（安全提醒，默认 on，灰显不可关）
+3. **Telemetry & Privacy**（新增）—
+   - `telemetry_enabled` switch（默认 on）
+   - "Request data export" 按钮 → 触发 server fn，把用户的 instances/api_keys/usage 导出 JSON 下载
+   - "Request account deletion" 按钮 → 写入 `account_deletion_requests` 表，弹确认对话框
+4. **Delete Account**（新增红色危险区）— 立即软删（标记 profile.deleted_at + 注销 session），与 #3 的「请求删除」分开：一个走 GDPR 30 天流程，一个立即生效
 
-- 把 `searchCommunity()` 改成循环 `from=0,250,500,…` 分页拉取，直到 `total` 或 1000 上限。
-- 对每个 keyword 单独搜索后用 Set 去重（按 package name）。
-- 增加 `name` 过滤：必须以 `n8n-nodes-` 开头、或在 `@scope/n8n-nodes-*` 命名空间下，避免 keyword 滥用包混入。
-- 保留下载量字段（写入 `_index.json` 用于排序/调试），但不再硬过滤。
+**Migration 要点**：
+- `profiles` 加列：`product_updates_email boolean default true`、`telemetry_enabled boolean default true`、`deleted_at timestamptz`
+- 新表 `account_deletion_requests (id, user_id, requested_at, reason text)`，RLS：用户只能 insert/select 自己的
 
-### 3. 输出节点统计文件
-**新文件**: `tools/n8n-knowledge-mcp/scripts/6-emit-stats.ts`
-**修改**: `tools/n8n-knowledge-mcp/package.json`（在 `build:db` 末尾追加 `&& tsx scripts/6-emit-stats.ts`）
+---
 
-读取 `data/nodes.db`，输出 `data/stats.json`：
-```json
-{
-  "totalNodes": 1648,
-  "coreNodes": 820,
-  "communityNodes": 828,
-  "communityPackages": 312,
-  "aiTools": 287,
-  "generatedAt": "2026-05-12T..."
-}
-```
-同时把同样的 JSON 复制到 `src/data/n8n-stats.json`（git 提交进仓库，让前端可以静态导入）。
+## 阶段 P1 — 核心 UX 引导（Dashboard + Instances + Connect）
 
-### 4. 首页改为从静态 JSON 读取
-**文件**: `src/routes/index.tsx`
+### 1. Dashboard Home 改造（`src/routes/_authenticated/dashboard.tsx`）
 
-- 顶部 `import stats from "@/data/n8n-stats.json"`。
-- Hero 三个 Stats 中的 "n8n nodes covered"：`value: stats.totalNodes`，`source: "${stats.coreNodes} core + ${stats.communityNodes} community"`。
-- 来源行的脚注同步：`Sources: node count generated from data/nodes.db on ${stats.generatedAt}, …`。
-- 同时把 `value: 1084` / "1650" 之类历史魔术数字全部移除。
+新增三个组件，按顺序插在 Welcome 标题下方：
 
-### 5. CI 触发刷新（已有 workflow，仅微调）
-**文件**: `.github/workflows/n8n-knowledge-mcp.yml`
+- **DismissableBanner**（蓝色提示条）— 文案可由 `announcements` 表驱动（已有），加 localStorage `dismissed-banner-{id}` 控制隐藏
+- **OnboardingChecklist**（4 步进度卡片）— 检测：
+  1. ✅ Email 已验证（`user.email_confirmed_at`）
+  2. ⬜ 已添加 n8n instance（`stats.instances > 0`）
+  3. ⬜ 已创建 API Key（`stats.keys > 0`）
+  4. ⬜ 已发起首次 MCP 调用（`stats.callsToday > 0` 或历史 usage 行存在）
+  - 用 `<Progress>` 显示完成度，每步带 CTA 链接到对应页面
+  - 全部完成后整卡折叠/隐藏
+- **CapabilityCards**（2 张能力卡）— "MCP Server"（已就绪）+ "Chat Agent"（标 Beta），点击跳转
 
-- 在构建 Docker 镜像之前，先 `pnpm build:db`，把生成的 `src/data/n8n-stats.json` 通过 `peter-evans/create-pull-request` 自动开 PR 回主分支（每周一次）。这样首页数字会跟着 weekly 刷新自动走，无需人工。
-- 不在本任务里做的：自动合并 PR（保留人工 review）。
+### 2. Instances 页（`src/routes/_authenticated/instances.tsx`）
+
+- 顶部加蓝色 dismissable 教育 banner：「n8n Cloud users need Starter plan or above to access the API. [Learn more →]」
+- 「Add Instance」对话框里 API Key 输入框下方加灰色 hint：「Generate an API key from n8n → Settings → n8n API」
+
+### 3. Connect Client 页（`src/routes/_authenticated/connect.tsx`）
+
+- 顶部 dependency check：若用户 `instances === 0` → 显示黄色 alert「Add at least one n8n instance before connecting an MCP client」+ 跳转按钮
+- 顶部加搜索框（client-side filter by name）
+- Claude Desktop 卡片加 "Recommended" 角标
+- 列表底部加一张「Don't see your client? **Request integration →**」CTA 卡片，点击打开 mailto 或链接到 GitHub issue
+
+---
+
+## 阶段 P2 — 内容/文案（低成本快赢）
+
+1. **Billing 文案**（`src/routes/_authenticated/billing.tsx`、`pricing.tsx`、`src/lib/tiers.ts`）
+   - Pro tier 描述把「100,000 calls/day」改为「Unlimited tool calls *fair use 5,000/day*」
+   - 加一段小字脚注解释 fair use
+2. **Footer**（`src/components/marketing-footer.tsx`）
+   - 加版本号（从 `package.json.version` 静态导入）
+   - 加 support 邮箱链接
+3. **Connect Client 客户端补齐**（`src/routes/_authenticated/connect.tsx`）
+   - 新增 12 个客户端卡片片段（仅 Bearer 配置 JSON）：OpenCode、Kiro、OpenHands、Genspark、HuggingChat、Trae IDE、Google Antigravity、LM Studio、AnythingLLM、Manus AI、MiniMax Agent、ElevenLabs Agent、n8n AI Agent
+   - OAuth 流不在本计划内（评估为独立大项目）
 
 ---
 
 ## 不在本次范围
 
-- 不做实时（首页直接 fetch nodes.db count）—— 太重，静态 JSON 足够。
-- 不动 MCP runtime tool 行为（`list_nodes` 等已经按 DB 工作，节点变多自动覆盖）。
-- 不改 templates 抓取流程（与节点数无关）。
-- 不接 czlonkowski 的「verified community」白名单（独立来源，后续可加）。
-
----
-
-## 技术细节
-
-- npm search API 端点：`https://registry.npmjs.org/-/v1/search?text=...&size=250&from=N`，返回 `total` 字段用于翻页。
-- `1-fetch-packages.ts` 当前用 `min_monthly_downloads` 过滤；改后保留 `npmDownloads()` 调用，但只把结果写入 `_index.json`，不过滤。
-- 拉取并发：当前是串行。社区包从 ~70 涨到 ~800 后，串行约 15-25 分钟。加一个 `p-limit(8)` 并发下载即可，CI 时间可控。
-- `data/nodes.db` 体积会从 ~800MB 增至 ~1.2-1.5GB（按 czlonkowski 生产镜像推算）；GHCR 镜像可承受。
-- 首页 JSON 体积 < 1KB，无 SSR 风险。
+- **OAuth 客户端授权流**（Claude.ai/ChatGPT 网页端接入）— 需独立设计 OAuth server、consent 页、token 存储，工作量 ≥ 本计划全部三阶段总和，建议作为单独项目
+- 顶部横向 nav 重构（你的 sidebar 信息密度更高，保留更优）
+- GitHub star 徽章、floating chat bubble（次要装饰）
+- What's New 改造（你的实现已优于对方）
 
 ---
 
 ## 验证
 
-1. 本地 `cd tools/n8n-knowledge-mcp && pnpm i && pnpm build:db` 跑通，看末尾日志是否打印 `totalNodes >= 1500`。
-2. 检查 `src/data/n8n-stats.json` 已生成、被 git 跟踪。
-3. 浏览器打开首页 671px viewport，Hero 第一个 stat 数字与 `n8n-stats.json.totalNodes` 一致；脚注 source 行同步更新。
-4. `bunx tsc --noEmit` 通过。
+- P0：建账号 → Settings 切换 telemetry → 重登仍记忆；点 Delete Account → 用户被登出且无法登录
+- P1：新账号登录 → Dashboard 看到 4 步 checklist，加 instance 后第 2 步打勾；Connect 页未加 instance 时看到黄色 alert
+- P2：Billing 显示新文案；Footer 出现版本号；Connect 看到 25 个客户端卡片
+- `bunx tsc --noEmit` 通过

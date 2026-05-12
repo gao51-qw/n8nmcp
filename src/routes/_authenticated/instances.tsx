@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   listInstances,
@@ -40,7 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plug, Trash2, Pencil } from "lucide-react";
+import { Loader2, Plug, Trash2, Pencil, Info, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/instances")({
   head: () => ({ meta: [{ title: "n8n Instances — n8n-mcp" }] }),
@@ -72,6 +72,12 @@ function InstancesPage() {
   });
   const [editing, setEditing] = useState<Instance | null>(null);
   const [open, setOpen] = useState(false);
+  const [bannerDismissed, setBannerDismissed] = useState(true);
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      setBannerDismissed(localStorage.getItem("dismissed-instances-banner") === "1");
+    }
+  }, []);
 
   const test = useMutation({
     mutationFn: (id: string) => testInstance({ data: { id } }),
@@ -93,6 +99,39 @@ function InstancesPage() {
 
   return (
     <div className="space-y-6">
+      {!bannerDismissed && (
+        <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
+          <div className="flex items-start gap-3">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+              <span className="font-medium">Using n8n Cloud?</span>{" "}
+              <span className="text-muted-foreground">
+                You need a Starter plan or above to access the API.{" "}
+                <a
+                  href="https://docs.n8n.io/api/authentication/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-primary underline"
+                >
+                  Learn more →
+                </a>
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className="text-muted-foreground hover:text-foreground"
+            onClick={() => {
+              localStorage.setItem("dismissed-instances-banner", "1");
+              setBannerDismissed(true);
+            }}
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">n8n Instances</h1>
@@ -272,6 +311,9 @@ function InstanceDialog({
             placeholder="n8n_api_..."
             autoComplete="off"
           />
+          <p className="text-xs text-muted-foreground">
+            Generate an API key from your n8n instance: Settings → n8n API → Create an API key.
+          </p>
         </div>
       </div>
       <DialogFooter>
