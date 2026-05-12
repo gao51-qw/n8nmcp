@@ -22,6 +22,7 @@ const NAV_LINKS: NavLink[] = [
   { kind: "internal", to: "/", hash: "architecture", label: "Architecture" },
   { kind: "internal", to: "/pricing", label: "Pricing" },
   { kind: "internal", to: "/docs", label: "Docs" },
+  { kind: "internal", to: "/blog", label: "Blog" },
   { kind: "internal", to: "/", hash: "community", label: "Community" },
   { kind: "internal", to: "/faq", label: "FAQ" },
   { kind: "external", href: "https://github.com/czlonkowski/n8n-mcp", label: "GitHub" },
