@@ -298,11 +298,11 @@ function BlogIndex() {
                     )}
                   </div>
                   <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
-                    <Highlight text={p.title} query={q} />
+                    <HighlightText text={p.title} query={q} />
                   </h2>
                   {p.description && (
                     <p className="mt-2 text-sm text-muted-foreground">
-                      <Highlight text={p.description} query={q} />
+                      <HighlightText text={p.description} query={q} />
                     </p>
                   )}
                   {p.tags.length > 0 && (
