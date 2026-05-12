@@ -3,6 +3,7 @@ import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Badge } from "@/components/ui/badge";
 import { mdxComponents } from "@/components/mdx-components";
+import { ShareButtons } from "@/components/share-buttons";
 import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 
@@ -135,6 +136,7 @@ function BlogPostPage() {
   const meta = Route.useLoaderData();
   const post = getPostBySlug(meta.slug)!;
   const PostBody = post.Component;
+  const url = `${SITE}/blog/${post.slug}`;
   return (
     <div className="min-h-screen">
       <MarketingHeader />
@@ -178,6 +180,23 @@ function BlogPostPage() {
         <article className="mt-8">
           <PostBody components={mdxComponents} />
         </article>
+
+        <footer className="mt-12 rounded-xl border border-border bg-card/50 p-5">
+          <p className="text-sm font-medium text-foreground">
+            Found this useful?
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Share it with someone who'd want to read it.
+          </p>
+          <div className="mt-4">
+            <ShareButtons
+              url={url}
+              title={post.title}
+              description={post.description}
+              hashtags={["n8n", "MCP"]}
+            />
+          </div>
+        </footer>
       </main>
       <MarketingFooter />
     </div>
