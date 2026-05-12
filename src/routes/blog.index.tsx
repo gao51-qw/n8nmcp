@@ -298,11 +298,11 @@ function BlogIndex() {
                     )}
                   </div>
                   <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground">
-                    {p.title}
+                    <HighlightText text={p.title} query={q} />
                   </h2>
                   {p.description && (
                     <p className="mt-2 text-sm text-muted-foreground">
-                      {p.description}
+                      <HighlightText text={p.description} query={q} />
                     </p>
                   )}
                   {p.tags.length > 0 && (
@@ -411,5 +411,32 @@ function BlogPagination({
         Page {page} of {totalPages} · {totalPosts} posts
       </p>
     </nav>
+  );
+}
+
+function escapeRegExp(s: string) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function HighlightText({ text, query }: { text: string; query: string }) {
+  const q = query.trim();
+  if (!q) return <>{text}</>;
+  const re = new RegExp(`(${escapeRegExp(q)})`, "ig");
+  const parts = text.split(re);
+  return (
+    <>
+      {parts.map((part, i) =>
+        i % 2 === 1 ? (
+          <mark
+            key={i}
+            className="rounded-sm bg-primary/15 px-0.5 text-foreground"
+          >
+            {part}
+          </mark>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
   );
 }
