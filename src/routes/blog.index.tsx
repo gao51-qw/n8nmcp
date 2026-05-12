@@ -7,7 +7,7 @@ import { getAllPosts, formatPostDate } from "@/lib/blog";
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
 
-export const Route = createFileRoute("/blog")({
+export const Route = createFileRoute("/blog/")({
   head: () => {
     const TITLE = "Blog — n8n-mcp";
     const DESC =
