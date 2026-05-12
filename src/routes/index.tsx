@@ -304,7 +304,58 @@ function Landing() {
             </div>
           ))}
         </div>
+
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+          <span className="text-muted-foreground/70">Not the same as:</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 hover:border-primary/40 hover:text-foreground"
+              >
+                Zapier MCP
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Zapier hosts MCP for Zapier's Zaps. We host MCP for your existing
+              n8n — self-hosted, no platform lock-in.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 hover:border-primary/40 hover:text-foreground"
+              >
+                Pipedream / Composio
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              They expose connector-grain tools (one tool per API endpoint). We
+              expose your workflow-grain tools — your existing n8n logic, reused
+              as-is.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 hover:border-primary/40 hover:text-foreground"
+              >
+                n8n Cloud built-in MCP
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Only serves n8n Cloud workspaces. We work for self-hosted, Cloud,
+              and multi-instance setups in one account.
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </section>
+
+      <DiyComparison />
+
+      <ArchitectureDiagram />
 
       <EvolutionSection />
 
