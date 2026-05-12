@@ -309,3 +309,80 @@ html:not(.dark) {
     pointer-events: none;
   }
 }
+
+@layer base {
+  /* Unified keyboard focus ring. Only shows for actual keyboard focus
+     (`:focus-visible`), never for mouse clicks. Uses the theme ring token
+     so it stays legible in both light and dark mode, and sits above any
+     component-level outline reset. Component libraries (e.g. shadcn) may
+     still customise this per-control via their own `focus-visible:` utility
+     classes — those win because they are more specific. */
+  :where(
+    a[href],
+    area[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    label[for],
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus {
+    outline: none;
+  }
+
+  :where(
+    a[href],
+    area[href],
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    label[for],
+    [role="button"],
+    [role="link"],
+    [role="tab"],
+    [role="menuitem"],
+    [role="menuitemcheckbox"],
+    [role="menuitemradio"],
+    [role="option"],
+    [role="switch"],
+    [role="checkbox"],
+    [role="radio"],
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--color-ring) 28%, transparent);
+    transition: box-shadow 120ms ease, outline-color 120ms ease;
+  }
+
+  /* Suppress the focus ring on disabled / loading controls — they aren't
+     actionable, so a glowing ring would be misleading. */
+  :where(
+    button:disabled,
+    input:disabled,
+    select:disabled,
+    textarea:disabled,
+    [aria-disabled="true"],
+    [aria-busy="true"],
+    [data-loading="true"],
+    [data-state="loading"],
+    [data-pending]
+  ):focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+}
