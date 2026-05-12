@@ -138,6 +138,22 @@ function Landing() {
               <Link to="/docs">Read the docs</Link>
             </Button>
           </div>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
+            <Link
+              to="/"
+              hash="diy"
+              className="rounded-full border border-border bg-card/40 px-3 py-1 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              See DIY comparison →
+            </Link>
+            <Link
+              to="/"
+              hash="architecture"
+              className="rounded-full border border-border bg-card/40 px-3 py-1 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+            >
+              View architecture →
+            </Link>
+          </div>
           <p className="mt-4 text-xs text-muted-foreground">
             No credit card required · 100 calls/day on Free
           </p>
