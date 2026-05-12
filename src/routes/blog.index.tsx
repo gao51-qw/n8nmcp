@@ -135,7 +135,7 @@ function BlogIndex() {
         ) : (
           <>
           <ul className="mt-12 space-y-6">
-            {posts.map((p) => (
+            {posts.map((p: PostCard) => (
               <li key={p.slug}>
                 <Link
                   to="/blog/$slug"
