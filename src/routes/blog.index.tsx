@@ -29,6 +29,7 @@ const searchSchema = z.object({
   q: fallback(z.string(), "").default(""),
   tag: fallback(z.string(), "").default(""),
 });
+type BlogSearch = z.infer<typeof searchSchema>;
 
 export const Route = createFileRoute("/blog/")({
   validateSearch: zodValidator(searchSchema),
@@ -213,9 +214,9 @@ function BlogIndex() {
             </div>
             {allTags.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5">
-                <Link
+              <Link
                   to="/blog"
-                  search={(prev) => ({ ...prev, tag: "", page: 1 })}
+                search={(prev: BlogSearch) => ({ ...prev, tag: "", page: 1 })}
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs transition-colors",
                     tag === ""
@@ -225,13 +226,13 @@ function BlogIndex() {
                 >
                   All
                 </Link>
-                {allTags.map(({ tag: t, count }) => {
+                {allTags.map(({ tag: t, count }: { tag: string; count: number }) => {
                   const active = tag.toLowerCase() === t.toLowerCase();
                   return (
                     <Link
                       key={t}
                       to="/blog"
-                      search={(prev) => ({
+                      search={(prev: BlogSearch) => ({
                         ...prev,
                         tag: active ? "" : t,
                         page: 1,
@@ -344,9 +345,6 @@ function BlogPagination({
     "pointer-events-none opacity-40",
   );
 
-  const prevSearch = page - 1 === 1 ? {} : { page: page - 1 };
-  const nextSearch = { page: page + 1 };
-
   return (
     <nav
       aria-label="Blog pagination"
@@ -357,7 +355,7 @@ function BlogPagination({
           {page > 1 ? (
             <Link
               to="/blog"
-              search={(prev) => ({ ...prev, page: page - 1 })}
+              search={(prev: BlogSearch) => ({ ...prev, page: page - 1 })}
               className={linkBase}
               aria-label="Previous page"
               rel="prev"
@@ -374,7 +372,7 @@ function BlogPagination({
           <li key={p}>
             <Link
               to="/blog"
-              search={(prev) => ({ ...prev, page: p })}
+              search={(prev: BlogSearch) => ({ ...prev, page: p })}
               className={p === page ? linkActive : linkBase}
               aria-label={`Go to page ${p}`}
               aria-current={p === page ? "page" : undefined}
@@ -387,7 +385,7 @@ function BlogPagination({
           {page < totalPages ? (
             <Link
               to="/blog"
-              search={(prev) => ({ ...prev, page: page + 1 })}
+              search={(prev: BlogSearch) => ({ ...prev, page: page + 1 })}
               className={linkBase}
               aria-label="Next page"
               rel="next"
