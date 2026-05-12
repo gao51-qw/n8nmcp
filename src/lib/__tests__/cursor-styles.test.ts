@@ -17,6 +17,8 @@ type Case = {
   expected: "pointer" | "not-allowed" | "auto" | "";
   /** Optional CSS selector to pick a child element instead of the root. */
   target?: string;
+  /** When true, also assert `pointer-events: none` on the element. */
+  blocked?: boolean;
 };
 
 const CASES: Case[] = [
@@ -41,8 +43,16 @@ const CASES: Case[] = [
   // Disabled / aria-disabled — should get not-allowed
   { name: "button:disabled", html: `<button type="button" disabled>x</button>`, expected: "not-allowed" },
   { name: "input:disabled", html: `<input type="text" disabled />`, expected: "not-allowed" },
-  { name: "[role=button][aria-disabled=true]", html: `<div role="button" aria-disabled="true">x</div>`, expected: "not-allowed" },
-  { name: "a[aria-disabled=true]", html: `<a href="/x" aria-disabled="true">x</a>`, expected: "not-allowed" },
+  { name: "[role=button][aria-disabled=true]", html: `<div role="button" aria-disabled="true">x</div>`, expected: "not-allowed", blocked: true },
+  { name: "a[aria-disabled=true]", html: `<a href="/x" aria-disabled="true">x</a>`, expected: "not-allowed", blocked: true },
+
+  // Loading state — same not-allowed treatment, plus pointer-events: none
+  { name: "button[aria-busy=true]", html: `<button type="button" aria-busy="true">x</button>`, expected: "not-allowed", blocked: true },
+  { name: "button[data-loading=true]", html: `<button type="button" data-loading="true">x</button>`, expected: "not-allowed", blocked: true },
+  { name: "button[data-state=loading]", html: `<button type="button" data-state="loading">x</button>`, expected: "not-allowed", blocked: true },
+  { name: "button[data-pending]", html: `<button type="button" data-pending>x</button>`, expected: "not-allowed", blocked: true },
+  { name: "[role=button][aria-busy=true]", html: `<div role="button" aria-busy="true">x</div>`, expected: "not-allowed", blocked: true },
+  { name: "a[href][data-loading=true]", html: `<a href="/x" data-loading="true">x</a>`, expected: "not-allowed", blocked: true },
 
   // Decorative / layout — should NOT receive pointer
   { name: "plain div", html: `<div>x</div>`, expected: "auto" },
@@ -109,6 +119,9 @@ describe("global cursor rules in src/styles.css", () => {
       // jsdom returns "" for unset; normalise to "auto".
       const normalised = cursor === "" ? "auto" : cursor;
       expect(normalised).toBe(c.expected);
+      if (c.blocked) {
+        expect(window.getComputedStyle(el!).pointerEvents).toBe("none");
+      }
       host.remove();
     });
   }
