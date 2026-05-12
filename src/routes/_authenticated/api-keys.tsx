@@ -1,6 +1,6 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { listApiKeys, createApiKey, revokeApiKey } from "@/lib/api-keys.functions";
 import { Button } from "@/components/ui/button";
@@ -31,10 +31,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Copy, Loader2, ShieldOff, KeyRound } from "lucide-react";
+import { Copy, Loader2, ShieldOff, KeyRound, Sparkles, ArrowLeft } from "lucide-react";
+import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/api-keys")({
   head: () => ({ meta: [{ title: "API Keys — n8n-mcp" }] }),
+  validateSearch: (s) => z.object({ setup: z.enum(["connect"]).optional() }).parse(s),
   component: ApiKeysPage,
 });
 
@@ -49,6 +51,8 @@ type ApiKey = {
 
 function ApiKeysPage() {
   const qc = useQueryClient();
+  const { setup } = Route.useSearch();
+  const fromConnect = setup === "connect";
   const { data, isLoading } = useQuery({
     queryKey: ["api-keys"],
     queryFn: () => listApiKeys(),
@@ -57,6 +61,17 @@ function ApiKeysPage() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [created, setCreated] = useState<{ plaintext: string; prefix: string } | null>(null);
+
+  useEffect(() => {
+    if (!fromConnect) return;
+    const activeCount = (data as ApiKey[] | undefined)?.filter((k) => !k.revoked_at).length ?? 0;
+    if (activeCount === 0) setOpen(true);
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() =>
+        document.getElementById("setup-banner")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  }, [fromConnect, data]);
 
   const create = useMutation({
     mutationFn: () => createApiKey({ data: { name } }),
@@ -84,6 +99,28 @@ function ApiKeysPage() {
 
   return (
     <div className="space-y-6">
+      {fromConnect && (
+        <div
+          id="setup-banner"
+          className="flex items-start justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm"
+        >
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+              <div className="font-medium">Step from Connect: create an API key</div>
+              <div className="mt-0.5 text-muted-foreground">
+                Each MCP client uses an <code className="rounded bg-muted px-1">Authorization: Bearer</code> header. Keys are shown once — copy it before closing the dialog.
+              </div>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="ghost">
+            <Link to="/connect">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Connect
+            </Link>
+          </Button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Platform API Keys</h1>
