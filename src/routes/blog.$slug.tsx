@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Badge } from "@/components/ui/badge";
-import { Markdown } from "@/components/markdown";
+import { mdxComponents } from "@/components/mdx-components";
 import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 
@@ -86,6 +86,7 @@ export const Route = createFileRoute("/blog/$slug")({
 
 function BlogPostPage() {
   const post = Route.useLoaderData();
+  const PostBody = post.Component;
   return (
     <div className="min-h-screen">
       <MarketingHeader />
@@ -127,7 +128,7 @@ function BlogPostPage() {
         </header>
 
         <article className="mt-8">
-          <Markdown className="text-base text-foreground">{post.body}</Markdown>
+          <PostBody components={mdxComponents} />
         </article>
       </main>
       <MarketingFooter />
