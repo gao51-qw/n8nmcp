@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, stripSearchParams } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -28,6 +28,10 @@ const searchSchema = z.object({
 
 export const Route = createFileRoute("/blog/")({
   validateSearch: zodValidator(searchSchema),
+  search: {
+    // Default page=1 should never appear in the URL — keep /blog clean.
+    middlewares: [stripSearchParams({ page: 1 })],
+  },
   loaderDeps: ({ search }) => ({ page: search.page }),
   loader: ({ deps }): {
     page: number;
