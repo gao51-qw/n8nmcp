@@ -1,13 +1,15 @@
-import { createFileRoute, Link, notFound, stripSearchParams } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
+import { useEffect, useState } from "react";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { getAllPosts, formatPostDate } from "@/lib/blog";
+import { getAllPosts, getAllTags, formatPostDate } from "@/lib/blog";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
@@ -24,30 +26,52 @@ type PostCard = {
 
 const searchSchema = z.object({
   page: fallback(z.number().int().min(1), 1).default(1),
+  q: fallback(z.string(), "").default(""),
+  tag: fallback(z.string(), "").default(""),
 });
+type BlogSearch = z.infer<typeof searchSchema>;
 
 export const Route = createFileRoute("/blog/")({
   validateSearch: zodValidator(searchSchema),
   search: {
-    // Default page=1 should never appear in the URL — keep /blog clean.
-    middlewares: [stripSearchParams({ page: 1 })],
+    // Strip default values so /blog stays clean.
+    middlewares: [stripSearchParams({ page: 1, q: "", tag: "" })],
   },
-  loaderDeps: ({ search }) => ({ page: search.page }),
+  loaderDeps: ({ search }) => ({ page: search.page, q: search.q, tag: search.tag }),
   loader: ({ deps }): {
     page: number;
     totalPages: number;
     totalPosts: number;
+    totalAll: number;
+    q: string;
+    tag: string;
+    allTags: { tag: string; count: number }[];
     posts: PostCard[];
   } => {
     const all = getAllPosts();
-    const totalPages = Math.max(1, Math.ceil(all.length / PER_PAGE));
+    const allTags = getAllTags();
+    const q = deps.q.trim().toLowerCase();
+    const tag = deps.tag.trim().toLowerCase();
+    const filtered = all.filter((p) => {
+      if (tag && !p.tags.some((t) => t.toLowerCase() === tag)) return false;
+      if (q) {
+        const hay = `${p.title} ${p.description} ${p.tags.join(" ")}`.toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
+      return true;
+    });
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
     if (deps.page > totalPages) throw notFound();
     const start = (deps.page - 1) * PER_PAGE;
     return {
       page: deps.page,
       totalPages,
-      totalPosts: all.length,
-      posts: all.slice(start, start + PER_PAGE).map((p) => ({
+      totalPosts: filtered.length,
+      totalAll: all.length,
+      q: deps.q,
+      tag: deps.tag,
+      allTags,
+      posts: filtered.slice(start, start + PER_PAGE).map((p) => ({
         slug: p.slug,
         title: p.title,
         description: p.description,
@@ -117,7 +141,35 @@ export const Route = createFileRoute("/blog/")({
 });
 
 function BlogIndex() {
-  const { posts, page, totalPages, totalPosts } = Route.useLoaderData();
+  const { posts, page, totalPages, totalPosts, totalAll, q, tag, allTags } =
+    Route.useLoaderData();
+  const navigate = useNavigate({ from: "/blog" });
+  const [query, setQuery] = useState(q);
+
+  // Sync local input when URL changes (back/forward, tag click, clear).
+  useEffect(() => {
+    setQuery(q);
+  }, [q]);
+
+  // Debounced URL update on typing.
+  useEffect(() => {
+    if (query === q) return;
+    const id = setTimeout(() => {
+      navigate({
+        search: (prev: BlogSearch) => ({
+          ...prev,
+          q: query,
+          page: 1,
+        }),
+        replace: true,
+      });
+    }, 250);
+    return () => clearTimeout(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  const hasFilter = q !== "" || tag !== "";
+
   return (
     <div className="min-h-screen">
       <MarketingHeader />
@@ -132,13 +184,95 @@ function BlogIndex() {
           </p>
         </div>
 
-        {totalPosts === 0 ? (
+        {totalAll === 0 ? (
           <p className="mt-16 text-center text-sm text-muted-foreground">
             No posts yet — check back soon.
           </p>
         ) : (
           <>
-          <ul className="mt-12 space-y-6">
+          <div className="mt-10 space-y-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="search"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search posts by title, description or tag…"
+                aria-label="Search blog posts"
+                className="pl-9 pr-9"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  aria-label="Clear search"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+              <Link
+                  to="/blog"
+                search={(prev: BlogSearch) => ({ ...prev, tag: "", page: 1 })}
+                  className={cn(
+                    "rounded-full border px-3 py-1 text-xs transition-colors",
+                    tag === ""
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                  )}
+                >
+                  All
+                </Link>
+                {allTags.map(({ tag: t, count }: { tag: string; count: number }) => {
+                  const active = tag.toLowerCase() === t.toLowerCase();
+                  return (
+                    <Link
+                      key={t}
+                      to="/blog"
+                      search={(prev: BlogSearch) => ({
+                        ...prev,
+                        tag: active ? "" : t,
+                        page: 1,
+                      })}
+                      className={cn(
+                        "rounded-full border px-3 py-1 text-xs transition-colors",
+                        active
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                      )}
+                    >
+                      #{t}
+                      <span className="ml-1 opacity-60">{count}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {posts.length === 0 ? (
+            <div className="mt-12 rounded-2xl border border-dashed border-border p-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                No posts match your filters.
+              </p>
+              {hasFilter && (
+                <Link
+                  to="/blog"
+                  search={{}}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "sm" }),
+                    "mt-4",
+                  )}
+                >
+                  Clear filters
+                </Link>
+              )}
+            </div>
+          ) : (
+          <ul className="mt-8 space-y-6">
             {posts.map((p: PostCard) => (
               <li key={p.slug}>
                 <Link
@@ -176,6 +310,7 @@ function BlogIndex() {
               </li>
             ))}
           </ul>
+          )}
           {totalPages > 1 && (
             <BlogPagination page={page} totalPages={totalPages} totalPosts={totalPosts} />
           )}
@@ -210,9 +345,6 @@ function BlogPagination({
     "pointer-events-none opacity-40",
   );
 
-  const prevSearch = page - 1 === 1 ? {} : { page: page - 1 };
-  const nextSearch = { page: page + 1 };
-
   return (
     <nav
       aria-label="Blog pagination"
@@ -223,7 +355,7 @@ function BlogPagination({
           {page > 1 ? (
             <Link
               to="/blog"
-              search={prevSearch}
+              search={(prev: BlogSearch) => ({ ...prev, page: page - 1 })}
               className={linkBase}
               aria-label="Previous page"
               rel="prev"
@@ -240,7 +372,7 @@ function BlogPagination({
           <li key={p}>
             <Link
               to="/blog"
-              search={p === 1 ? {} : { page: p }}
+              search={(prev: BlogSearch) => ({ ...prev, page: p })}
               className={p === page ? linkActive : linkBase}
               aria-label={`Go to page ${p}`}
               aria-current={p === page ? "page" : undefined}
@@ -253,7 +385,7 @@ function BlogPagination({
           {page < totalPages ? (
             <Link
               to="/blog"
-              search={nextSearch}
+              search={(prev: BlogSearch) => ({ ...prev, page: page + 1 })}
               className={linkBase}
               aria-label="Next page"
               rel="next"
