@@ -1,9 +1,9 @@
 {
-  "totalNodes": 1810,
-  "coreNodes": 555,
-  "communityNodes": 1255,
+  "totalNodes": 1994,
+  "coreNodes": 661,
+  "communityNodes": 1333,
   "communityPackages": 553,
-  "aiTools": 117,
-  "triggers": 107,
+  "aiTools": 105,
+  "triggers": 290,
   "generatedAt": "2026-05-12T00:00:00.000Z"
 }
