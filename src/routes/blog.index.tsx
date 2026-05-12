@@ -5,25 +5,48 @@ import { Badge } from "@/components/ui/badge";
 import { getAllPosts, formatPostDate } from "@/lib/blog";
 
 const SITE = "https://n8nmcp.lovable.app";
+const SITE_NAME = "n8n-mcp";
 
-export const Route = createFileRoute("/blog")({
+export const Route = createFileRoute("/blog/")({
   head: () => {
     const TITLE = "Blog — n8n-mcp";
     const DESC =
       "Release notes, deep-dives and tutorials from the n8n-mcp team — building an MCP gateway for n8n.";
     const URL = `${SITE}/blog`;
+    const posts = getAllPosts();
     return {
       meta: [
         { title: TITLE },
         { name: "description", content: DESC },
+        { property: "og:site_name", content: SITE_NAME },
         { property: "og:title", content: TITLE },
         { property: "og:description", content: DESC },
         { property: "og:url", content: URL },
         { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary" },
         { name: "twitter:title", content: TITLE },
         { name: "twitter:description", content: DESC },
       ],
       links: [{ rel: "canonical", href: URL }],
+      scripts: [
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Blog",
+            name: TITLE,
+            description: DESC,
+            url: URL,
+            blogPost: posts.map((p) => ({
+              "@type": "BlogPosting",
+              headline: p.title,
+              description: p.description,
+              datePublished: p.date,
+              url: `${SITE}/blog/${p.slug}`,
+            })),
+          }),
+        },
+      ],
     };
   },
   component: BlogIndex,

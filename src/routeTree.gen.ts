@@ -19,9 +19,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImprintRouteImport } from './routes/imprint'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as DocsRouteImport } from './routes/docs'
-import { Route as BlogRouteImport } from './routes/blog'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
@@ -88,11 +88,6 @@ const DocsRoute = DocsRouteImport.update({
   path: '/docs',
   getParentRoute: () => rootRouteImport,
 } as any)
-const BlogRoute = BlogRouteImport.update({
-  id: '/blog',
-  path: '/blog',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
@@ -102,10 +97,15 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlogIndexRoute = BlogIndexRouteImport.update({
+  id: '/blog/',
+  path: '/blog/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
-  id: '/$slug',
-  path: '/$slug',
-  getParentRoute: () => BlogRoute,
+  id: '/blog/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedWhatsNewRoute = AuthenticatedWhatsNewRouteImport.update({
   id: '/whats-new',
@@ -181,7 +181,6 @@ const AuthenticatedAdminAdminAnnouncementsRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/blog': typeof BlogRouteWithChildren
   '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
@@ -202,6 +201,7 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog/': typeof BlogIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
@@ -209,7 +209,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/blog': typeof BlogRouteWithChildren
   '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
@@ -230,6 +229,7 @@ export interface FileRoutesByTo {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog': typeof BlogIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
@@ -239,7 +239,6 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
-  '/blog': typeof BlogRouteWithChildren
   '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
@@ -261,6 +260,7 @@ export interface FileRoutesById {
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/blog/': typeof BlogIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
@@ -270,7 +270,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/blog'
     | '/docs'
     | '/faq'
     | '/imprint'
@@ -291,6 +290,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/blog/'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
@@ -298,7 +298,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/blog'
     | '/docs'
     | '/faq'
     | '/imprint'
@@ -319,6 +318,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/blog'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
@@ -327,7 +327,6 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
-    | '/blog'
     | '/docs'
     | '/faq'
     | '/imprint'
@@ -349,6 +348,7 @@ export interface FileRouteTypes {
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/blog/$slug'
+    | '/blog/'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/_authenticated/_admin/admin/announcements'
@@ -358,7 +358,6 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
-  BlogRoute: typeof BlogRouteWithChildren
   DocsRoute: typeof DocsRoute
   FaqRoute: typeof FaqRoute
   ImprintRoute: typeof ImprintRoute
@@ -369,6 +368,8 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
+  BlogSlugRoute: typeof BlogSlugRoute
+  BlogIndexRoute: typeof BlogIndexRoute
   ApiPublicMcpRoute: typeof ApiPublicMcpRoute
   ApiPublicPaddleWebhookRoute: typeof ApiPublicPaddleWebhookRoute
 }
@@ -445,13 +446,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/blog': {
-      id: '/blog'
-      path: '/blog'
-      fullPath: '/blog'
-      preLoaderRoute: typeof BlogRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/_authenticated': {
       id: '/_authenticated'
       path: ''
@@ -466,12 +460,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blog/': {
+      id: '/blog/'
+      path: '/blog'
+      fullPath: '/blog/'
+      preLoaderRoute: typeof BlogIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/blog/$slug': {
       id: '/blog/$slug'
-      path: '/$slug'
+      path: '/blog/$slug'
       fullPath: '/blog/$slug'
       preLoaderRoute: typeof BlogSlugRouteImport
-      parentRoute: typeof BlogRoute
+      parentRoute: typeof rootRouteImport
     }
     '/_authenticated/whats-new': {
       id: '/_authenticated/whats-new'
@@ -618,20 +619,9 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
-interface BlogRouteChildren {
-  BlogSlugRoute: typeof BlogSlugRoute
-}
-
-const BlogRouteChildren: BlogRouteChildren = {
-  BlogSlugRoute: BlogSlugRoute,
-}
-
-const BlogRouteWithChildren = BlogRoute._addFileChildren(BlogRouteChildren)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
-  BlogRoute: BlogRouteWithChildren,
   DocsRoute: DocsRoute,
   FaqRoute: FaqRoute,
   ImprintRoute: ImprintRoute,
@@ -642,9 +632,21 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
+  BlogSlugRoute: BlogSlugRoute,
+  BlogIndexRoute: BlogIndexRoute,
   ApiPublicMcpRoute: ApiPublicMcpRoute,
   ApiPublicPaddleWebhookRoute: ApiPublicPaddleWebhookRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
