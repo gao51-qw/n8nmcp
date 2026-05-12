@@ -5,8 +5,7 @@
   ],
   "community": {
     "search_keywords": [
-      "n8n-community-node-package",
-      "n8n-nodes"
+      "n8n-community-node-package"
     ],
     "min_monthly_downloads": 0,
     "max_packages": 1000,
