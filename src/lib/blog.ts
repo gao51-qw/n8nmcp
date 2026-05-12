@@ -17,8 +17,13 @@
 
 import type { ComponentType } from "react";
 
+// MDX default export accepts a `components` map keyed by tag name. Using `any`
+// in the value position keeps the prop types of each component (h1, p, code …)
+// intact when callers pass `mdxComponents`.
+type MDXContent = ComponentType<{ components?: Record<string, ComponentType<any>> }>;
+
 type MdxModule = {
-  default: ComponentType<{ components?: Record<string, ComponentType<unknown>> }>;
+  default: MDXContent;
   frontmatter?: {
     title?: string;
     description?: string;
@@ -39,7 +44,7 @@ export type BlogPost = {
   date: string;
   author?: string;
   tags: string[];
-  Component: MdxModule["default"];
+  Component: MDXContent;
 };
 
 function slugFromPath(p: string): string {
