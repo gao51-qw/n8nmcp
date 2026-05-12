@@ -138,18 +138,49 @@ function Landing() {
           {/* Stats */}
           <div className="mx-auto mt-12 grid max-w-3xl grid-cols-3 gap-6">
             {[
-              { value: 1084, suffix: "", label: "n8n nodes covered" },
-              { value: 20, suffix: "+", label: "supported AI clients" },
-              { value: 200, prefix: "<", suffix: "ms", label: "median tool call" },
+              {
+                value: 1084,
+                suffix: "",
+                label: "n8n nodes covered",
+                source: "n8n core + community packages",
+              },
+              {
+                value: 20,
+                suffix: "+",
+                label: "supported AI clients",
+                source: "Any MCP-compliant client",
+              },
+              {
+                value: 200,
+                prefix: "<",
+                suffix: "ms",
+                label: "median tool call",
+                source: "p50, EU edge, last 30 days",
+              },
             ].map((s) => (
               <div key={s.label}>
                 <div className="text-3xl font-bold md:text-4xl">
                   <CountUp value={s.value} prefix={s.prefix} suffix={s.suffix} />
                 </div>
                 <div className="mt-1 text-xs text-muted-foreground">{s.label}</div>
+                <div className="mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                  {s.source}
+                </div>
               </div>
             ))}
           </div>
+          <p className="mx-auto mt-6 max-w-xl text-[11px] text-muted-foreground/70">
+            Sources: node count from{" "}
+            <a
+              href="https://github.com/czlonkowski/n8n-mcp"
+              target="_blank"
+              rel="noreferrer"
+              className="underline hover:text-foreground"
+            >
+              n8n-mcp knowledge base
+            </a>
+            ; latency measured on the hosted gateway over the last 30 days.
+          </p>
         </div>
       </section>
 
