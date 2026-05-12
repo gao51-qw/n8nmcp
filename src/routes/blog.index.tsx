@@ -172,7 +172,7 @@ function BlogIndex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const selectedSet = new Set(tags.map((t) => t.toLowerCase()));
+  const selectedSet = new Set(tags.map((t: string) => t.toLowerCase()));
   const hasFilter = q !== "" || tags.length > 0;
 
   return (
