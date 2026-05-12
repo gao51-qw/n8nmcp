@@ -8,6 +8,13 @@ import { AiLogoWall } from "@/components/marketing/ai-logo-wall";
 import { EvolutionSection } from "@/components/marketing/evolution-section";
 import { CacheSection } from "@/components/marketing/cache-section";
 import { CommunitySection } from "@/components/marketing/community-section";
+import { DiyComparison } from "@/components/marketing/diy-comparison";
+import { ArchitectureDiagram } from "@/components/marketing/architecture-diagram";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -199,6 +206,19 @@ function Landing() {
             Use our Chat Agent to build workflows instantly, or connect your
             favorite AI tools via MCP for full control.
           </p>
+          <p className="mx-auto mt-3 max-w-2xl text-xs text-muted-foreground/70">
+            Powered by the open-source{" "}
+            <a
+              href="https://github.com/czlonkowski/n8n-mcp"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary hover:underline"
+            >
+              czlonkowski/n8n-mcp
+            </a>{" "}
+            knowledge server, plus a hosted runtime gateway — not a fork, a
+            complement.
+          </p>
         </div>
 
         <div className="mt-12 grid gap-6 md:grid-cols-2 md:items-stretch">
@@ -284,7 +304,58 @@ function Landing() {
             </div>
           ))}
         </div>
+
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
+          <span className="text-muted-foreground/70">Not the same as:</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 hover:border-primary/40 hover:text-foreground"
+              >
+                Zapier MCP
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Zapier hosts MCP for Zapier's Zaps. We host MCP for your existing
+              n8n — self-hosted, no platform lock-in.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 hover:border-primary/40 hover:text-foreground"
+              >
+                Pipedream / Composio
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              They expose connector-grain tools (one tool per API endpoint). We
+              expose your workflow-grain tools — your existing n8n logic, reused
+              as-is.
+            </TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full border border-border bg-card px-2.5 py-1 hover:border-primary/40 hover:text-foreground"
+              >
+                n8n Cloud built-in MCP
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              Only serves n8n Cloud workspaces. We work for self-hosted, Cloud,
+              and multi-instance setups in one account.
+            </TooltipContent>
+          </Tooltip>
+        </div>
       </section>
+
+      <DiyComparison />
+
+      <ArchitectureDiagram />
 
       <EvolutionSection />
 
