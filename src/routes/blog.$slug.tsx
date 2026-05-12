@@ -7,6 +7,12 @@ import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 
 const SITE = "https://n8nmcp.lovable.app";
+const SITE_NAME = "n8n-mcp";
+
+function absoluteUrl(maybeRelative: string): string {
+  if (/^https?:\/\//i.test(maybeRelative)) return maybeRelative;
+  return `${SITE}${maybeRelative.startsWith("/") ? "" : "/"}${maybeRelative}`;
+}
 
 export const Route = createFileRoute("/blog/$slug")({
   loader: ({ params }) => {
@@ -21,8 +27,10 @@ export const Route = createFileRoute("/blog/$slug")({
       title: post.title,
       description: post.description,
       date: post.date,
+      updated: post.updated,
       author: post.author,
       tags: post.tags,
+      cover: post.cover,
     };
   },
   head: ({ loaderData }) => {
@@ -30,20 +38,40 @@ export const Route = createFileRoute("/blog/$slug")({
     const TITLE = `${loaderData.title} — n8n-mcp blog`;
     const DESC = loaderData.description;
     const URL = `${SITE}/blog/${loaderData.slug}`;
+    const IMAGE = loaderData.cover ? absoluteUrl(loaderData.cover) : undefined;
     return {
       meta: [
         { title: TITLE },
         { name: "description", content: DESC },
+        { property: "og:site_name", content: SITE_NAME },
         { property: "og:title", content: TITLE },
         { property: "og:description", content: DESC },
         { property: "og:url", content: URL },
         { property: "og:type", content: "article" },
         { property: "article:published_time", content: loaderData.date },
+        ...(loaderData.updated
+          ? [{ property: "article:modified_time", content: loaderData.updated }]
+          : []),
         ...(loaderData.author
           ? [{ property: "article:author", content: loaderData.author }]
           : []),
+        ...loaderData.tags.map((tag: string) => ({
+          property: "article:tag",
+          content: tag,
+        })),
+        ...(IMAGE
+          ? [
+              { property: "og:image", content: IMAGE },
+              { property: "og:image:alt", content: loaderData.title },
+            ]
+          : []),
+        {
+          name: "twitter:card",
+          content: IMAGE ? "summary_large_image" : "summary",
+        },
         { name: "twitter:title", content: TITLE },
         { name: "twitter:description", content: DESC },
+        ...(IMAGE ? [{ name: "twitter:image", content: IMAGE }] : []),
       ],
       links: [{ rel: "canonical", href: URL }],
       scripts: [
@@ -55,10 +83,18 @@ export const Route = createFileRoute("/blog/$slug")({
             headline: loaderData.title,
             description: loaderData.description,
             datePublished: loaderData.date,
+            dateModified: loaderData.updated ?? loaderData.date,
+            ...(IMAGE ? { image: IMAGE } : {}),
+            keywords: loaderData.tags.join(", ") || undefined,
             author: loaderData.author
               ? { "@type": "Person", name: loaderData.author }
               : undefined,
             mainEntityOfPage: URL,
+            publisher: {
+              "@type": "Organization",
+              name: SITE_NAME,
+              url: SITE,
+            },
           }),
         },
       ],
