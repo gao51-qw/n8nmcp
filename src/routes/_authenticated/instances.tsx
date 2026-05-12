@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
   listInstances,
@@ -40,9 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plug, Trash2, Pencil } from "lucide-react";
-import { Info, X } from "lucide-react";
-import { useEffect } from "react";
+import { Loader2, Plug, Trash2, Pencil, Info, X } from "lucide-react";
 
 export const Route = createFileRoute("/_authenticated/instances")({
   head: () => ({ meta: [{ title: "n8n Instances — n8n-mcp" }] }),
