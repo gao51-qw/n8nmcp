@@ -4,12 +4,18 @@
     "@n8n/n8n-nodes-langchain"
   ],
   "community": {
-    "search_keyword": "n8n-community-node-package",
-    "min_monthly_downloads": 100,
-    "max_packages": 250,
+    "search_keywords": [
+      "n8n-community-node-package",
+      "n8n-nodes"
+    ],
+    "min_monthly_downloads": 0,
+    "max_packages": 1000,
     "blacklist": [
       "n8n-nodes-test",
-      "n8n-nodes-example"
+      "n8n-nodes-example",
+      "n8n-nodes-template",
+      "n8n-nodes-starter",
+      "n8n-nodes-boilerplate"
     ]
   }
 }
