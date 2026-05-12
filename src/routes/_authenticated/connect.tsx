@@ -17,7 +17,8 @@ import {
   PlugZap,
   X,
 } from "lucide-react";
-import { Link, useServerFn } from "@tanstack/react-router";
+import { Link } from "@tanstack/react-router";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { testMcpConnection } from "@/lib/instances.functions";
 
@@ -362,6 +363,39 @@ function CodeBlock({ code, lang }: { code: string; lang: string }) {
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </Button>
+    </div>
+  );
+}
+
+function CheckRow({
+  ok,
+  label,
+  detail,
+  link,
+}: {
+  ok: boolean;
+  label: string;
+  detail: string;
+  link?: { to: string; label: string };
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <div
+        className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${
+          ok ? "bg-emerald-500/20 text-emerald-500" : "bg-destructive/20 text-destructive"
+        }`}
+      >
+        {ok ? <Check className="h-3 w-3" /> : <X className="h-3 w-3" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="font-medium">{label}</div>
+        <div className="text-xs text-muted-foreground">{detail}</div>
+      </div>
+      {link && (
+        <Link to={link.to} className="text-xs text-primary underline">
+          {link.label}
+        </Link>
+      )}
     </div>
   );
 }
