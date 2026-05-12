@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, Plug, KeyRound, ChevronDown, Search, AlertTriangle, Sparkles } from "lucide-react";
+import { Copy, Check, Plug, KeyRound, ChevronDown, Search, AlertTriangle, Sparkles, ExternalLink } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
 
@@ -359,6 +359,7 @@ function ConnectPage() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState("");
   const [instanceCount, setInstanceCount] = useState<number | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   useEffect(() => {
     supabase
@@ -391,6 +392,29 @@ function ConnectPage() {
     return true;
   });
 
+  const copyConfig = async (id: string, code: string) => {
+    if (!selected) {
+      toast.error("Select an API key first");
+      return;
+    }
+    if (instanceCount === 0) {
+      toast.error("Add an n8n instance before copying", {
+        description: "MCP calls need at least one instance to route to.",
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(code);
+      setCopiedId(id);
+      toast.success("Configuration copied", {
+        description: "Replace <your-saved-key> with the API key you saved.",
+      });
+      setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 1800);
+    } catch {
+      toast.error("Copy failed — select and copy manually");
+    }
+  };
+
   return (
     <div className="space-y-8">
       <div>
@@ -403,19 +427,66 @@ function ConnectPage() {
       </div>
 
       {instanceCount === 0 && (
-        <div className="flex items-start justify-between gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-            <div>
-              <div className="font-medium">Add an n8n instance first</div>
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">No n8n instance connected yet</div>
               <div className="mt-0.5 text-muted-foreground">
-                MCP calls need at least one connected n8n instance to route to.
+                Configurations below will copy fine, but MCP calls will fail until an instance is connected. Follow these steps:
+              </div>
+              <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-muted-foreground">
+                <li>
+                  In n8n, open <span className="font-medium text-foreground">Settings → MCP access</span> and toggle{" "}
+                  <span className="font-medium text-foreground">Enable MCP access</span> (n8n Cloud requires the Starter plan or higher).
+                </li>
+                <li>Copy the MCP URL n8n shows you (ends with <code className="rounded bg-muted px-1">/mcp-server/http</code>).</li>
+                <li>
+                  Add it on the <Link to="/instances" className="font-medium text-primary underline">Instances</Link> page along with an n8n API key.
+                </li>
+                <li>
+                  In each workflow you want to expose, open <span className="font-medium text-foreground">Workflow Settings</span> and turn on{" "}
+                  <span className="font-medium text-foreground">Available in MCP</span>.
+                </li>
+              </ol>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button asChild size="sm">
+                  <Link to="/instances">Add instance</Link>
+                </Button>
+                <Button asChild size="sm" variant="outline">
+                  <Link to="/api-keys">Manage API keys</Link>
+                </Button>
+                <Button asChild size="sm" variant="ghost">
+                  <a
+                    href="https://docs.n8n.io/advanced-ai/mcp/accessing-n8n-mcp-server/#setting-up-mcp-authentication"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    n8n MCP setup guide <ExternalLink className="ml-1 h-3 w-3" />
+                  </a>
+                </Button>
               </div>
             </div>
           </div>
-          <Button asChild size="sm" variant="outline">
-            <Link to="/instances">Add instance</Link>
-          </Button>
+        </div>
+      )}
+
+      {keys.length === 0 && instanceCount !== 0 && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+            <div className="min-w-0 flex-1">
+              <div className="font-medium">Create an API key to authenticate</div>
+              <div className="mt-0.5 text-muted-foreground">
+                Each snippet below uses an <code className="rounded bg-muted px-1">Authorization: Bearer …</code> header. Save the key once — we never store the plaintext value.
+              </div>
+              <div className="mt-3">
+                <Button asChild size="sm">
+                  <Link to="/api-keys">Create API key</Link>
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -482,12 +553,20 @@ function ConnectPage() {
         {filtered.map((p) => {
           const block = p.build(url, token);
           const open = expanded[p.id] ?? false;
+          const isCopied = copiedId === p.id;
           return (
             <div key={p.id} className="rounded-xl border border-border bg-card">
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setExpanded((s) => ({ ...s, [p.id]: !open }))}
-                className="flex w-full items-start justify-between gap-2 rounded-xl p-5 text-left transition-colors hover:bg-muted/30"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setExpanded((s) => ({ ...s, [p.id]: !open }));
+                  }
+                }}
+                className="flex w-full cursor-pointer items-start justify-between gap-2 rounded-xl p-5 text-left transition-colors hover:bg-muted/30"
                 aria-expanded={open}
               >
                 <div className="min-w-0">
@@ -503,9 +582,27 @@ function ConnectPage() {
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge variant="secondary" className="uppercase">{p.category}</Badge>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyConfig(p.id, block.code);
+                    }}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="h-3.5 w-3.5" /> Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-3.5 w-3.5" /> Copy config
+                      </>
+                    )}
+                  </Button>
                   <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
                 </div>
-              </button>
+              </div>
               {open && (
                 <div className="px-5 pb-5">
                   <CodeBlock code={block.code} lang={block.lang} />
