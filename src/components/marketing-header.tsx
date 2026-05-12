@@ -18,6 +18,8 @@ type NavLink =
 
 const NAV_LINKS: NavLink[] = [
   { kind: "internal", to: "/", hash: "features", label: "Features" },
+  { kind: "internal", to: "/", hash: "diy", label: "vs DIY" },
+  { kind: "internal", to: "/", hash: "architecture", label: "Architecture" },
   { kind: "internal", to: "/pricing", label: "Pricing" },
   { kind: "internal", to: "/docs", label: "Docs" },
   { kind: "internal", to: "/", hash: "community", label: "Community" },
