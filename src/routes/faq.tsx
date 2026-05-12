@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
@@ -8,6 +9,8 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Search } from "lucide-react";
 import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
 
 export const Route = createFileRoute("/faq")({
@@ -40,6 +43,15 @@ export const Route = createFileRoute("/faq")({
 });
 
 function FaqPage() {
+  const [query, setQuery] = useState("");
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return FAQ;
+    return FAQ.filter(
+      (f) => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q),
+    );
+  }, [query]);
+
   return (
     <div className="min-h-screen">
       <MarketingHeader />
@@ -61,16 +73,32 @@ function FaqPage() {
           </p>
         </div>
 
-        <Accordion type="single" collapsible className="mt-10">
-          {FAQ.map((f) => (
-            <AccordionItem key={f.q} value={f.q}>
-              <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                {f.a}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <div className="relative mx-auto mt-8 max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search questions…"
+            className="pl-9"
+            aria-label="Search FAQ"
+          />
+        </div>
+        {filtered.length > 0 ? (
+          <Accordion type="single" collapsible className="mt-6">
+            {filtered.map((f) => (
+              <AccordionItem key={f.q} value={f.q}>
+                <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  {f.a}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        ) : (
+          <p className="mt-10 text-center text-sm text-muted-foreground">
+            No questions match — try another keyword.
+          </p>
+        )}
 
         <div className="mt-16 rounded-2xl border border-border bg-card p-8 text-center">
           <h2 className="text-xl font-semibold">Ready to try it?</h2>
