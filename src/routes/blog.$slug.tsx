@@ -12,7 +12,18 @@ export const Route = createFileRoute("/blog/$slug")({
   loader: ({ params }) => {
     const post = getPostBySlug(params.slug);
     if (!post) throw notFound();
-    return post;
+    // The MDX component itself is not serializable for SSR loader hydration —
+    // return only the metadata and re-resolve the component from params in the
+    // page body. Both the loader and the component run in the same bundle, so
+    // the in-memory POSTS list is identical.
+    return {
+      slug: post.slug,
+      title: post.title,
+      description: post.description,
+      date: post.date,
+      author: post.author,
+      tags: post.tags,
+    };
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {};
@@ -85,7 +96,8 @@ export const Route = createFileRoute("/blog/$slug")({
 });
 
 function BlogPostPage() {
-  const post = Route.useLoaderData();
+  const meta = Route.useLoaderData();
+  const post = getPostBySlug(meta.slug)!;
   const PostBody = post.Component;
   return (
     <div className="min-h-screen">
