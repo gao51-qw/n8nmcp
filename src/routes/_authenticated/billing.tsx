@@ -204,7 +204,10 @@ function BillingPage() {
               </div>
               <ul className="mt-5 space-y-2 text-sm">
                 <Row label="Daily prompts (Chat Agent)" value={fmt(lim.prompts_day)} />
-                <Row label="Daily MCP calls" value={fmt(lim.calls_day)} />
+                <Row
+                  label="Daily MCP calls"
+                  value={t === "pro" ? "Unlimited *" : fmt(lim.calls_day)}
+                />
                 <Row label="Requests / minute" value={fmt(lim.rpm)} />
               </ul>
               <ul className="mt-4 space-y-1.5 text-sm">
@@ -319,6 +322,11 @@ function BillingPage() {
         <a className="text-primary underline" href="mailto:sales@n8n-mcp.dev">Talk to sales</a> — or check{" "}
         <Link to="/usage" className="text-primary underline">your current usage</Link> first.
       </div>
+
+      <p className="text-xs text-muted-foreground">
+        * Unlimited under fair use. Sustained traffic above 5,000 calls/day may be throttled to keep the
+        gateway responsive for everyone. Contact us for higher dedicated limits.
+      </p>
     </div>
   );
 }
