@@ -51,7 +51,7 @@ function Arrow() {
 
 export function ArchitectureDiagram() {
   return (
-    <section className="mx-auto max-w-6xl px-6 py-20">
+    <section id="architecture" className="mx-auto max-w-6xl scroll-mt-20 px-6 py-20">
       <div className="text-center">
         <p className="text-xs uppercase tracking-widest text-primary">
           Architecture
