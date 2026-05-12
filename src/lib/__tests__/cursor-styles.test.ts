@@ -105,7 +105,7 @@ describe("global cursor rules in src/styles.css", () => {
         c.target ? host.querySelector(c.target) : host.firstElementChild
       ) as HTMLElement | null;
       expect(el, `fixture must render an element for ${c.name}`).toBeTruthy();
-      const cursor = window.getComputedStyle(el).cursor || "auto";
+      const cursor = window.getComputedStyle(el!).cursor || "auto";
       // jsdom returns "" for unset; normalise to "auto".
       const normalised = cursor === "" ? "auto" : cursor;
       expect(normalised).toBe(c.expected);
