@@ -1,8 +1,9 @@
-// Markdown-file-based blog. Add a new file under src/content/blog/*.md
+// MDX-file-based blog. Add a new file under src/content/blog/<slug>.mdx
 // with the frontmatter shown below and it will appear automatically on
 // /blog after the next deploy.
 //
-// Frontmatter:
+// Frontmatter (YAML at the top of the file):
+//
 //   ---
 //   title: "Hello world"
 //   description: "Short summary used for cards + SEO."
@@ -10,71 +11,59 @@
 //   author: "Your name"
 //   tags: ["tag-a", "tag-b"]
 //   ---
-//   Body in **markdown**…
+//
+// Then write the body in MDX — plain markdown PLUS any React component
+// you import at the top of the file.
 
-const RAW_POSTS = import.meta.glob("../content/blog/*.md", {
-  query: "?raw",
-  import: "default",
+import type { ComponentType } from "react";
+
+// MDX default export accepts a `components` map keyed by tag name. Using `any`
+// in the value position keeps the prop types of each component (h1, p, code …)
+// intact when callers pass `mdxComponents`.
+type MDXContent = ComponentType<{ components?: Record<string, ComponentType<any>> }>;
+
+type MdxModule = {
+  default: MDXContent;
+  frontmatter?: {
+    title?: string;
+    description?: string;
+    date?: string;
+    author?: string;
+    tags?: string[];
+  };
+};
+
+const MDX_MODULES = import.meta.glob<MdxModule>("../content/blog/*.mdx", {
   eager: true,
-}) as Record<string, string>;
+});
 
 export type BlogPost = {
   slug: string;
   title: string;
   description: string;
-  date: string; // ISO yyyy-mm-dd
+  date: string;
   author?: string;
   tags: string[];
-  body: string;
+  Component: MDXContent;
 };
-
-function parseFrontmatter(raw: string): { meta: Record<string, unknown>; body: string } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(raw);
-  if (!m) return { meta: {}, body: raw };
-  const meta: Record<string, unknown> = {};
-  for (const line of m[1].split(/\r?\n/)) {
-    const kv = /^([A-Za-z0-9_-]+)\s*:\s*(.*)$/.exec(line);
-    if (!kv) continue;
-    const key = kv[1];
-    let value: string = kv[2].trim();
-    // Array literal: ["a","b"] or [a, b]
-    if (value.startsWith("[") && value.endsWith("]")) {
-      meta[key] = value
-        .slice(1, -1)
-        .split(",")
-        .map((s) => s.trim().replace(/^["']|["']$/g, ""))
-        .filter(Boolean);
-      continue;
-    }
-    // Strip surrounding quotes
-    if (
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-    ) {
-      value = value.slice(1, -1);
-    }
-    meta[key] = value;
-  }
-  return { meta, body: m[2] };
-}
 
 function slugFromPath(p: string): string {
   const file = p.split("/").pop() ?? p;
-  return file.replace(/\.md$/, "");
+  return file.replace(/\.mdx$/, "");
 }
 
-const POSTS: BlogPost[] = Object.entries(RAW_POSTS)
-  .map(([path, raw]) => {
-    const { meta, body } = parseFrontmatter(raw);
+const POSTS: BlogPost[] = Object.entries(MDX_MODULES)
+  .map(([path, mod]) => {
+    const fm = mod.frontmatter ?? {};
     const slug = slugFromPath(path);
     return {
       slug,
-      title: String(meta.title ?? slug),
-      description: String(meta.description ?? ""),
-      date: String(meta.date ?? "1970-01-01"),
-      author: meta.author ? String(meta.author) : undefined,
-      tags: Array.isArray(meta.tags) ? (meta.tags as string[]) : [],
-      body: body.trim(),
+      title: fm.title ?? slug,
+      description: fm.description ?? "",
+      date: fm.date ?? "1970-01-01",
+      author: fm.author,
+      tags: Array.isArray(fm.tags) ? fm.tags : [],
+      Component: mod.default,
     } satisfies BlogPost;
   })
   .sort((a, b) => (a.date < b.date ? 1 : -1));

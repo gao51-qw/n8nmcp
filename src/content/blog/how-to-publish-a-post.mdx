@@ -1,0 +1,52 @@
+---
+title: "How to publish a new blog post"
+description: "Drop an MDX file, push to GitHub, done. Embed React components inline if you need to."
+date: "2026-05-11"
+author: "n8n-mcp team"
+tags: ["meta", "guide"]
+---
+
+import { Button } from "@/components/ui/button";
+
+Adding a new post takes about 30 seconds.
+
+## 1. Create the file
+
+Create a file at `src/content/blog/<your-slug>.mdx`. The filename
+(without `.mdx`) becomes the URL: `/blog/<your-slug>`.
+
+## 2. Add the frontmatter
+
+```md
+---
+title: "My great post"
+description: "One-sentence summary used for cards + SEO."
+date: "2026-05-12"
+author: "Your name"
+tags: ["release", "tutorial"]
+---
+```
+
+## 3. Write the body
+
+Plain Markdown works (tables, code fences, lists). Because it's **MDX**,
+you can also import and embed any React component from the codebase:
+
+```mdx
+import { Button } from "@/components/ui/button";
+
+<Button>Click me</Button>
+```
+
+Live example, rendered from this very file:
+
+<div className="my-4">
+  <Button>Click me</Button>
+</div>
+
+## 4. Push
+
+`git push` → CI builds the new image → watchtower on the VPS pulls it within
+~5 minutes → your post is live at `/blog/<your-slug>`.
+
+No database, no admin panel — your git history *is* the CMS.

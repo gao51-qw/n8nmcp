@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Badge } from "@/components/ui/badge";
-import { Markdown } from "@/components/markdown";
+import { mdxComponents } from "@/components/mdx-components";
 import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 
@@ -12,7 +12,18 @@ export const Route = createFileRoute("/blog/$slug")({
   loader: ({ params }) => {
     const post = getPostBySlug(params.slug);
     if (!post) throw notFound();
-    return post;
+    // The MDX component itself is not serializable for SSR loader hydration —
+    // return only the metadata and re-resolve the component from params in the
+    // page body. Both the loader and the component run in the same bundle, so
+    // the in-memory POSTS list is identical.
+    return {
+      slug: post.slug,
+      title: post.title,
+      description: post.description,
+      date: post.date,
+      author: post.author,
+      tags: post.tags,
+    };
   },
   head: ({ loaderData }) => {
     if (!loaderData) return {};
@@ -85,7 +96,9 @@ export const Route = createFileRoute("/blog/$slug")({
 });
 
 function BlogPostPage() {
-  const post = Route.useLoaderData();
+  const meta = Route.useLoaderData();
+  const post = getPostBySlug(meta.slug)!;
+  const PostBody = post.Component;
   return (
     <div className="min-h-screen">
       <MarketingHeader />
@@ -127,7 +140,7 @@ function BlogPostPage() {
         </header>
 
         <article className="mt-8">
-          <Markdown className="text-base text-foreground">{post.body}</Markdown>
+          <PostBody components={mdxComponents} />
         </article>
       </main>
       <MarketingFooter />
