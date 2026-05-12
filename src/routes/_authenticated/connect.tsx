@@ -645,7 +645,11 @@ function ConnectPage() {
             <div className="flex items-center gap-2">
               <KeyRound className="h-4 w-4 text-muted-foreground" />
               {keys.length === 0 ? (
-                <Link to="/api-keys" className="text-sm text-primary underline">
+                <Link
+                  to="/api-keys"
+                  search={{ setup: "connect" as const }}
+                  className="text-sm text-primary underline"
+                >
                   Create an API key first
                 </Link>
               ) : (
