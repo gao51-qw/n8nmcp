@@ -27,7 +27,7 @@ type PostCard = {
 const searchSchema = z.object({
   page: fallback(z.number().int().min(1), 1).default(1),
   q: fallback(z.string(), "").default(""),
-  tag: fallback(z.string(), "").default(""),
+  tags: fallback(z.array(z.string()), []).default([]),
 });
 type BlogSearch = z.infer<typeof searchSchema>;
 
@@ -35,25 +35,29 @@ export const Route = createFileRoute("/blog/")({
   validateSearch: zodValidator(searchSchema),
   search: {
     // Strip default values so /blog stays clean.
-    middlewares: [stripSearchParams({ page: 1, q: "", tag: "" })],
+    middlewares: [stripSearchParams({ page: 1, q: "", tags: [] })],
   },
-  loaderDeps: ({ search }) => ({ page: search.page, q: search.q, tag: search.tag }),
+  loaderDeps: ({ search }) => ({ page: search.page, q: search.q, tags: search.tags }),
   loader: ({ deps }): {
     page: number;
     totalPages: number;
     totalPosts: number;
     totalAll: number;
     q: string;
-    tag: string;
+    tags: string[];
     allTags: { tag: string; count: number }[];
     posts: PostCard[];
   } => {
     const all = getAllPosts();
     const allTags = getAllTags();
     const q = deps.q.trim().toLowerCase();
-    const tag = deps.tag.trim().toLowerCase();
+    const selectedTags = deps.tags.map((t) => t.trim().toLowerCase()).filter(Boolean);
     const filtered = all.filter((p) => {
-      if (tag && !p.tags.some((t) => t.toLowerCase() === tag)) return false;
+      if (selectedTags.length > 0) {
+        const postTags = p.tags.map((t) => t.toLowerCase());
+        // AND semantics: post must include every selected tag.
+        if (!selectedTags.every((t) => postTags.includes(t))) return false;
+      }
       if (q) {
         const hay = `${p.title} ${p.description} ${p.tags.join(" ")}`.toLowerCase();
         if (!hay.includes(q)) return false;
@@ -69,7 +73,7 @@ export const Route = createFileRoute("/blog/")({
       totalPosts: filtered.length,
       totalAll: all.length,
       q: deps.q,
-      tag: deps.tag,
+      tags: deps.tags,
       allTags,
       posts: filtered.slice(start, start + PER_PAGE).map((p) => ({
         slug: p.slug,
