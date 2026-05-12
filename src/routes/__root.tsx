@@ -19,7 +19,7 @@ import { applyTheme, getStoredTheme } from "@/lib/theme";
 
 function NotFoundComponent() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main" tabIndex={-1} className="relative flex min-h-screen items-center justify-center bg-background px-4 outline-none">
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
@@ -36,7 +36,7 @@ function NotFoundComponent() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -45,7 +45,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main" tabIndex={-1} className="relative flex min-h-screen items-center justify-center bg-background px-4 outline-none">
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
@@ -70,7 +70,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           </a>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
