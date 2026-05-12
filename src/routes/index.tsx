@@ -8,6 +8,13 @@ import { AiLogoWall } from "@/components/marketing/ai-logo-wall";
 import { EvolutionSection } from "@/components/marketing/evolution-section";
 import { CacheSection } from "@/components/marketing/cache-section";
 import { CommunitySection } from "@/components/marketing/community-section";
+import { DiyComparison } from "@/components/marketing/diy-comparison";
+import { ArchitectureDiagram } from "@/components/marketing/architecture-diagram";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import {
   Accordion,
@@ -198,6 +205,19 @@ function Landing() {
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
             Use our Chat Agent to build workflows instantly, or connect your
             favorite AI tools via MCP for full control.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl text-xs text-muted-foreground/70">
+            Powered by the open-source{" "}
+            <a
+              href="https://github.com/czlonkowski/n8n-mcp"
+              target="_blank"
+              rel="noreferrer"
+              className="text-primary hover:underline"
+            >
+              czlonkowski/n8n-mcp
+            </a>{" "}
+            knowledge server, plus a hosted runtime gateway — not a fork, a
+            complement.
           </p>
         </div>
 
