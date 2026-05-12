@@ -145,7 +145,7 @@ export const Route = createFileRoute("/blog/")({
 });
 
 function BlogIndex() {
-  const { posts, page, totalPages, totalPosts, totalAll, q, tag, allTags } =
+  const { posts, page, totalPages, totalPosts, totalAll, q, tags, allTags } =
     Route.useLoaderData();
   const navigate = useNavigate({ from: "/blog" });
   const [query, setQuery] = useState(q);
@@ -172,7 +172,8 @@ function BlogIndex() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [query]);
 
-  const hasFilter = q !== "" || tag !== "";
+  const selectedSet = new Set(tags.map((t) => t.toLowerCase()));
+  const hasFilter = q !== "" || tags.length > 0;
 
   return (
     <div className="min-h-screen">
@@ -220,10 +221,10 @@ function BlogIndex() {
               <div className="flex flex-wrap items-center gap-1.5">
               <Link
                   to="/blog"
-                search={(prev: BlogSearch) => ({ ...prev, tag: "", page: 1 })}
+                search={(prev: BlogSearch) => ({ ...prev, tags: [], page: 1 })}
                   className={cn(
                     "rounded-full border px-3 py-1 text-xs transition-colors",
-                    tag === ""
+                    tags.length === 0
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
                   )}
@@ -231,22 +232,25 @@ function BlogIndex() {
                   All
                 </Link>
                 {allTags.map(({ tag: t, count }: { tag: string; count: number }) => {
-                  const active = tag.toLowerCase() === t.toLowerCase();
+                  const active = selectedSet.has(t.toLowerCase());
                   return (
                     <Link
                       key={t}
                       to="/blog"
-                      search={(prev: BlogSearch) => ({
-                        ...prev,
-                        tag: active ? "" : t,
-                        page: 1,
-                      })}
+                      search={(prev: BlogSearch) => {
+                        const lower = t.toLowerCase();
+                        const next = active
+                          ? prev.tags.filter((x) => x.toLowerCase() !== lower)
+                          : [...prev.tags, t];
+                        return { ...prev, tags: next, page: 1 };
+                      }}
                       className={cn(
                         "rounded-full border px-3 py-1 text-xs transition-colors",
                         active
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
                       )}
+                      aria-pressed={active}
                     >
                       #{t}
                       <span className="ml-1 opacity-60">{count}</span>
