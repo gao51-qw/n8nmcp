@@ -45,7 +45,7 @@ export function DiyComparison() {
         : "grid md:hidden";
 
   return (
-    <section className="mx-auto max-w-5xl px-6 py-20">
+    <section id="diy" className="mx-auto max-w-5xl scroll-mt-20 px-6 py-20">
       <div className="text-center">
         <p className="text-xs uppercase tracking-widest text-primary">
           Why a gateway
