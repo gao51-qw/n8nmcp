@@ -556,10 +556,17 @@ function ConnectPage() {
           const isCopied = copiedId === p.id;
           return (
             <div key={p.id} className="rounded-xl border border-border bg-card">
-              <button
-                type="button"
+              <div
+                role="button"
+                tabIndex={0}
                 onClick={() => setExpanded((s) => ({ ...s, [p.id]: !open }))}
-                className="flex w-full items-start justify-between gap-2 rounded-xl p-5 text-left transition-colors hover:bg-muted/30"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    setExpanded((s) => ({ ...s, [p.id]: !open }));
+                  }
+                }}
+                className="flex w-full cursor-pointer items-start justify-between gap-2 rounded-xl p-5 text-left transition-colors hover:bg-muted/30"
                 aria-expanded={open}
               >
                 <div className="min-w-0">
@@ -595,7 +602,7 @@ function ConnectPage() {
                   </Button>
                   <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
                 </div>
-              </button>
+              </div>
               {open && (
                 <div className="px-5 pb-5">
                   <CodeBlock code={block.code} lang={block.lang} />
