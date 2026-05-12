@@ -882,6 +882,34 @@ function ConnectPage() {
                       </>
                     )}
                   </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Download configuration"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span className="sr-only">Download</span>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenuItem onClick={() => downloadConfig(p, "native")}>
+                        <Download className="h-3.5 w-3.5" /> Native (.{
+                          ({ json: "json", toml: "toml", bash: "sh", text: "txt" } as Record<string, string>)[
+                            block.lang
+                          ] ?? "txt"
+                        })
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => downloadConfig(p, "json")}>
+                        <FileJson className="h-3.5 w-3.5" /> JSON bundle (.json)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => downloadConfig(p, "txt")}>
+                        <FileText className="h-3.5 w-3.5" /> Plain text (.txt)
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
                 </div>
               </div>
