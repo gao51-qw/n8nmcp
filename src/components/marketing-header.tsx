@@ -28,6 +28,8 @@ const NAV_LINKS: NavLink[] = [
 export function MarketingHeader() {
   const { user } = useAuth();
   const [open, setOpen] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
   const close = () => setOpen(false);
 
   return (
@@ -62,8 +64,8 @@ export function MarketingHeader() {
 
         <div className="flex items-center gap-2">
           <ThemeToggle />
-          <div className="hidden items-center gap-2 md:flex">
-            {user ? (
+          <div className="hidden items-center gap-2 md:flex" suppressHydrationWarning>
+            {!mounted ? null : user ? (
               <Button asChild size="sm"><Link to="/dashboard">Dashboard</Link></Button>
             ) : (
               <>
@@ -110,8 +112,8 @@ export function MarketingHeader() {
                   ),
                 )}
               </nav>
-              <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6">
-                {user ? (
+              <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6" suppressHydrationWarning>
+                {!mounted ? null : user ? (
                   <Button asChild onClick={close}>
                     <Link to="/dashboard">Dashboard</Link>
                   </Button>
