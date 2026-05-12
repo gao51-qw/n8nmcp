@@ -10,8 +10,10 @@ import {
 } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Search } from "lucide-react";
-import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
+import { Search, X } from "lucide-react";
+import { FAQ, FAQ_CATEGORIES, buildFaqJsonLd, type FaqCategory } from "@/lib/faq-data";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/faq")({
   head: () => {
@@ -44,13 +46,34 @@ export const Route = createFileRoute("/faq")({
 
 function FaqPage() {
   const [query, setQuery] = useState("");
+  const [activeCategory, setActiveCategory] = useState<FaqCategory | "All">("All");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+
+  const allTags = useMemo(
+    () => Array.from(new Set(FAQ.flatMap((f) => f.tags))).sort(),
+    [],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return FAQ;
-    return FAQ.filter(
-      (f) => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q),
-    );
-  }, [query]);
+    return FAQ.filter((f) => {
+      if (activeCategory !== "All" && f.category !== activeCategory) return false;
+      if (activeTag && !f.tags.includes(activeTag)) return false;
+      if (!q) return true;
+      return (
+        f.q.toLowerCase().includes(q) ||
+        f.a.toLowerCase().includes(q) ||
+        f.tags.some((t) => t.toLowerCase().includes(q))
+      );
+    });
+  }, [query, activeCategory, activeTag]);
+
+  const hasFilter = query || activeCategory !== "All" || activeTag;
+  const clearAll = () => {
+    setQuery("");
+    setActiveCategory("All");
+    setActiveTag(null);
+  };
 
   return (
     <div className="min-h-screen">
@@ -78,18 +101,98 @@ function FaqPage() {
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search questions…"
-            className="pl-9"
+            placeholder="Search questions, answers or tags…"
+            className="pl-9 pr-9"
             aria-label="Search FAQ"
           />
+          {query && (
+            <button
+              type="button"
+              onClick={() => setQuery("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+              aria-label="Clear search"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
+
+        <div className="mt-5 flex flex-wrap justify-center gap-2">
+          {(["All", ...FAQ_CATEGORIES] as const).map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setActiveCategory(c)}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs transition-colors",
+                activeCategory === c
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground",
+              )}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+          {allTags.map((t) => {
+            const active = activeTag === t;
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setActiveTag(active ? null : t)}
+                className={cn(
+                  "rounded-md px-2 py-0.5 text-[11px] transition-colors",
+                  active
+                    ? "bg-primary/15 text-primary ring-1 ring-primary/40"
+                    : "text-muted-foreground/80 hover:bg-muted hover:text-foreground",
+                )}
+              >
+                #{t}
+              </button>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+          <span>
+            {filtered.length} of {FAQ.length} questions
+          </span>
+          {hasFilter && (
+            <button
+              type="button"
+              onClick={clearAll}
+              className="text-primary hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
         {filtered.length > 0 ? (
           <Accordion type="single" collapsible className="mt-6">
             {filtered.map((f) => (
               <AccordionItem key={f.q} value={f.q}>
                 <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
                 <AccordionContent className="text-muted-foreground">
-                  {f.a}
+                  <p>{f.a}</p>
+                  <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                    <Badge variant="secondary" className="text-[10px]">
+                      {f.category}
+                    </Badge>
+                    {f.tags.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setActiveTag(t)}
+                        className="rounded-md px-1.5 py-0.5 text-[10px] text-muted-foreground/80 hover:bg-muted hover:text-foreground"
+                      >
+                        #{t}
+                      </button>
+                    ))}
+                  </div>
                 </AccordionContent>
               </AccordionItem>
             ))}
