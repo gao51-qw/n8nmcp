@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -40,10 +40,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Plug, Trash2, Pencil, Info, X } from "lucide-react";
+import { Loader2, Plug, Trash2, Pencil, Info, X, ArrowLeft, Sparkles } from "lucide-react";
+import { z } from "zod";
 
 export const Route = createFileRoute("/_authenticated/instances")({
   head: () => ({ meta: [{ title: "n8n Instances — n8n-mcp" }] }),
+  validateSearch: (s) => z.object({ setup: z.enum(["connect"]).optional() }).parse(s),
   component: InstancesPage,
 });
 
@@ -66,6 +68,8 @@ function statusVariant(s: string): "default" | "secondary" | "destructive" | "ou
 
 function InstancesPage() {
   const qc = useQueryClient();
+  const { setup } = Route.useSearch();
+  const fromConnect = setup === "connect";
   const { data, isLoading } = useQuery({
     queryKey: ["instances"],
     queryFn: () => listInstances(),
@@ -78,6 +82,19 @@ function InstancesPage() {
       setBannerDismissed(localStorage.getItem("dismissed-instances-banner") === "1");
     }
   }, []);
+
+  // Coming from Connect → auto-open the Add dialog and scroll into view.
+  useEffect(() => {
+    if (!fromConnect) return;
+    if ((data?.length ?? 0) === 0) {
+      setOpen(true);
+    }
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() =>
+        document.getElementById("setup-banner")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  }, [fromConnect, data?.length]);
 
   const test = useMutation({
     mutationFn: (id: string) => testInstance({ data: { id } }),
@@ -99,6 +116,28 @@ function InstancesPage() {
 
   return (
     <div className="space-y-6">
+      {fromConnect && (
+        <div
+          id="setup-banner"
+          className="flex items-start justify-between gap-3 rounded-lg border border-primary/40 bg-primary/10 p-4 text-sm"
+        >
+          <div className="flex items-start gap-3">
+            <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div>
+              <div className="font-medium">Step from Connect: add an n8n instance</div>
+              <div className="mt-0.5 text-muted-foreground">
+                Once at least one instance is connected and online, MCP calls can route through.
+              </div>
+            </div>
+          </div>
+          <Button asChild size="sm" variant="ghost">
+            <Link to="/connect">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Connect
+            </Link>
+          </Button>
+        </div>
+      )}
+
       {!bannerDismissed && (
         <div className="flex items-start justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm">
           <div className="flex items-start gap-3">
