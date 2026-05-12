@@ -1,10 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { getAllPosts } from "@/lib/blog";
 
 const SITE = "https://n8nmcp.lovable.app";
 const PAGES: Array<{ path: string; changefreq: string; priority: string }> = [
   { path: "/", changefreq: "weekly", priority: "1.0" },
   { path: "/pricing", changefreq: "monthly", priority: "0.8" },
   { path: "/docs", changefreq: "weekly", priority: "0.8" },
+  { path: "/blog", changefreq: "weekly", priority: "0.7" },
   { path: "/login", changefreq: "yearly", priority: "0.3" },
   { path: "/signup", changefreq: "yearly", priority: "0.5" },
   { path: "/terms", changefreq: "yearly", priority: "0.3" },
@@ -16,7 +18,15 @@ export const Route = createFileRoute("/sitemap.xml")({
     handlers: {
       GET: () => {
         const lastmod = new Date().toISOString().slice(0, 10);
-        const urls = PAGES.map(
+        const allPages = [
+          ...PAGES,
+          ...getAllPosts().map((p) => ({
+            path: `/blog/${p.slug}`,
+            changefreq: "monthly",
+            priority: "0.6",
+          })),
+        ];
+        const urls = allPages.map(
           (p) =>
             `  <url>\n` +
             `    <loc>${SITE}${p.path}</loc>\n` +
