@@ -13,6 +13,15 @@ const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
 const PER_PAGE = 6;
 
+type PostCard = {
+  slug: string;
+  title: string;
+  description: string;
+  date: string;
+  author: string | undefined;
+  tags: string[];
+};
+
 const searchSchema = z.object({
   page: fallback(z.number().int().min(1), 1).default(1),
 });
@@ -20,7 +29,12 @@ const searchSchema = z.object({
 export const Route = createFileRoute("/blog/")({
   validateSearch: zodValidator(searchSchema),
   loaderDeps: ({ search }) => ({ page: search.page }),
-  loader: ({ deps }) => {
+  loader: ({ deps }): {
+    page: number;
+    totalPages: number;
+    totalPosts: number;
+    posts: PostCard[];
+  } => {
     const all = getAllPosts();
     const totalPages = Math.max(1, Math.ceil(all.length / PER_PAGE));
     if (deps.page > totalPages) throw notFound();
@@ -83,7 +97,7 @@ export const Route = createFileRoute("/blog/")({
             name: TITLE,
             description: DESC,
             url: `${SITE}/blog`,
-            blogPost: posts.map((p: { slug: string; title: string; description: string; date: string }) => ({
+            blogPost: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               description: p.description,
