@@ -1,5 +1,8 @@
+import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
+import { CountUp } from "@/components/marketing/count-up";
+import { Input } from "@/components/ui/input";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { AiLogoWall } from "@/components/marketing/ai-logo-wall";
 import { EvolutionSection } from "@/components/marketing/evolution-section";
@@ -24,6 +27,7 @@ import {
   Sparkles,
   Terminal,
   MessageSquare,
+  Search,
 } from "lucide-react";
 import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
 
@@ -79,6 +83,15 @@ export const Route = createFileRoute("/")({
 
 
 function Landing() {
+  const [faqQuery, setFaqQuery] = useState("");
+  const filteredFaq = useMemo(() => {
+    const q = faqQuery.trim().toLowerCase();
+    if (!q) return FAQ;
+    return FAQ.filter(
+      (f) => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q),
+    );
+  }, [faqQuery]);
+
   return (
     <div className="min-h-screen">
       <MarketingHeader />
@@ -93,7 +106,7 @@ function Landing() {
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
             <Sparkles className="h-3 w-3 text-primary" /> Free to use
           </div>
-          <h1 className="text-balance text-5xl font-bold leading-tight tracking-tight md:text-6xl">
+          <h1 className="text-balance text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
             Plug your n8n workflows
             <br />
             <span
@@ -103,7 +116,7 @@ function Landing() {
               into any AI client
             </span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg text-muted-foreground">
+          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
             n8n-mcp turns your self-hosted n8n into a Model Context Protocol
             server. Connect Claude, ChatGPT, Cursor and any MCP-compatible
             client with one URL and one API key — no drag-and-drop required.
@@ -123,15 +136,17 @@ function Landing() {
           </p>
 
           {/* Stats */}
-          <div className="mx-auto mt-16 grid max-w-3xl grid-cols-3 gap-6">
+          <div className="mx-auto mt-12 grid max-w-3xl grid-cols-3 gap-6">
             {[
-              { v: "1,084", l: "n8n nodes covered" },
-              { v: "20+", l: "supported AI clients" },
-              { v: "<200ms", l: "median tool call" },
+              { value: 1084, suffix: "", label: "n8n nodes covered" },
+              { value: 20, suffix: "+", label: "supported AI clients" },
+              { value: 200, prefix: "<", suffix: "ms", label: "median tool call" },
             ].map((s) => (
-              <div key={s.l}>
-                <div className="text-3xl font-bold md:text-4xl">{s.v}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{s.l}</div>
+              <div key={s.label}>
+                <div className="text-3xl font-bold md:text-4xl">
+                  <CountUp value={s.value} prefix={s.prefix} suffix={s.suffix} />
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">{s.label}</div>
               </div>
             ))}
           </div>
@@ -157,7 +172,7 @@ function Landing() {
 
         <div className="mt-12 grid gap-6 md:grid-cols-2">
           <div
-            className="rounded-2xl border border-primary/40 bg-card p-8"
+            className="rounded-2xl border border-primary/40 bg-card p-8 transition-shadow"
             style={{ boxShadow: "var(--shadow-glow)" }}
           >
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
@@ -178,7 +193,7 @@ function Landing() {
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-8">
+          <div className="rounded-2xl border border-border bg-card p-8 transition-all hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]">
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
               <Terminal className="h-4 w-4" /> For power users
             </div>
@@ -326,16 +341,32 @@ function Landing() {
             Real questions from real users.
           </p>
         </div>
-        <Accordion type="single" collapsible className="mt-10">
-          {FAQ.map((f) => (
-            <AccordionItem key={f.q} value={f.q}>
-              <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
-              <AccordionContent className="text-muted-foreground">
-                {f.a}
-              </AccordionContent>
-            </AccordionItem>
-          ))}
-        </Accordion>
+        <div className="relative mx-auto mt-8 max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={faqQuery}
+            onChange={(e) => setFaqQuery(e.target.value)}
+            placeholder="Search questions…"
+            className="pl-9"
+            aria-label="Search FAQ"
+          />
+        </div>
+        {filteredFaq.length > 0 ? (
+          <Accordion type="single" collapsible className="mt-6">
+            {filteredFaq.map((f) => (
+              <AccordionItem key={f.q} value={f.q}>
+                <AccordionTrigger className="text-left">{f.q}</AccordionTrigger>
+                <AccordionContent className="text-muted-foreground">
+                  {f.a}
+                </AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        ) : (
+          <p className="mt-10 text-center text-sm text-muted-foreground">
+            No questions match — try another keyword.
+          </p>
+        )}
       </section>
 
       {/* Final CTA */}

@@ -1,70 +1,96 @@
-## 目标
 
-把首页与法务/SEO 补齐到对标 n8n-mcp.com 的水平。**不抄袭虚假的客户 logo 墙**，其余结构性板块逐步补全。当前首页已有 Hero+Stats、AI 工具条、Two Ways、Features、Pricing、FAQ、Final CTA，所以重点是补"对比叙事 / 集体知识 / 社区 / 元数据 / 视觉升级"。
+# UI 舒适性修复计划
 
-## 分步实施（每步一次提交，可独立验收）
+按上一轮诊断的优先级,从 P0 到 P2 依次修改。每步独立、可单独验收。
 
-### Step 1 — AI 工具条升级为 Logo 墙
-- 把 `src/routes/index.tsx` 里 `AI_TOOLS` 文字胶囊改为 logo 行
-- 用 `simple-icons` CDN（`https://cdn.simpleicons.org/{slug}/white`）或本地 SVG 渲染 Claude / OpenAI / Cursor / VS Code / Gemini / Windsurf 等图标
-- 移动端横向滚动、桌面端自动换行、统一灰度 + hover 上色
-- 验收：12+ 个工具图标，浅/深色主题下都清晰
+---
 
-### Step 2 — 新增"From Frustration to Flow"对比板块
-- 新建 `src/components/marketing/evolution-section.tsx`
-- 4 组痛点 vs 解法卡片左右对照：
-  1. Copy-Pasting JSON ↔ Direct Deployment
-  2. Screenshotting Workflows ↔ Live Workflow Access
-  3. Outdated Node Configs ↔ Always Current
-  4. Blind Debugging ↔ Smart Self-Correction
-- 左红/右绿语义色，桌面端 grid-cols-2，移动端堆叠
-- 在 `index.tsx` 的 Features 与 Pricing 之间挂载
+## 步骤 1 — P0:移动端汉堡菜单
 
-### Step 3 — 新增"Collective Knowledge / 缓存命中"板块
-- 新建 `src/components/marketing/cache-section.tsx`
-- 标题 "Every workflow makes everyone faster"
-- 一段叙事 + 5 步流程动画占位（CSS-only：Request → Search cache → Match → Deploy → Customize）
-- 强调 privacy-first 三个 badge：Patterns only / Self-hosted screening / Nothing leaves n8n-MCP
-- 挂在 Step 2 之后
+**问题**:`marketing-header.tsx` 的导航 `hidden md:flex`,< 768px 用户完全看不到 Features / Pricing / Docs / Community / FAQ / GitHub。
 
-### Step 4 — 新增 Community 板块
-- 新建 `src/components/marketing/community-section.tsx`
-- 左：GitHub Star History 卡片 — 用 `https://api.star-history.com/svg?repos=czlonkowski/n8n-mcp&type=Date` 作 `<img>`，带 GitHub repo 链接
-- 右：3 张 YouTube 教程卡片（封面图 + 标题 + 作者 + 跳转 youtube.com 搜索）
-- 挂在 Cache 板块之后、Pricing 之前
+**改动**:
+- 在 `src/components/marketing-header.tsx` 右侧、ThemeToggle 之前加一个 `md:hidden` 的汉堡按钮
+- 用现成的 `@/components/ui/sheet`(Drawer 风格)展开右侧侧栏
+- 侧栏内复用同一组导航链接 + 登录/注册按钮
+- 点击链接后自动关闭 Sheet(`onOpenChange`)
 
-### Step 5 — 页脚补 Imprint 与 GitHub
-- `src/components/marketing-footer.tsx` Legal 列加 `Imprint`（指向新建 `/imprint` 路由，最简公司主体信息占位）
-- Resources 列加 `GitHub`（外链 czlonkowski/n8n-mcp）和 `Star History`
-- 新建 `src/routes/imprint.tsx`，head meta + 页脚 + 占位主体信息
+**验收**:375px 视口下汉堡可点开,所有导航可达。
 
-### Step 6 — SEO 结构化数据（JSON-LD）
-- 在 `src/routes/index.tsx` 的 `head()` 注入：
-  - `SoftwareApplication` schema（name / description / offers / aggregateRating 暂留空）
-  - `FAQPage` schema，从现有 `FAQ` 数组生成
-- 在 `src/routes/__root.tsx` 注入 `Organization` schema（name / url / logo / sameAs:[github]）
-- 用 TanStack Router `head().scripts` 字段，type=`application/ld+json`
-- 验收：`view-source:` 能搜到 `application/ld+json`，Google Rich Results Test 通过
+---
 
-## 不做的事（明确排除）
+## 步骤 2 — P1:Hero 文案与移动端断行
 
-- **不**伪造 PayPal / Intercom / MIT 等"Trusted by"客户 logo 墙 — 没真实客户授权属虚假宣传
-- **不**编造 87,915+ Users / 19M Actions 等统计数字 — 当前 stats 用的是技术指标（节点数、客户端数、延迟），保持真实
-- **不**改动 Pricing 价格结构（已与竞品基本对齐：Free + $19）
+**问题**:
+- Hero 副标题 `text-lg + muted-foreground` 在桌面偏弱
+- 移动端 "into any AI / client" gradient 文字被切两行,观感差
 
-## 技术细节
+**改动**(`src/routes/index.tsx` 的 Hero 段):
+- 副标题 `text-lg` → `text-lg md:text-xl`,颜色保持但加 `leading-relaxed`
+- h1 第二行包一个 `whitespace-nowrap md:whitespace-normal` 或在移动端缩字号(`text-4xl md:text-6xl`)避免 gradient 拆行
 
-- 所有外链必须 `target="_blank" rel="noreferrer"`
-- 所有图片懒加载 `loading="lazy"` + `decoding="async"`
-- 颜色一律走 `src/styles.css` 的 oklch 语义 token，禁止硬编码
-- 新组件放 `src/components/marketing/` 目录便于聚合
-- `head().scripts` 的 JSON-LD 必须 `JSON.stringify` 安全转义
-- 不改 `src/integrations/supabase/*`、`src/routeTree.gen.ts`（自动生成）
+**验收**:375px 与 1440px 截图,gradient 不被尴尬截断。
 
-## 完成顺序与验收
+---
 
-按 Step 1 → 6 顺序提交。每步完成后我会：
-1. 编辑/新增对应文件
-2. 检查 build 输出无错
-3. 浏览器预览对应板块视觉与响应式
-4. 报告完成并等你确认再进入下一步
+## 步骤 3 — P1:Stats 间距与 count-up 动画
+
+**问题**:
+- `mt-16` (64px) 让数字与 hero 视觉断开
+- 静态数字缺乏可信度
+
+**改动**:
+- `mt-16` → `mt-12`
+- 新建 `src/components/marketing/count-up.tsx`:轻量 hook,用 `requestAnimationFrame` + `IntersectionObserver`,数字滚动 ~1.2s
+- 解析 `1,084` / `20+` / `<200ms` 中的数值部分做动画,前后缀保留
+
+**验收**:首次滚入视口时数字从 0 滚到目标值。
+
+---
+
+## 步骤 4 — P2:Two-ways 卡片视觉平衡
+
+**问题**:左卡有 glow,右卡没有,重量失衡;移动端永远左卡在上,引导单一。
+
+**改动**(`src/routes/index.tsx`):
+- 右卡加上一个更弱的 hover glow:`hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]`
+- 左卡 glow 强度保持但移除常驻 `boxShadow`,改为同样 hover 触发,二者对称
+- 或保留左卡 "Just launched" 主推地位,但右卡加 `transition-shadow` 让它"活"起来
+
+**验收**:两卡视觉重量接近,hover 反馈一致。
+
+---
+
+## 步骤 5 — P2:FAQ 搜索框
+
+**问题**:FAQ 条目超过 6 条时,Accordion 全展开找答案累。
+
+**改动**(`src/routes/index.tsx` FAQ 段 + `src/routes/faq.tsx`):
+- 在标题下加一个 `<Input>` 搜索框
+- 受控 state,按 `q` 或 `a` 包含关键词过滤 `FAQ` 数组
+- 无结果时显示 "No questions match — try another keyword."
+
+**验收**:输入关键词,Accordion 实时过滤。
+
+---
+
+## 技术细节(给开发者)
+
+| 步骤 | 涉及文件 | 新增依赖 |
+|---|---|---|
+| 1 | `src/components/marketing-header.tsx` | 无(已有 sheet.tsx) |
+| 2 | `src/routes/index.tsx` | 无 |
+| 3 | `src/routes/index.tsx`,新建 `src/components/marketing/count-up.tsx` | 无(原生 API) |
+| 4 | `src/routes/index.tsx` | 无 |
+| 5 | `src/routes/index.tsx`,`src/routes/faq.tsx` | 无 |
+
+无新增 npm 包,无后端改动,无数据库迁移。完全是前端展示层。
+
+---
+
+## 执行顺序确认
+
+默认按 1→5 顺序一次性提交一个 PR 级别的改动。如果你想:
+- **只做 P0**(最紧急的移动端导航)→ 告诉我"只做步骤 1"
+- **跳过某步** → 告诉我"跳过步骤 X"
+- **全部做** → 直接批准这个计划
