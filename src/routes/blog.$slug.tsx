@@ -116,7 +116,7 @@ function BlogPostPage() {
             )}
             {post.tags.length > 0 && (
               <div className="ml-1 flex flex-wrap gap-1.5">
-                {post.tags.map((t) => (
+                {post.tags.map((t: string) => (
                   <Badge key={t} variant="secondary" className="text-[10px]">
                     #{t}
                   </Badge>
