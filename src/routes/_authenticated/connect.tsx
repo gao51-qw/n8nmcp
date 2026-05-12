@@ -16,7 +16,16 @@ import {
   Loader2,
   PlugZap,
   X,
+  Download,
+  FileJson,
+  FileText,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
@@ -479,6 +488,67 @@ function ConnectPage() {
       setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 1800);
     } catch {
       toast.error("Copy failed — select and copy manually");
+    }
+  };
+
+  const downloadConfig = (preset: Preset, format: "native" | "json" | "txt") => {
+    if (!selected) {
+      toast.error("Select an API key first");
+      return;
+    }
+    const block = preset.build(url, token);
+    const baseName = `n8n-mcp-${preset.id}`;
+
+    let filename: string;
+    let mime: string;
+    let body: string;
+
+    if (format === "json") {
+      // Always wrap as JSON, even if the snippet is bash/toml/text.
+      filename = `${baseName}.json`;
+      mime = "application/json";
+      body = JSON.stringify(
+        {
+          client: preset.name,
+          mcpEndpoint: url,
+          authorization: `Bearer ${token}`,
+          format: block.lang,
+          snippet: block.code,
+          note: block.note ?? null,
+        },
+        null,
+        2,
+      );
+    } else if (format === "txt") {
+      filename = `${baseName}.txt`;
+      mime = "text/plain";
+      body = block.code;
+    } else {
+      const extByLang: Record<string, string> = {
+        json: "json",
+        toml: "toml",
+        bash: "sh",
+        text: "txt",
+      };
+      const ext = extByLang[block.lang] ?? "txt";
+      filename = `${baseName}.${ext}`;
+      mime = block.lang === "json" ? "application/json" : "text/plain";
+      body = block.code;
+    }
+
+    try {
+      const blob = new Blob([body], { type: `${mime};charset=utf-8` });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      toast.success(`Downloaded ${filename}`);
+    } catch (e) {
+      toast.error("Download failed", { description: e instanceof Error ? e.message : "Unexpected error" });
     }
   };
 
