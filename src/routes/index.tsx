@@ -201,13 +201,17 @@ function Landing() {
           </p>
         </div>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-2">
+        <div className="mt-12 grid gap-6 md:grid-cols-2 md:items-stretch">
+          {/* Highlighted card — same recipe as Pricing's highlighted tier */}
           <div
-            className="rounded-2xl border border-primary/40 bg-card p-8 transition-shadow"
+            className="relative flex flex-col rounded-2xl border border-primary bg-card p-8 transition-shadow"
             style={{ boxShadow: "var(--shadow-glow)" }}
           >
+            <span className="absolute right-4 top-4 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground">
+              Just launched
+            </span>
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
-              <MessageSquare className="h-4 w-4" /> Just launched
+              <MessageSquare className="h-4 w-4" /> Recommended
             </div>
             <h3 className="mt-3 text-2xl font-semibold">Chat Agent</h3>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -219,12 +223,13 @@ function Landing() {
               "Send me a Slack summary of my Google Calendar events every
               morning at 8am"
             </div>
-            <Button asChild className="mt-6">
+            <Button asChild className="mt-8 w-full">
               <Link to="/signup">Try Chat Agent</Link>
             </Button>
           </div>
 
-          <div className="rounded-2xl border border-border bg-card p-8 transition-all hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]">
+          {/* Default card — same recipe as Pricing's free tier */}
+          <div className="flex flex-col rounded-2xl border border-border bg-card/50 p-8 transition-all hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]">
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
               <Terminal className="h-4 w-4" /> For power users
             </div>
@@ -251,7 +256,7 @@ function Landing() {
                 </li>
               ))}
             </ol>
-            <Button asChild variant="outline" className="mt-6">
+            <Button asChild variant="outline" className="mt-auto pt-0 w-full md:mt-8">
               <Link to="/signup">Get started</Link>
             </Button>
           </div>
@@ -299,7 +304,7 @@ function Landing() {
           </p>
         </div>
 
-        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2">
+        <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2 md:items-stretch">
           {[
             {
               name: "Free",
@@ -325,13 +330,23 @@ function Landing() {
               ],
               cta: "Become a Supporter",
               highlight: true,
+              badge: "Most popular",
             },
           ].map((t) => (
             <div
               key={t.name}
-              className={`rounded-2xl border p-8 ${t.highlight ? "border-primary bg-card" : "border-border bg-card/50"}`}
+              className={`relative flex flex-col rounded-2xl border p-8 transition-all ${
+                t.highlight
+                  ? "border-primary bg-card"
+                  : "border-border bg-card/50 hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]"
+              }`}
               style={t.highlight ? { boxShadow: "var(--shadow-glow)" } : undefined}
             >
+              {t.highlight && t.badge && (
+                <span className="absolute right-4 top-4 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground">
+                  {t.badge}
+                </span>
+              )}
               <h3 className="text-lg font-semibold">{t.name}</h3>
               <div className="mt-4 flex items-baseline gap-1">
                 <span className="text-4xl font-bold">{t.price}</span>
@@ -347,7 +362,7 @@ function Landing() {
               </ul>
               <Button
                 asChild
-                className="mt-8 w-full"
+                className="mt-auto w-full md:mt-8"
                 variant={t.highlight ? "default" : "outline"}
               >
                 <Link to="/signup">{t.cta}</Link>
