@@ -376,7 +376,7 @@ function CheckRow({
   ok: boolean;
   label: string;
   detail: string;
-  link?: { to: string; label: string };
+  link?: { to: "/instances" | "/api-keys"; label: string };
 }) {
   return (
     <div className="flex items-start gap-2">
@@ -392,7 +392,11 @@ function CheckRow({
         <div className="text-xs text-muted-foreground">{detail}</div>
       </div>
       {link && (
-        <Link to={link.to} className="text-xs text-primary underline">
+        <Link
+          to={link.to}
+          search={{ setup: "connect" as const }}
+          className="text-xs text-primary underline"
+        >
           {link.label}
         </Link>
       )}
