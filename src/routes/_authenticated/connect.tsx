@@ -3,9 +3,23 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Copy, Check, Plug, KeyRound, ChevronDown, Search, AlertTriangle, Sparkles, ExternalLink } from "lucide-react";
-import { Link } from "@tanstack/react-router";
+import {
+  Copy,
+  Check,
+  Plug,
+  KeyRound,
+  ChevronDown,
+  Search,
+  AlertTriangle,
+  Sparkles,
+  ExternalLink,
+  Loader2,
+  PlugZap,
+  X,
+} from "lucide-react";
+import { Link, useServerFn } from "@tanstack/react-router";
 import { toast } from "sonner";
+import { testMcpConnection } from "@/lib/instances.functions";
 
 export const Route = createFileRoute("/_authenticated/connect")({
   head: () => ({ meta: [{ title: "Connect Client — n8n-mcp" }] }),
@@ -360,6 +374,15 @@ function ConnectPage() {
   const [search, setSearch] = useState("");
   const [instanceCount, setInstanceCount] = useState<number | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [instances, setInstances] = useState<{ id: string; name: string }[]>([]);
+  const [instanceId, setInstanceId] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<null | {
+    instance: { ok: boolean; status: string; detail: string; latency_ms: number | null; name: string | null };
+    apiKey: { ok: boolean; name: string | null; prefix: string | null };
+    endpoint: { ok: boolean; status: number | null; detail: string };
+  }>(null);
+  const runTest = useServerFn(testMcpConnection);
 
   useEffect(() => {
     supabase
@@ -373,8 +396,14 @@ function ConnectPage() {
       });
     supabase
       .from("n8n_instances")
-      .select("id", { count: "exact", head: true })
-      .then(({ count }) => setInstanceCount(count ?? 0));
+      .select("id,name")
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        const rows = data ?? [];
+        setInstances(rows);
+        setInstanceCount(rows.length);
+        if (rows[0]) setInstanceId(rows[0].id);
+      });
   }, []);
 
   const url = useMemo(
@@ -412,6 +441,58 @@ function ConnectPage() {
       setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 1800);
     } catch {
       toast.error("Copy failed — select and copy manually");
+    }
+  };
+
+  const onTestConnection = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const server = await runTest({
+        data: {
+          instance_id: instanceId || undefined,
+          key_id: keyId || undefined,
+        },
+      });
+
+      // Probe the public MCP endpoint from the browser. We expect 401 Unauthorized
+      // when sending no Bearer token — that confirms the endpoint is alive.
+      let endpoint: { ok: boolean; status: number | null; detail: string } = {
+        ok: false,
+        status: null,
+        detail: "no response",
+      };
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+          },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+        });
+        endpoint = {
+          ok: res.status === 200 || res.status === 401,
+          status: res.status,
+          detail: res.status === 401 ? "Reachable (auth required)" : `HTTP ${res.status}`,
+        };
+      } catch (e) {
+        endpoint = {
+          ok: false,
+          status: null,
+          detail: e instanceof Error ? e.message : "network error",
+        };
+      }
+
+      const result = { ...server, endpoint };
+      setTestResult(result);
+      const allOk = server.instance.ok && server.apiKey.ok && endpoint.ok;
+      if (allOk) toast.success("All checks passed");
+      else toast.warning("Some checks failed — see details below");
+    } catch (e) {
+      toast.error("Test failed", { description: e instanceof Error ? e.message : "Unexpected error" });
+    } finally {
+      setTesting(false);
     }
   };
 
@@ -496,25 +577,54 @@ function ConnectPage() {
             <div className="text-xs uppercase tracking-wider text-muted-foreground">MCP endpoint</div>
             <code className="text-sm">{url}</code>
           </div>
-          <div className="flex items-center gap-2">
-            <KeyRound className="h-4 w-4 text-muted-foreground" />
-            {keys.length === 0 ? (
-              <Link to="/api-keys" className="text-sm text-primary underline">
-                Create an API key first
-              </Link>
-            ) : (
-              <select
-                value={keyId}
-                onChange={(e) => setKeyId(e.target.value)}
-                className="rounded-md border border-input bg-background px-2 py-1 text-sm"
-              >
-                {keys.map((k) => (
-                  <option key={k.id} value={k.id}>
-                    {k.name} ({k.key_prefix}…)
-                  </option>
-                ))}
-              </select>
+          <div className="flex flex-wrap items-center gap-2">
+            {instances.length > 0 && (
+              <div className="flex items-center gap-2">
+                <Plug className="h-4 w-4 text-muted-foreground" />
+                <select
+                  value={instanceId}
+                  onChange={(e) => setInstanceId(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                >
+                  {instances.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             )}
+            <div className="flex items-center gap-2">
+              <KeyRound className="h-4 w-4 text-muted-foreground" />
+              {keys.length === 0 ? (
+                <Link to="/api-keys" className="text-sm text-primary underline">
+                  Create an API key first
+                </Link>
+              ) : (
+                <select
+                  value={keyId}
+                  onChange={(e) => setKeyId(e.target.value)}
+                  className="rounded-md border border-input bg-background px-2 py-1 text-sm"
+                >
+                  {keys.map((k) => (
+                    <option key={k.id} value={k.id}>
+                      {k.name} ({k.key_prefix}…)
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+            <Button size="sm" onClick={onTestConnection} disabled={testing}>
+              {testing ? (
+                <>
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Testing…
+                </>
+              ) : (
+                <>
+                  <PlugZap className="h-3.5 w-3.5" /> Test connection
+                </>
+              )}
+            </Button>
           </div>
         </div>
         {selected && (
@@ -523,6 +633,52 @@ function ConnectPage() {
             <code className="rounded bg-muted px-1">&lt;your-saved-key&gt;</code> with the value you copied when you
             created the key.
           </p>
+        )}
+        {testResult && (
+          <div className="mt-4 space-y-2 rounded-lg border border-border bg-background/40 p-3 text-sm">
+            <div className="flex items-center justify-between">
+              <div className="font-medium">Connection check</div>
+              <button
+                type="button"
+                onClick={() => setTestResult(null)}
+                className="text-muted-foreground hover:text-foreground"
+                aria-label="Dismiss"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <CheckRow
+              ok={testResult.endpoint.ok}
+              label="MCP endpoint reachable"
+              detail={testResult.endpoint.detail}
+            />
+            <CheckRow
+              ok={testResult.apiKey.ok}
+              label="Active API key"
+              detail={
+                testResult.apiKey.ok
+                  ? `${testResult.apiKey.name} (${testResult.apiKey.prefix}…)`
+                  : "No active key found — create one"
+              }
+              link={testResult.apiKey.ok ? undefined : { to: "/api-keys", label: "Create key" }}
+            />
+            <CheckRow
+              ok={testResult.instance.ok}
+              label={`n8n instance${testResult.instance.name ? ` (${testResult.instance.name})` : ""}`}
+              detail={
+                testResult.instance.status === "missing"
+                  ? "No instance connected"
+                  : `${testResult.instance.status}${
+                      testResult.instance.latency_ms != null ? ` · ${testResult.instance.latency_ms} ms` : ""
+                    }${testResult.instance.detail ? ` · ${testResult.instance.detail}` : ""}`
+              }
+              link={
+                testResult.instance.ok
+                  ? undefined
+                  : { to: "/instances", label: testResult.instance.status === "missing" ? "Add instance" : "Fix instance" }
+              }
+            />
+          </div>
         )}
       </div>
 
