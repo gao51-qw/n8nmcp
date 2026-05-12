@@ -1,4 +1,6 @@
-import { Check, X, Wrench, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { Check, X, Wrench, Sparkles, Table2, LayoutGrid } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 type Row = { label: string; diy: string; gateway: string };
 
@@ -26,6 +28,22 @@ const ROWS: Row[] = [
 ];
 
 export function DiyComparison() {
+  // "auto" follows the breakpoint (md:), "table" / "cards" force a view.
+  const [view, setView] = useState<"auto" | "table" | "cards">("auto");
+
+  const tableClass =
+    view === "table"
+      ? "block"
+      : view === "cards"
+        ? "hidden"
+        : "hidden md:block";
+  const cardsClass =
+    view === "cards"
+      ? "grid"
+      : view === "table"
+        ? "hidden"
+        : "grid md:hidden";
+
   return (
     <section className="mx-auto max-w-5xl px-6 py-20">
       <div className="text-center">
@@ -41,8 +59,44 @@ export function DiyComparison() {
         </p>
       </div>
 
+      <div className="mt-6 flex justify-center">
+        <ToggleGroup
+          type="single"
+          value={view}
+          onValueChange={(v) => v && setView(v as typeof view)}
+          variant="outline"
+          size="sm"
+          className="rounded-full border border-border bg-card/60 p-1"
+        >
+          <ToggleGroupItem
+            value="auto"
+            aria-label="Auto by breakpoint"
+            className="rounded-full px-3 text-xs"
+          >
+            Auto
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="table"
+            aria-label="Desktop table view"
+            className="rounded-full px-3 text-xs"
+          >
+            <Table2 className="h-3.5 w-3.5" /> Desktop
+          </ToggleGroupItem>
+          <ToggleGroupItem
+            value="cards"
+            aria-label="Mobile cards view"
+            className="rounded-full px-3 text-xs"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> Mobile
+          </ToggleGroupItem>
+        </ToggleGroup>
+      </div>
+
       {/* Desktop table */}
-      <div className="mt-10 hidden overflow-hidden rounded-2xl border border-border md:block">
+      <div
+        key={`table-${view}`}
+        className={`mt-8 overflow-hidden rounded-2xl border border-border animate-fade-in ${tableClass}`}
+      >
         <div className="grid grid-cols-3 border-b border-border bg-muted/40 text-sm">
           <div className="px-5 py-3 font-medium text-muted-foreground">
             Capability
@@ -81,7 +135,10 @@ export function DiyComparison() {
       </div>
 
       {/* Mobile stacked cards */}
-      <div className="mt-8 grid gap-4 md:hidden">
+      <div
+        key={`cards-${view}`}
+        className={`mt-8 gap-4 animate-fade-in ${cardsClass}`}
+      >
         {ROWS.map((r) => (
           <div
             key={r.label}
