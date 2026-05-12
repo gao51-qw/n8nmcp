@@ -110,9 +110,13 @@ function Settings() {
     value: boolean,
   ) => {
     if (!user) return;
+    const patch =
+      field === "product_updates_email"
+        ? { product_updates_email: value }
+        : { telemetry_enabled: value };
     const { error } = await supabase
       .from("profiles")
-      .update({ [field]: value })
+      .update(patch)
       .eq("id", user.id);
     if (error) toast.error(error.message);
     else toast.success("Saved");
