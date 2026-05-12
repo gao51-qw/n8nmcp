@@ -19,7 +19,7 @@ import { applyTheme, getStoredTheme } from "@/lib/theme";
 
 function NotFoundComponent() {
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main" tabIndex={-1} className="relative flex min-h-screen items-center justify-center bg-background px-4 outline-none">
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
@@ -36,7 +36,7 @@ function NotFoundComponent() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -45,7 +45,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   const router = useRouter();
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-background px-4">
+    <main id="main" tabIndex={-1} className="relative flex min-h-screen items-center justify-center bg-background px-4 outline-none">
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
@@ -70,7 +70,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
           </a>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
 
@@ -131,6 +131,15 @@ function RootShell({ children }: { children: React.ReactNode }) {
         />
       </head>
       <body className="min-h-screen bg-background text-foreground antialiased">
+        {/* Skip-to-content link: visually hidden until it receives keyboard
+            focus, then animates into view at the top-left. Lives at the very
+            top of <body> so it's the first Tab stop on every page. */}
+        <a
+          href="#main"
+          className="sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:left-4 focus-visible:top-4 focus-visible:z-[100] focus-visible:inline-flex focus-visible:items-center focus-visible:gap-2 focus-visible:rounded-md focus-visible:bg-primary focus-visible:px-4 focus-visible:py-2 focus-visible:text-sm focus-visible:font-medium focus-visible:text-primary-foreground focus-visible:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          Skip to main content
+        </a>
         {children}
         <Scripts />
       </body>
@@ -155,7 +164,9 @@ function RootComponent() {
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <Outlet />
+          <main id="main" tabIndex={-1} className="outline-none">
+            <Outlet />
+          </main>
           <Toaster richColors position="top-right" />
         </TooltipProvider>
       </AuthProvider>
