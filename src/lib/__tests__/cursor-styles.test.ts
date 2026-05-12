@@ -15,6 +15,8 @@ type Case = {
   name: string;
   html: string;
   expected: "pointer" | "not-allowed" | "auto" | "";
+  /** Optional CSS selector to pick a child element instead of the root. */
+  target?: string;
 };
 
 const CASES: Case[] = [
@@ -32,7 +34,7 @@ const CASES: Case[] = [
   { name: "input[type=radio]", html: `<input type="radio" />`, expected: "pointer" },
   { name: "input[type=submit]", html: `<input type="submit" />`, expected: "pointer" },
   { name: "select", html: `<select><option>a</option></select>`, expected: "pointer" },
-  { name: "summary", html: `<details><summary>x</summary></details>`, expected: "pointer" },
+  { name: "summary", html: `<details open><summary>x</summary></details>`, expected: "pointer", target: "summary" },
   { name: "label[for]", html: `<label for="x">x</label>`, expected: "pointer" },
   { name: "[tabindex=0]", html: `<div tabindex="0">x</div>`, expected: "pointer" },
 
@@ -99,7 +101,9 @@ describe("global cursor rules in src/styles.css", () => {
       const host = document.createElement("div");
       host.innerHTML = c.html;
       document.body.appendChild(host);
-      const el = host.firstElementChild as HTMLElement;
+      const el = (
+        c.target ? host.querySelector(c.target) : host.firstElementChild
+      ) as HTMLElement | null;
       expect(el, `fixture must render an element for ${c.name}`).toBeTruthy();
       const cursor = window.getComputedStyle(el).cursor || "auto";
       // jsdom returns "" for unset; normalise to "auto".
