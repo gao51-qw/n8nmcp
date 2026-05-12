@@ -116,10 +116,10 @@ function Landing() {
               into any AI client
             </span>
           </h1>
-          <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-muted-foreground md:text-xl">
+          <p className="mx-auto mt-6 max-w-2xl text-pretty text-balance px-2 text-xl leading-[1.6] text-foreground/80 sm:px-0 sm:text-2xl sm:leading-relaxed md:text-[26px] md:leading-[1.55]">
             n8n-mcp turns your self-hosted n8n into a Model Context Protocol
             server. Connect Claude, ChatGPT, Cursor and any MCP-compatible
-            client with one URL and one API key — no drag-and-drop required.
+            client with one URL and one API key&nbsp;— no drag-and-drop required.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="h-12 px-6">
