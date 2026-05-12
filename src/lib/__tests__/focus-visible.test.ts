@@ -49,14 +49,35 @@ let focusVisibleBlock = "";
 let suppressBlock = "";
 
 function extractRule(source: string, pseudo: string, requiredHint: string): string {
-  // Find each `:where(...){pseudo}` block and return the first one that
-  // contains the hint string (used to disambiguate focus-visible from the
-  // disabled-suppression block, which both target :focus-visible).
-  const re = new RegExp(`:where\\(([^)]+)\\):${pseudo}\\s*\\{([^}]+)\\}`, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(source)) !== null) {
-    const full = m[0];
-    if (full.includes(requiredHint)) return full;
+  // Manual paren+brace scanner — `:where(...)` may contain nested `()`
+  // (e.g. `:not([tabindex="-1"])`), which a flat regex cannot match.
+  const marker = ":where(";
+  let i = 0;
+  while (i < source.length) {
+    const start = source.indexOf(marker, i);
+    if (start === -1) return "";
+    let depth = 1;
+    let j = start + marker.length;
+    while (j < source.length && depth > 0) {
+      const ch = source[j];
+      if (ch === "(") depth++;
+      else if (ch === ")") depth--;
+      j++;
+    }
+    // After the closing paren we expect optional `:pseudo` then a `{...}`.
+    const after = source.slice(j).trimStart();
+    const pseudoMatch = `:${pseudo}`;
+    if (after.startsWith(pseudoMatch)) {
+      const braceStart = source.indexOf("{", j);
+      const braceEnd = source.indexOf("}", braceStart);
+      if (braceStart !== -1 && braceEnd !== -1) {
+        const full = source.slice(start, braceEnd + 1);
+        if (full.includes(requiredHint)) return full;
+        i = braceEnd + 1;
+        continue;
+      }
+    }
+    i = j;
   }
   return "";
 }
