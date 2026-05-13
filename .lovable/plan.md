@@ -1,87 +1,159 @@
 ## 目标
 
-把本项目 dashboard 与 `dashboard.n8n-mcp.com` 的差距分三阶段补齐。仅做前端/展示层与少量 profile 字段调整，不改动现有计费、MCP runtime、API Key 等业务逻辑。
+把账号管理体验补到主流 SaaS 标准：
+
+- 用户侧：改密码/邮箱、活跃会话、TOTP 二步验证、头像 + Google 关联管理
+- 管理员侧：用户详情抽屉、改 tier/角色/重置密码/强制登出、封禁、待删除请求队列、备注/标签、CSV 导出
+- 所有 admin 写操作落 `admin_audit_logs`
+
+竞品 (`dashboard.n8n-mcp.com`) 自身的 Profile 页跟我们当前实现几乎一致（Display Name / Email Preferences / Telemetry / Delete Account），密码/会话/MFA/Google 关联都托管给 Auth0；我们用 Supabase 自管，需要在应用层自己做。
 
 ---
 
-## 阶段 P0 — 合规 & 账户设置（Settings 页扩展）
+## Phase 1 — 数据库与基础设施
 
-**文件**：`src/routes/_authenticated/settings.tsx`、新建 1 条 migration、`src/lib/admin.functions.ts` 增 1 个 server fn
+### 1.1 新表
 
-把现有 Settings 从「Profile + Appearance」扩成 4 块，与对方对齐：
+```text
+admin_audit_logs
+  id, actor_id, action, target_user_id, summary, changes(jsonb), created_at
+  RLS: admin select / admin insert(actor_id=auth.uid())
 
-1. **Profile**（已有）— 保留 email + display name
-2. **Email Preferences**（新增）— 两个 switch：
-   - `product_updates`（产品更新邮件）
-   - `security_alerts`（安全提醒，默认 on，灰显不可关）
-3. **Telemetry & Privacy**（新增）—
-   - `telemetry_enabled` switch（默认 on）
-   - "Request data export" 按钮 → 触发 server fn，把用户的 instances/api_keys/usage 导出 JSON 下载
-   - "Request account deletion" 按钮 → 写入 `account_deletion_requests` 表，弹确认对话框
-4. **Delete Account**（新增红色危险区）— 立即软删（标记 profile.deleted_at + 注销 session），与 #3 的「请求删除」分开：一个走 GDPR 30 天流程，一个立即生效
+admin_user_notes
+  id, user_id (unique), note, tags text[], updated_by, updated_at
+  RLS: admin all
 
-**Migration 要点**：
-- `profiles` 加列：`product_updates_email boolean default true`、`telemetry_enabled boolean default true`、`deleted_at timestamptz`
-- 新表 `account_deletion_requests (id, user_id, requested_at, reason text)`，RLS：用户只能 insert/select 自己的
+storage.buckets: 'avatars' (public read, owner write)
+  policy: owner = (storage.foldername(name))[1] = auth.uid()::text
+```
 
----
+### 1.2 现有表加列
 
-## 阶段 P1 — 核心 UX 引导（Dashboard + Instances + Connect）
+```text
+profiles      + avatar_url 已存在 ✓
+subscriptions + 由 admin 通过 server fn 改 tier（无需新列）
+auth.users    + banned_until 由 supabase.auth.admin.updateUserById 控制（无需迁移）
+```
 
-### 1. Dashboard Home 改造（`src/routes/_authenticated/dashboard.tsx`）
+### 1.3 SECURITY DEFINER
 
-新增三个组件，按顺序插在 Welcome 标题下方：
-
-- **DismissableBanner**（蓝色提示条）— 文案可由 `announcements` 表驱动（已有），加 localStorage `dismissed-banner-{id}` 控制隐藏
-- **OnboardingChecklist**（4 步进度卡片）— 检测：
-  1. ✅ Email 已验证（`user.email_confirmed_at`）
-  2. ⬜ 已添加 n8n instance（`stats.instances > 0`）
-  3. ⬜ 已创建 API Key（`stats.keys > 0`）
-  4. ⬜ 已发起首次 MCP 调用（`stats.callsToday > 0` 或历史 usage 行存在）
-  - 用 `<Progress>` 显示完成度，每步带 CTA 链接到对应页面
-  - 全部完成后整卡折叠/隐藏
-- **CapabilityCards**（2 张能力卡）— "MCP Server"（已就绪）+ "Chat Agent"（标 Beta），点击跳转
-
-### 2. Instances 页（`src/routes/_authenticated/instances.tsx`）
-
-- 顶部加蓝色 dismissable 教育 banner：「n8n Cloud users need Starter plan or above to access the API. [Learn more →]」
-- 「Add Instance」对话框里 API Key 输入框下方加灰色 hint：「Generate an API key from n8n → Settings → n8n API」
-
-### 3. Connect Client 页（`src/routes/_authenticated/connect.tsx`）
-
-- 顶部 dependency check：若用户 `instances === 0` → 显示黄色 alert「Add at least one n8n instance before connecting an MCP client」+ 跳转按钮
-- 顶部加搜索框（client-side filter by name）
-- Claude Desktop 卡片加 "Recommended" 角标
-- 列表底部加一张「Don't see your client? **Request integration →**」CTA 卡片，点击打开 mailto 或链接到 GitHub issue
+- `admin_set_user_tier(_user_id, _tier)`：admin only，写 audit
+- `admin_grant_role / admin_revoke_role`：admin only，写 audit
+- 全部 `REVOKE EXECUTE FROM authenticated, anon, PUBLIC`，仅在 server fn 内通过 admin client 调
 
 ---
 
-## 阶段 P2 — 内容/文案（低成本快赢）
+## Phase 2 — 用户自助 (`/settings`)
 
-1. **Billing 文案**（`src/routes/_authenticated/billing.tsx`、`pricing.tsx`、`src/lib/tiers.ts`）
-   - Pro tier 描述把「100,000 calls/day」改为「Unlimited tool calls *fair use 5,000/day*」
-   - 加一段小字脚注解释 fair use
-2. **Footer**（`src/components/marketing-footer.tsx`）
-   - 加版本号（从 `package.json.version` 静态导入）
-   - 加 support 邮箱链接
-3. **Connect Client 客户端补齐**（`src/routes/_authenticated/connect.tsx`）
-   - 新增 12 个客户端卡片片段（仅 Bearer 配置 JSON）：OpenCode、Kiro、OpenHands、Genspark、HuggingChat、Trae IDE、Google Antigravity、LM Studio、AnythingLLM、Manus AI、MiniMax Agent、ElevenLabs Agent、n8n AI Agent
-   - OAuth 流不在本计划内（评估为独立大项目）
+把现 settings.tsx 拆成 tabs 减少文件膨胀：
+
+```text
+/settings                 → Profile（含头像）
+/settings/security        → 密码、邮箱、2FA、会话
+/settings/connections     → Google 关联管理
+/settings/notifications   → 现有 email + telemetry
+/settings/danger          → 现有导出/删除
+```
+
+### 2.1 Profile + 头像
+- `<Avatar>` + 上传到 `avatars/{user_id}/avatar.png`
+- 更新 `profiles.avatar_url`，header 头像同步
+
+### 2.2 Security
+- **改密码**：当前密码 + 新密码 + 确认；调 `supabase.auth.updateUser({ password })`，前端先用 `signInWithPassword` 验当前密码
+- **改邮箱**：`supabase.auth.updateUser({ email })` 触发确认邮件（沿用 Lovable auth-email 模板）
+- **2FA TOTP**：`supabase.auth.mfa.enroll/challenge/verify/unenroll`，QR 码 + 6 位验证；登录页加 challenge step
+- **活跃会话**：列出 `auth.refresh_tokens`（通过 server fn + admin client 按 user_id 查），显示创建时间/UA/IP；单条/全部撤销 → `signOut({ scope: 'others' })` + admin 删 token
+
+### 2.3 Connections
+- 列已链接的 OAuth identities（`supabase.auth.getUserIdentities()`）
+- 关联 Google：`linkIdentity({ provider: 'google' })`
+- 解绑：`unlinkIdentity()`，至少保留一种登录方式
+
+---
+
+## Phase 3 — 管理员 (`/admin/users`)
+
+### 3.1 列表升级
+- 顶部搜索框（email / display_name 模糊）
+- 列加：状态徽章（active / banned / pending-delete）、tags
+- 排序（注册日期 / 今日 calls）
+- 服务端分页（25/页）—— 改用 server fn 避免 1000 行限制
+- 右上角「Export CSV」按钮
+
+### 3.2 用户详情抽屉（点行打开）
+Tabs：
+- **Overview**：profile、subscription、近 30 天 calls 折线、instances 列表、API keys 列表
+- **Activity**：最近 50 条 mcp_call_logs
+- **Notes**：admin_user_notes 编辑（备注 + tags）
+- **Audit**：该用户为 target 的 admin_audit_logs
+
+底部 action bar：
+- 改 tier（Free / Pro / Enterprise）
+- 授予/撤销 admin
+- 重置密码：`auth.admin.generateLink({ type:'recovery' })` 发邮件
+- 强制登出：`auth.admin.signOut(userId, 'global')`
+- 封禁/解封：`auth.admin.updateUserById(userId, { ban_duration: '8760h' | 'none' })`
+- 删除账号（复用现 `deleteAccountNow` 逻辑，admin 版）
+
+### 3.3 待删除请求队列 `/admin/deletion-requests`
+- 列 `account_deletion_requests` 未处理的
+- 「Approve & delete」/「Cancel & dismiss」按钮 → 写 processed_at + audit
+
+### 3.4 全部 admin 写操作
+- 走 `src/lib/admin-actions.functions.ts` 的 createServerFn
+- 每个 handler 用 `requireAdmin` 中间件（getAdminStatus 复用），失败返回 403 不泄漏细节
+- 成功后 `INSERT INTO admin_audit_logs`
+
+---
+
+## Phase 4 — 文件清单
+
+新增：
+```text
+supabase/migrations/<ts>_account_management.sql
+src/lib/security.functions.ts             # 改密码、会话列表、撤销、2FA helpers
+src/lib/connections.functions.ts          # OAuth identity 管理
+src/lib/admin-actions.functions.ts        # 改 tier/角色/封禁/重置/强登/删除
+src/lib/admin-users.functions.ts          # 分页查询 + CSV 导出
+src/lib/avatar-upload.ts                  # storage helper（client）
+src/components/avatar-uploader.tsx
+src/components/admin/user-detail-drawer.tsx
+src/components/require-admin-middleware.ts
+src/routes/_authenticated/settings.tsx                  # 改成 layout + Outlet
+src/routes/_authenticated/settings.index.tsx            # Profile
+src/routes/_authenticated/settings.security.tsx
+src/routes/_authenticated/settings.connections.tsx
+src/routes/_authenticated/settings.notifications.tsx
+src/routes/_authenticated/settings.danger.tsx
+src/routes/_authenticated/_admin/admin.deletion-requests.tsx
+src/routes/login.tsx                                     # 加 MFA challenge step
+```
+
+修改：
+```text
+src/routes/_authenticated/_admin/admin.users.tsx        # 升级为详情抽屉版
+src/components/site-header.tsx (or sidebar)             # 头像同步显示
+```
+
+---
+
+## 实施顺序
+
+1. Phase 1 数据库迁移（一次性 migration + storage bucket）→ 等你审批
+2. Phase 2.1 头像 + Phase 2.2 改密码/改邮箱（用户最高频）
+3. Phase 2.2 会话管理 + 2FA
+4. Phase 2.3 Google 关联
+5. Phase 3.1 + 3.2 admin 列表升级 + 详情抽屉
+6. Phase 3.3 待删除队列
+7. Phase 4 整体回归 + 顺手把 settings 路由拆分的 link 全改好
+
+我会保证每步通过 lint/typecheck，admin 写操作 100% 落审计。
 
 ---
 
 ## 不在本次范围
 
-- **OAuth 客户端授权流**（Claude.ai/ChatGPT 网页端接入）— 需独立设计 OAuth server、consent 页、token 存储，工作量 ≥ 本计划全部三阶段总和，建议作为单独项目
-- 顶部横向 nav 重构（你的 sidebar 信息密度更高，保留更优）
-- GitHub star 徽章、floating chat bubble（次要装饰）
-- What's New 改造（你的实现已优于对方）
-
----
-
-## 验证
-
-- P0：建账号 → Settings 切换 telemetry → 重登仍记忆；点 Delete Account → 用户被登出且无法登录
-- P1：新账号登录 → Dashboard 看到 4 步 checklist，加 instance 后第 2 步打勾；Connect 页未加 instance 时看到黄色 alert
-- P2：Billing 显示新文案；Footer 出现版本号；Connect 看到 25 个客户端卡片
-- `bunx tsc --noEmit` 通过
+- 团队/工作区（多人协作）—— 现产品是单人账户模型，要做需要单独立项
+- SAML/SSO —— Supabase 支持但当前用户量级不需要
+- 邮件验证模板的视觉重做 —— 现有模板可用，单独优化
