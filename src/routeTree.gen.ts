@@ -42,6 +42,7 @@ import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/
 import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/paddle-webhook'
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
+import { Route as AuthenticatedAdminAdminIntegrationsRouteImport } from './routes/_authenticated/_admin/admin.integrations'
 import { Route as AuthenticatedAdminAdminDeploymentRouteImport } from './routes/_authenticated/_admin/admin.deployment'
 import { Route as AuthenticatedAdminAdminDeletionRequestsRouteImport } from './routes/_authenticated/_admin/admin.deletion-requests'
 import { Route as AuthenticatedAdminAdminAnnouncementsRouteImport } from './routes/_authenticated/_admin/admin.announcements'
@@ -211,6 +212,12 @@ const AuthenticatedAdminAdminUsersRoute =
     path: '/admin/users',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminIntegrationsRoute =
+  AuthenticatedAdminAdminIntegrationsRouteImport.update({
+    id: '/admin/integrations',
+    path: '/admin/integrations',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminDeploymentRoute =
   AuthenticatedAdminAdminDeploymentRouteImport.update({
     id: '/admin/deployment',
@@ -270,6 +277,7 @@ export interface FileRoutesByFullPath {
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
+  '/admin/integrations': typeof AuthenticatedAdminAdminIntegrationsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
@@ -306,6 +314,7 @@ export interface FileRoutesByTo {
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
+  '/admin/integrations': typeof AuthenticatedAdminAdminIntegrationsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
@@ -346,6 +355,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/_authenticated/_admin/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/_authenticated/_admin/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
+  '/_authenticated/_admin/admin/integrations': typeof AuthenticatedAdminAdminIntegrationsRoute
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/_authenticated/_admin/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
@@ -385,6 +395,7 @@ export interface FileRouteTypes {
     | '/admin/announcements'
     | '/admin/deletion-requests'
     | '/admin/deployment'
+    | '/admin/integrations'
     | '/admin/users'
     | '/admin/announcements/preview/$id'
   fileRoutesByTo: FileRoutesByTo
@@ -421,6 +432,7 @@ export interface FileRouteTypes {
     | '/admin/announcements'
     | '/admin/deletion-requests'
     | '/admin/deployment'
+    | '/admin/integrations'
     | '/admin/users'
     | '/admin/announcements/preview/$id'
   id:
@@ -460,6 +472,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin/admin/announcements'
     | '/_authenticated/_admin/admin/deletion-requests'
     | '/_authenticated/_admin/admin/deployment'
+    | '/_authenticated/_admin/admin/integrations'
     | '/_authenticated/_admin/admin/users'
     | '/_authenticated/_admin/admin/announcements/preview/$id'
   fileRoutesById: FileRoutesById
@@ -717,6 +730,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminUsersRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/integrations': {
+      id: '/_authenticated/_admin/admin/integrations'
+      path: '/admin/integrations'
+      fullPath: '/admin/integrations'
+      preLoaderRoute: typeof AuthenticatedAdminAdminIntegrationsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/deployment': {
       id: '/_authenticated/_admin/admin/deployment'
       path: '/admin/deployment'
@@ -767,6 +787,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminAnnouncementsRoute: typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   AuthenticatedAdminAdminDeletionRequestsRoute: typeof AuthenticatedAdminAdminDeletionRequestsRoute
   AuthenticatedAdminAdminDeploymentRoute: typeof AuthenticatedAdminAdminDeploymentRoute
+  AuthenticatedAdminAdminIntegrationsRoute: typeof AuthenticatedAdminAdminIntegrationsRoute
   AuthenticatedAdminAdminUsersRoute: typeof AuthenticatedAdminAdminUsersRoute
 }
 
@@ -777,6 +798,8 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
     AuthenticatedAdminAdminDeletionRequestsRoute,
   AuthenticatedAdminAdminDeploymentRoute:
     AuthenticatedAdminAdminDeploymentRoute,
+  AuthenticatedAdminAdminIntegrationsRoute:
+    AuthenticatedAdminAdminIntegrationsRoute,
   AuthenticatedAdminAdminUsersRoute: AuthenticatedAdminAdminUsersRoute,
 }
 
@@ -853,3 +876,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
