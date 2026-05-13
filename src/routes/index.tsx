@@ -39,6 +39,7 @@ import {
 import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
 import { buildWebSiteJsonLd } from "@/lib/seo-jsonld";
 import n8nStats from "@/data/n8n-stats.json";
+import { useT } from "@/i18n/context";
 
 export const Route = createFileRoute("/")({
   head: () => {
@@ -97,6 +98,7 @@ export const Route = createFileRoute("/")({
 
 function Landing() {
   const [faqQuery, setFaqQuery] = useState("");
+  const t = useT();
   const filteredFaq = useMemo(() => {
     const q = faqQuery.trim().toLowerCase();
     if (!q) return FAQ;
@@ -117,31 +119,29 @@ function Landing() {
         />
         <div className="relative mx-auto max-w-5xl px-6 py-24 text-center md:py-32">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-border bg-card/40 px-3 py-1 text-xs text-muted-foreground backdrop-blur">
-            <Sparkles className="h-3 w-3 text-primary" /> Free to use
+            <Sparkles className="h-3 w-3 text-primary" /> {t.home.hero.badge}
           </div>
           <h1 className="text-balance text-4xl font-bold leading-tight tracking-tight sm:text-5xl md:text-6xl">
-            Plug your n8n workflows
+            {t.home.hero.titleLineOne}
             <br />
             <span
               className="bg-clip-text text-transparent"
               style={{ backgroundImage: "var(--gradient-primary)" }}
             >
-              into any AI client
+              {t.home.hero.titleLineTwo}
             </span>
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-pretty text-balance px-2 text-xl leading-[1.6] text-foreground/80 sm:px-0 sm:text-2xl sm:leading-relaxed md:text-[26px] md:leading-[1.55]">
-            n8n-mcp turns your self-hosted n8n into a Model Context Protocol
-            server. Connect Claude, ChatGPT, Cursor and any MCP-compatible
-            client with one URL and one API key&nbsp;— no drag-and-drop required.
+            {t.home.hero.subtitle}
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
             <Button asChild size="lg" className="h-12 px-6">
               <Link to="/signup">
-                Start for free <ArrowRight className="ml-2 h-4 w-4" />
+                {t.home.hero.ctaPrimary} <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-12 px-6">
-              <Link to="/docs">Read the docs</Link>
+              <Link to="/docs">{t.home.hero.ctaSecondary}</Link>
             </Button>
           </div>
           <div className="mt-4 flex flex-wrap items-center justify-center gap-2 text-xs">
