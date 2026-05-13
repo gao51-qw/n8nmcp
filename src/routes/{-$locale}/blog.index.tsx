@@ -130,7 +130,7 @@ export const Route = createFileRoute("/{-$locale}/blog/")({
         { name: "twitter:description", content: DESC },
       ],
       links: [
-        { rel: "canonical", href: canonicalUrl },
+        ...buildAlternateLinks("/blog", resolveLocale(params.locale)),
         ...(prevHref ? [{ rel: "prev", href: prevHref }] : []),
         ...(nextHref ? [{ rel: "next", href: nextHref }] : []),
       ],
