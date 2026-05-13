@@ -1,148 +1,94 @@
-# GEO / AI-SEO 优化计划
+# 多语言（i18n）实施方案
 
-目标：让 ChatGPT / Claude / Perplexity / Google AI Overviews 等生成式搜索引擎能更准确、更频繁地引用 n8nmcp.lovable.app。
+## 范围
+- **语言**：英文（默认）、简体中文、日本語、Español、Deutsch
+- **页面**：首页 / Pricing / FAQ / Blog 列表+详情 / 8 个 Docs 子页 / Terms / Privacy / Imprint
+- **不包含**：Dashboard、Settings、Billing、Connect、Admin、Auth 页（保持英文）
 
----
-
-## 1. 新增 `/llms.txt` 与 `/llms-full.txt`（关键缺失）
-
-新建两个 server 路由：
-
-- `src/routes/llms[.]txt.tsx` — 简版站点摘要（项目定位、核心价值、主要章节链接），遵循 llmstxt.org 规范
-- `src/routes/llms-full[.]txt.tsx` — 完整版，把 `/docs/*` 全部 11 个页面的标题 + 正文以 Markdown 形式聚合输出
-
-技术细节：
-- `llms-full.txt` 从 docs 路由对应的内容数据源生成（如已有 markdown 文件则直接读取；否则在文档页提取核心段落）
-- 设置 `Content-Type: text/plain; charset=utf-8`，`Cache-Control: public, max-age=3600`
-
----
-
-## 2. 扩展 `sitemap.xml`
-
-修改 `src/routes/sitemap[.]xml.tsx` 的 `PAGES` 数组，补全：
-
-- `/faq`
-- `/docs/getting-started`、`/docs/concepts`、`/docs/clients`、`/docs/api-keys`、`/docs/n8n-instances`、`/docs/tools`、`/docs/quotas`、`/docs/security`（共 8 个文档页）
-- `/imprint`（如希望被收录）
-
-文档页设置 `priority: 0.7`，`changefreq: monthly`。
-
----
-
-## 3. `robots.txt` 显式声明 AI 爬虫
-
-修改 `src/routes/robots[.]txt.tsx`，在通用规则后追加：
-
+## URL 结构（SEO 友好）
+英文走根路径，其它语言加前缀：
 ```
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: OAI-SearchBot
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: PerplexityBot
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: CCBot
-Allow: /
+/                          → English (默认)
+/pricing                   → English
+/docs/getting-started      → English
+/zh                        → 中文首页
+/zh/pricing                → 中文 Pricing
+/ja/docs/getting-started   → 日文文档
+/es/blog                   → 西文博客
+/de/faq                    → 德文 FAQ
 ```
+比 `?lang=` 或纯 cookie 方案的 SEO 收益高一个量级——每种语言都是独立可索引页面。
 
-每个 bot 同样 Disallow 私有路径（`/dashboard`、`/admin` 等）。
+## 技术实现
 
----
-
-## 4. 清理 `__root.tsx` 重复 meta
-
-`src/routes/__root.tsx` 的 `head().meta` 中：
-- `description` 出现 2 次
-- `og:description` 出现 2 次
-- `og:image` / `twitter:image` 用的是 Lovable preview R2 的临时 URL
-
-操作：
-- 删除重复的 `description` / `og:description` 条目
-- 暂时保留 og:image，但加 TODO 注释提示替换为正式品牌图（如有现成 logo 可立即替换为 favicon 或 logo 的绝对 URL）
-
----
-
-## 5. Blog 文章添加 `BlogPosting` JSON-LD
-
-修改 `src/routes/blog.$slug.tsx` 的 `head()`：
-
-```ts
-scripts: [{
-  type: "application/ld+json",
-  children: JSON.stringify({
-    "@context": "https://schema.org",
-    "@type": "BlogPosting",
-    headline: post.title,
-    description: post.excerpt,
-    datePublished: post.date,
-    dateModified: post.updatedAt ?? post.date,
-    author: { "@type": "Person", name: post.author ?? "n8n-mcp" },
-    mainEntityOfPage: `https://n8nmcp.lovable.app/blog/${post.slug}`,
-    publisher: { "@type": "Organization", name: "n8n-mcp",
-      logo: { "@type": "ImageObject", url: "https://n8nmcp.lovable.app/favicon.ico" }}
-  })
-}]
+### 1. 路由重构（一次性）
+把营销+文档路由整体迁移到 `{-$locale}` 可选参数下：
 ```
+src/routes/
+  {-$locale}/
+    index.tsx                    ← 原 index.tsx
+    pricing.tsx
+    faq.tsx
+    blog.index.tsx
+    blog.$slug.tsx
+    docs.tsx (layout)
+    docs.index.tsx
+    docs.getting-started.tsx
+    docs.concepts.tsx
+    docs.clients.tsx
+    docs.api-keys.tsx
+    docs.n8n-instances.tsx
+    docs.tools.tsx
+    docs.quotas.tsx
+    docs.security.tsx
+    terms.tsx
+    privacy.tsx
+    imprint.tsx
+```
+未受影响：`_authenticated/*`、`api/public/*`、`login`、`signup`、`admin-setup`、`llms.txt`、`robots.txt`、`sitemap.xml`、`__root.tsx`。
 
-同时补 `BreadcrumbList`：Home → Blog → Post。
+### 2. 翻译字典
+```
+src/i18n/
+  config.ts            ← LOCALES = ['en','zh','ja','es','de']，类型与默认值
+  context.tsx          ← LocaleProvider + useT() hook（轻量，无外部库）
+  locales/
+    en.ts  zh.ts  ja.ts  es.ts  de.ts
+```
+字典按页面分组（`home.hero.title`、`pricing.cta`、`docs.gettingStarted.intro`…），TypeScript 全程类型安全，缺 key 直接编译报错。
 
----
+**初始翻译用 Lovable AI（Gemini 2.5 Pro）批量生成**，免费且质量高；之后你可以手工润色。
 
-## 6. Docs 页面添加 `TechArticle` + `BreadcrumbList`
+### 3. 组件改造
+- 在 `LocaleProvider` 中根据路由 `params.locale ?? 'en'` 注入语言。
+- `useT()` 返回当前语言字典。
+- 营销 Header 加语言切换下拉（🌐 EN / 中文 / 日本語 / Español / Deutsch），切换时调用 `navigate({ to: currentRoute, params: { locale: newLocale === 'en' ? undefined : newLocale } })`。
+- 持久化偏好到 cookie，首次访问根路径时按 `Accept-Language` 头跳转到匹配语言。
 
-为 `src/components/docs/docs-layout.tsx` 引入一个共享 helper `buildDocsJsonLd(title, description, slug)`，输出：
+### 4. SEO 信号（关键）
+- **hreflang**：在 `__root.tsx` 的 `head()` 里给每条路由生成 5 个 `<link rel="alternate" hreflang="...">` + 1 个 `x-default`。
+- **canonical**：每页指向自己的 locale 版本。
+- **`og:locale`**：随当前语言切换。
+- **sitemap.xml**：URL 数从 19 增至 19 × 5 = 95（含 hreflang `<xhtml:link>` 兄弟标签）。
+- **llms.txt**：在索引中加入 `## Translations` 章节，列出 5 种语言入口。
+- **robots.txt**：无需改动。
 
-- `@type: TechArticle` — headline、description、author=Organization、inLanguage="en"
-- `@type: BreadcrumbList` — Home → Docs → 当前页
-
-每个 `src/routes/docs.*.tsx` 在 `head().scripts` 中调用一次。
-
-文档首页 `docs.index.tsx` 额外加 `@type: ItemList`，列出全部 docs 页面，提升 AI 对结构的理解。
-
----
-
-## 7. 首页补 `BreadcrumbList` + `WebSite` SearchAction
-
-`src/routes/index.tsx` `head().scripts` 追加：
-
-- `WebSite` schema with `potentialAction: SearchAction` (即使没站内搜索，声明为空也可被部分引擎识别为根入口)
-- 不需要 BreadcrumbList（首页是根）
-
----
-
-## 技术细节小结
-
-- 全部新增路由用 TanStack Start 的 `createFileRoute` + `server.handlers.GET`，不引入新依赖
-- llms-full.txt 体积需控制在 < 200KB；如 docs 内容超量，按页分段并在 llms.txt 中列子链接
-- 所有 JSON-LD 注入使用 head() `scripts` 字段，避免 hydration 警告
-- 修改不触及任何后端逻辑、数据库或 RLS
-
----
+### 5. 内容总量
+约 15 个页面 × 5 种语言。Lovable AI 一次批量生成只需几次调用，token 成本可忽略。
 
 ## 实施顺序
+1. 搭 i18n 基础设施（config / context / 空字典）
+2. 迁移路由文件到 `{-$locale}/` 下，验证英文路径不变
+3. 抽取所有硬编码英文字符串到 `en.ts` 字典
+4. AI 批量翻译生成 `zh.ts` / `ja.ts` / `es.ts` / `de.ts`
+5. 加语言切换 UI + cookie 持久化 + Accept-Language 重定向
+6. 更新 sitemap / hreflang / llms.txt
+7. 验证 5 种语言 + Search Console 抓取
 
-1. 修复 `__root.tsx` 重复 meta（5 分钟）
-2. 扩展 sitemap.xml + robots.txt AI bot 规则
-3. 新增 llms.txt / llms-full.txt
-4. Blog + Docs 结构化数据
-5. 首页 WebSite schema
+## 注意事项
+- 迁移路由是大动作，会触发 `routeTree.gen.ts` 重新生成；过程中 `<Link to="/pricing">` 等需改为 `<Link to="/{-$locale}/pricing" params={{ locale }}>`，全站搜索替换。
+- Blog MDX 内容暂不翻译（5 种语言写 5 份 MDX 不现实），保持英文 + 在文章顶部加一行 "This post is available in English only"。如果你之后想多语博客，再单独规划。
+- 文档量较大（每个 docs 页 ~200 行 JSX），AI 翻译后建议你或母语审校至少校对一遍。
 
-完成后用 curl 验证生产站点：
-- `/llms.txt`、`/llms-full.txt` 返回 200
-- `/sitemap.xml` 包含全部新 URL
-- `/robots.txt` 列出 AI bot
-- 首页 / blog / docs 页 JSON-LD 数量正确
+## 预计交付
+完成后你将拥有：5 种语言可索引 URL、自动语言切换器、完整 SEO 多语种信号、可随时编辑的本地化字典。
