@@ -17,7 +17,9 @@ async function audit(
     target_user_id: targetUserId,
     action,
     summary,
-    changes,
+    // Cast: jsonb column accepts any JSON-serializable value at runtime; the
+    // generated type narrows to Json which is structurally stricter.
+    changes: changes as never,
   });
   if (error) console.error("[admin audit log]", error);
 }
