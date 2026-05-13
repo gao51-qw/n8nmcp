@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Badge } from "@/components/ui/badge";
@@ -283,7 +283,7 @@ function UserDetailDrawer({ userId, onClose }: { userId: string | null; onClose:
   const [noteText, setNoteText] = useState("");
   const [tagsText, setTagsText] = useState("");
 
-  useMemo(() => {
+  useEffect(() => {
     if (data?.note) {
       setNoteText(data.note.note ?? "");
       setTagsText((data.note.tags ?? []).join(", "));
