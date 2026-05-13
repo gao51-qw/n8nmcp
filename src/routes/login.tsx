@@ -90,10 +90,10 @@ function Login() {
           <p className="mt-1 text-sm text-muted-foreground">Sign in to your account</p>
 
           <div className="mt-6 grid gap-2">
-            <Button variant="outline" className="w-full transition-transform active:scale-[.98]" onClick={() => handleOAuth("google")}>
+            <Button variant="outline" className="w-full" onClick={() => handleOAuth("google")}>
               Continue with Google
             </Button>
-            <Button variant="outline" className="w-full transition-transform active:scale-[.98]" onClick={() => handleOAuth("apple")}>
+            <Button variant="outline" className="w-full" onClick={() => handleOAuth("apple")}>
               Continue with Apple
             </Button>
           </div>
@@ -111,7 +111,7 @@ function Login() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full transition-transform active:scale-[.98]" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
