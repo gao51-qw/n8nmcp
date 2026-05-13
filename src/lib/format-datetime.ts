@@ -10,15 +10,26 @@
  * there is no ambiguity.
  */
 
+// NOTE: combining `dateStyle`/`timeStyle` with `timeZoneName` throws
+// "Invalid option : option" in some V8/ICU builds (notably the Cloudflare
+// Workers runtime used for SSR). Spell out the individual fields instead.
 const SHORT = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
   timeZoneName: "short",
 });
 
 const LONG = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "full",
-  timeStyle: "long",
+  weekday: "long",
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  second: "2-digit",
   timeZoneName: "long",
 });
 
