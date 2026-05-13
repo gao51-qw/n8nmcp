@@ -320,26 +320,51 @@ function InstanceDialog({
       }
       return createInstance({ data: { name, base_url: baseUrl, api_key: apiKey } });
     },
-    onSuccess: () => {
-      toast.success(instance ? "Instance updated" : "Instance created");
+    onMutate: () => {
+      (window as any).__instanceDialogPending = true;
+      return {
+        tId: toast.loading(instance ? "Saving changes…" : "Creating instance…", {
+          description: name || baseUrl,
+        }),
+      };
+    },
+    onSuccess: (_d, _v, ctx) => {
+      toast.success(instance ? "Instance updated" : "Instance created", {
+        id: ctx?.tId,
+        description: name,
+      });
       qc.invalidateQueries({ queryKey: ["instances"] });
       onClose();
     },
-    onError: (e: Error) => {
+    onError: (e: Error, _v, ctx) => {
       console.error("[instance save] failed:", e);
-      toast.error(e.message || "Failed to save instance");
+      toast.error(instance ? "Failed to save changes" : "Failed to create instance", {
+        id: ctx?.tId,
+        description: e.message || "Please check the URL and API key, then try again.",
+      });
+    },
+    onSettled: () => {
+      (window as any).__instanceDialogPending = false;
     },
   });
 
+  const submit = (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (save.isPending) return; // anti double-submit
+    if (!name || !baseUrl || (!instance && !apiKey)) return;
+    save.mutate();
+  };
+
   return (
     <DialogContent>
+    <form onSubmit={submit}>
       <DialogHeader>
         <DialogTitle>{instance ? "Edit instance" : "Add n8n instance"}</DialogTitle>
         <DialogDescription>
           Provide the base URL of your n8n and an API key (Settings → API).
         </DialogDescription>
       </DialogHeader>
-      <div className="space-y-4">
+      <fieldset disabled={save.isPending} className="space-y-4 pt-4">
         <div className="space-y-2">
           <Label htmlFor="name">Name</Label>
           <Input
@@ -348,6 +373,7 @@ function InstanceDialog({
             onChange={(e) => setName(e.target.value)}
             placeholder="Production n8n"
             maxLength={100}
+            autoFocus
           />
         </div>
         <div className="space-y-2">
@@ -357,6 +383,7 @@ function InstanceDialog({
             value={baseUrl}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://n8n.example.com"
+            inputMode="url"
           />
         </div>
         <div className="space-y-2">
@@ -373,19 +400,21 @@ function InstanceDialog({
             Generate an API key from your n8n instance: Settings → n8n API → Create an API key.
           </p>
         </div>
-      </div>
-      <DialogFooter>
-        <Button variant="ghost" onClick={onClose}>
+      </fieldset>
+      <DialogFooter className="pt-4">
+        <Button type="button" variant="ghost" onClick={onClose} disabled={save.isPending}>
           Cancel
         </Button>
         <Button
-          onClick={() => save.mutate()}
+          type="submit"
           disabled={save.isPending || !name || !baseUrl || (!instance && !apiKey)}
+          aria-busy={save.isPending}
         >
           {save.isPending && <Loader2 className="mr-1 size-4 animate-spin" />}
-          {instance ? "Save changes" : "Create"}
+          {save.isPending ? (instance ? "Saving…" : "Creating…") : instance ? "Save changes" : "Create"}
         </Button>
       </DialogFooter>
+    </form>
     </DialogContent>
   );
 }
