@@ -6,6 +6,8 @@
 // entries each shareable route should ship in <head>.
 
 import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/i18n/config";
+import { isLocale } from "@/i18n/config";
+import { DICTIONARIES } from "@/i18n/dict";
 
 export const SITE_ORIGIN = "https://n8nmcp.lovable.app";
 
@@ -70,3 +72,55 @@ export const OG_LOCALE: Record<Locale, string> = {
   es: "es_ES",
   de: "de_DE",
 };
+
+/** Resolve a possibly-undefined locale param into a known Locale. */
+export function resolveLocale(raw: unknown): Locale {
+  return isLocale(raw) ? raw : DEFAULT_LOCALE;
+}
+
+type SeoStrings = { title: string; description: string };
+
+/**
+ * Build a locale-aware head() payload (title / description / OG / canonical
+ * + hreflang alternates) for a route at a given logical path.
+ *
+ * `pickStrings(t)` reads the (already-resolved) dictionary tree and returns
+ * the title + description for this page.
+ */
+export function buildLocalizedHead(args: {
+  rawLocale: unknown;
+  logicalPath: string;
+  pickStrings: (t: (typeof DICTIONARIES)[Locale]) => SeoStrings;
+  ogType?: string;
+  ogImage?: string;
+}) {
+  const locale = resolveLocale(args.rawLocale);
+  const t = DICTIONARIES[locale];
+  const { title, description } = args.pickStrings(t);
+  const url = localizedUrl(args.logicalPath, locale);
+
+  return {
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:url", content: url },
+      { property: "og:type", content: args.ogType ?? "website" },
+      { property: "og:locale", content: OG_LOCALE[locale] },
+      ...LOCALES.filter((l) => l !== locale).map((l) => ({
+        property: "og:locale:alternate",
+        content: OG_LOCALE[l],
+      })),
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: description },
+      ...(args.ogImage
+        ? [
+            { property: "og:image", content: args.ogImage },
+            { name: "twitter:image", content: args.ogImage },
+          ]
+        : []),
+    ],
+    links: buildAlternateLinks(args.logicalPath, locale),
+  };
+}
