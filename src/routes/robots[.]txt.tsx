@@ -6,21 +6,47 @@ export const Route = createFileRoute("/robots.txt")({
   server: {
     handlers: {
       GET: () => {
+        const privateDisallows = [
+          "/api/",
+          "/dashboard",
+          "/settings",
+          "/billing",
+          "/api-keys",
+          "/instances",
+          "/usage",
+          "/chat",
+          "/connect",
+          "/admin",
+        ];
+        // Explicitly allow major AI / search crawlers so they don't fall back
+        // to a conservative default. Each block reiterates the private
+        // disallows so a bot that only reads its own User-agent section still
+        // skips the authenticated app surface.
+        const aiBots = [
+          "GPTBot",
+          "ChatGPT-User",
+          "OAI-SearchBot",
+          "ClaudeBot",
+          "anthropic-ai",
+          "Claude-Web",
+          "PerplexityBot",
+          "Perplexity-User",
+          "Google-Extended",
+          "GoogleOther",
+          "CCBot",
+          "Applebot-Extended",
+          "cohere-ai",
+          "Bytespider",
+        ];
+        const block = (ua: string) =>
+          `User-agent: ${ua}\nAllow: /\n${privateDisallows
+            .map((p) => `Disallow: ${p}`)
+            .join("\n")}\n`;
         const body =
-          `User-agent: *\n` +
-          `Allow: /\n` +
-          `Disallow: /api/\n` +
-          `Disallow: /dashboard\n` +
-          `Disallow: /settings\n` +
-          `Disallow: /billing\n` +
-          `Disallow: /api-keys\n` +
-          `Disallow: /instances\n` +
-          `Disallow: /usage\n` +
-          `Disallow: /chat\n` +
-          `Disallow: /connect\n` +
-          `Disallow: /admin\n` +
-          `\n` +
-          `Sitemap: ${SITE}/sitemap.xml\n`;
+          block("*") +
+          "\n" +
+          aiBots.map((b) => block(b)).join("\n") +
+          `\nSitemap: ${SITE}/sitemap.xml\n`;
 
         return new Response(body, {
           headers: {
