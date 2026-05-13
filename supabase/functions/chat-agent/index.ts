@@ -198,7 +198,8 @@ Deno.serve(async (req) => {
     }
 
     const aiJson = await aiRes.json();
-    const reply: string = aiJson?.choices?.[0]?.message?.content ?? "(empty response)";
+    const rawReply: string = aiJson?.choices?.[0]?.message?.content ?? "(empty response)";
+    const reply = rawReply + "\n\n" + buildSourceFooter(knowledge);
 
     // Persist assistant message
     await userClient
