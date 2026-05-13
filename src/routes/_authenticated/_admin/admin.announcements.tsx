@@ -45,6 +45,7 @@ import {
   CalendarX,
   Clock,
   Eye,
+  ExternalLink,
   FileText,
   History,
   Loader2,
