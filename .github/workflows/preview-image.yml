@@ -1,0 +1,127 @@
+# Per-PR preview environment.
+#
+# Trigger on pull_request open/sync/reopen → build a `pr-<N>` tagged image,
+# push to GHCR, then SSH into the VPS and (re)start a dedicated container
+# bound to port 40000+<N>. Nginx wildcard vhost (deploy/nginx/preview.conf)
+# routes pr-<N>.preview.n8nworkflow.com → that port.
+# On pull_request close, tear the container down and clean up the image tag.
+#
+# Required GitHub secrets:
+#   VPS_HOST          e.g. app.n8nworkflow.com (or raw IP)
+#   VPS_USER          ssh user (must be in docker group)
+#   VPS_SSH_KEY       private key (PEM) authorized on VPS
+#   PREVIEW_BASE_DOMAIN   e.g. preview.n8nworkflow.com
+
+name: PR Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+    paths-ignore:
+      - "tools/**"
+      - "deploy/**"
+      - "**/*.md"
+
+permissions:
+  contents: read
+  packages: write
+  pull-requests: write
+
+concurrency:
+  group: preview-pr-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------- BUILD & DEPLOY ----------------
+  deploy:
+    if: github.event.action != 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute lowercase owner
+        id: owner
+        run: echo "value=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - name: Compute build timestamp
+        id: built
+        run: echo "at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push preview image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ steps.owner.outputs.value }}/n8nworkflow-app:pr-${{ github.event.pull_request.number }}
+            ghcr.io/${{ steps.owner.outputs.value }}/n8nworkflow-app:pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+          build-args: |
+            APP_GIT_SHA=${{ github.event.pull_request.head.sha }}
+            APP_GIT_BRANCH=${{ github.event.pull_request.head.ref }}
+            APP_BUILT_AT=${{ steps.built.outputs.at }}
+            APP_GITHUB_REPO=${{ github.repository }}
+            APP_IMAGE_TAG=pr-${{ github.event.pull_request.number }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy preview on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/n8nworkflow
+            ./preview/preview-up.sh \
+              ${{ github.event.pull_request.number }} \
+              ghcr.io/${{ steps.owner.outputs.value }}/n8nworkflow-app:pr-${{ github.event.pull_request.number }}-${{ github.event.pull_request.head.sha }}
+
+      - name: Comment preview URL on PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview-env
+          message: |
+            ### Preview environment ready
+
+            **URL:** https://pr-${{ github.event.pull_request.number }}.${{ secrets.PREVIEW_BASE_DOMAIN }}
+            **Commit:** `${{ github.event.pull_request.head.sha }}`
+            **Branch:** `${{ github.event.pull_request.head.ref }}`
+            **Image:** `ghcr.io/${{ steps.owner.outputs.value }}/n8nworkflow-app:pr-${{ github.event.pull_request.number }}`
+
+            The environment is auto-rebuilt on every push and torn down when this PR closes.
+
+  # ---------------- TEARDOWN ----------------
+  teardown:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop preview container on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/n8nworkflow
+            ./preview/preview-down.sh ${{ github.event.pull_request.number }} || true
+
+      - name: Mark PR comment as torn down
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: preview-env
+          message: |
+            ### Preview environment removed
+
+            The preview for PR #${{ github.event.pull_request.number }} has been stopped and its container removed from the VPS.
