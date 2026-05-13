@@ -37,6 +37,7 @@ import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminAnnouncementsRouteImport } from './routes/_authenticated/_admin/admin.announcements'
+import { Route as AuthenticatedAdminAdminAnnouncementsPreviewIdRouteImport } from './routes/_authenticated/_admin/admin.announcements.preview.$id'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -178,6 +179,12 @@ const AuthenticatedAdminAdminAnnouncementsRoute =
     path: '/admin/announcements',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminAnnouncementsPreviewIdRoute =
+  AuthenticatedAdminAdminAnnouncementsPreviewIdRouteImport.update({
+    id: '/preview/$id',
+    path: '/preview/$id',
+    getParentRoute: () => AuthenticatedAdminAdminAnnouncementsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -204,8 +211,9 @@ export interface FileRoutesByFullPath {
   '/blog/': typeof BlogIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
-  '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
+  '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
+  '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -232,8 +240,9 @@ export interface FileRoutesByTo {
   '/blog': typeof BlogIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
-  '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
+  '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
+  '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -263,8 +272,9 @@ export interface FileRoutesById {
   '/blog/': typeof BlogIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
-  '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRoute
+  '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
+  '/_authenticated/_admin/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -295,6 +305,7 @@ export interface FileRouteTypes {
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
     | '/admin/users'
+    | '/admin/announcements/preview/$id'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -323,6 +334,7 @@ export interface FileRouteTypes {
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
     | '/admin/users'
+    | '/admin/announcements/preview/$id'
   id:
     | '__root__'
     | '/'
@@ -353,6 +365,7 @@ export interface FileRouteTypes {
     | '/api/public/paddle-webhook'
     | '/_authenticated/_admin/admin/announcements'
     | '/_authenticated/_admin/admin/users'
+    | '/_authenticated/_admin/admin/announcements/preview/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -572,17 +585,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminAnnouncementsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/announcements/preview/$id': {
+      id: '/_authenticated/_admin/admin/announcements/preview/$id'
+      path: '/preview/$id'
+      fullPath: '/admin/announcements/preview/$id'
+      preLoaderRoute: typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRouteImport
+      parentRoute: typeof AuthenticatedAdminAdminAnnouncementsRoute
+    }
   }
 }
 
+interface AuthenticatedAdminAdminAnnouncementsRouteChildren {
+  AuthenticatedAdminAdminAnnouncementsPreviewIdRoute: typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
+}
+
+const AuthenticatedAdminAdminAnnouncementsRouteChildren: AuthenticatedAdminAdminAnnouncementsRouteChildren =
+  {
+    AuthenticatedAdminAdminAnnouncementsPreviewIdRoute:
+      AuthenticatedAdminAdminAnnouncementsPreviewIdRoute,
+  }
+
+const AuthenticatedAdminAdminAnnouncementsRouteWithChildren =
+  AuthenticatedAdminAdminAnnouncementsRoute._addFileChildren(
+    AuthenticatedAdminAdminAnnouncementsRouteChildren,
+  )
+
 interface AuthenticatedAdminRouteChildren {
-  AuthenticatedAdminAdminAnnouncementsRoute: typeof AuthenticatedAdminAdminAnnouncementsRoute
+  AuthenticatedAdminAdminAnnouncementsRoute: typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   AuthenticatedAdminAdminUsersRoute: typeof AuthenticatedAdminAdminUsersRoute
 }
 
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminAnnouncementsRoute:
-    AuthenticatedAdminAdminAnnouncementsRoute,
+    AuthenticatedAdminAdminAnnouncementsRouteWithChildren,
   AuthenticatedAdminAdminUsersRoute: AuthenticatedAdminAdminUsersRoute,
 }
 
