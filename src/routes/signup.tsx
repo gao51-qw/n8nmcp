@@ -21,6 +21,10 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [pendingAction, setPendingAction] = useState<
+    "password" | "google" | "apple" | null
+  >(null);
+  const anyPending = loading || pendingAction !== null;
 
   useEffect(() => {
     if (user) navigate({ to: "/dashboard" });
@@ -28,22 +32,35 @@ function Signup() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (anyPending) return;
     setLoading(true);
+    setPendingAction("password");
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: { emailRedirectTo: window.location.origin + "/dashboard" },
     });
     setLoading(false);
+    setPendingAction(null);
     if (error) return toast.error(error.message);
     toast.success("Check your email to confirm your account.");
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
-    const result = await lovable.auth.signInWithOAuth(provider, {
-      redirect_uri: window.location.origin + "/dashboard",
-    });
-    if (result.error) toast.error(`${provider} sign-in failed`);
+    if (anyPending) return;
+    setPendingAction(provider);
+    try {
+      const result = await lovable.auth.signInWithOAuth(provider, {
+        redirect_uri: window.location.origin + "/dashboard",
+      });
+      if (result.error) {
+        toast.error(`${provider} sign-in failed`);
+        setPendingAction(null);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${provider} sign-in failed`);
+      setPendingAction(null);
+    }
   };
 
   return (
@@ -61,11 +78,37 @@ function Signup() {
           <p className="mt-1 text-sm text-muted-foreground">Start with the free tier</p>
 
           <div className="mt-6 grid gap-2">
-            <Button variant="outline" className="w-full" onClick={() => handleOAuth("google")}>
-              Continue with Google
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handleOAuth("google")}
+              disabled={anyPending}
+              aria-busy={pendingAction === "google"}
+            >
+              {pendingAction === "google" ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Redirecting to Google…
+                </span>
+              ) : (
+                "Continue with Google"
+              )}
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => handleOAuth("apple")}>
-              Continue with Apple
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handleOAuth("apple")}
+              disabled={anyPending}
+              aria-busy={pendingAction === "apple"}
+            >
+              {pendingAction === "apple" ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Redirecting to Apple…
+                </span>
+              ) : (
+                "Continue with Apple"
+              )}
             </Button>
           </div>
 
@@ -82,8 +125,20 @@ function Signup() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? "Creating…" : "Create account"}
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={anyPending}
+              aria-busy={pendingAction === "password"}
+            >
+              {pendingAction === "password" ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Creating…
+                </span>
+              ) : (
+                "Create account"
+              )}
             </Button>
           </form>
 

@@ -23,6 +23,14 @@ function Login() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [creatingTest, setCreatingTest] = useState(false);
+  // Which action is currently in flight: "password" | "google" | "apple" | null.
+  // Stays set until the auth state actually flips (post-redirect) so buttons
+  // remain disabled with their spinner all the way through navigation.
+  const [pendingAction, setPendingAction] = useState<
+    "password" | "google" | "apple" | null
+  >(null);
+
+  const anyPending = loading || creatingTest || pendingAction !== null;
 
   useEffect(() => {
     if (user) navigate({ to: "/dashboard" });
@@ -30,21 +38,41 @@ function Login() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    if (anyPending) return;
     setLoading(true);
+    setPendingAction("password");
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    setLoading(false);
-    if (error) return toast.error(error.message);
+    if (error) {
+      setLoading(false);
+      setPendingAction(null);
+      return toast.error(error.message);
+    }
+    // Keep the spinner up; the useEffect on `user` will navigate, and the
+    // route transition will unmount this component naturally.
     navigate({ to: "/dashboard" });
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
-    const result = await lovable.auth.signInWithOAuth(provider, {
-      redirect_uri: window.location.origin + "/dashboard",
-    });
-    if (result.error) toast.error(`${provider} sign-in failed`);
+    if (anyPending) return;
+    setPendingAction(provider);
+    try {
+      const result = await lovable.auth.signInWithOAuth(provider, {
+        redirect_uri: window.location.origin + "/dashboard",
+      });
+      if (result.error) {
+        toast.error(`${provider} sign-in failed`);
+        setPendingAction(null);
+      }
+      // On success the browser is redirected to the provider; keep the
+      // spinner up so the button stays in its loading state until then.
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${provider} sign-in failed`);
+      setPendingAction(null);
+    }
   };
 
   const handleCreateTestAccount = async () => {
+    if (anyPending) return;
     setCreatingTest(true);
     try {
       const creds = await createTestAccount();
@@ -90,11 +118,37 @@ function Login() {
           <p className="mt-1 text-sm text-muted-foreground">Sign in to your account</p>
 
           <div className="mt-6 grid gap-2">
-            <Button variant="outline" className="w-full" onClick={() => handleOAuth("google")}>
-              Continue with Google
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handleOAuth("google")}
+              disabled={anyPending}
+              aria-busy={pendingAction === "google"}
+            >
+              {pendingAction === "google" ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Redirecting to Google…
+                </span>
+              ) : (
+                "Continue with Google"
+              )}
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => handleOAuth("apple")}>
-              Continue with Apple
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => handleOAuth("apple")}
+              disabled={anyPending}
+              aria-busy={pendingAction === "apple"}
+            >
+              {pendingAction === "apple" ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Redirecting to Apple…
+                </span>
+              ) : (
+                "Continue with Apple"
+              )}
             </Button>
           </div>
 
@@ -111,8 +165,13 @@ function Login() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
+            <Button
+              type="submit"
+              className="w-full"
+              disabled={anyPending}
+              aria-busy={pendingAction === "password"}
+            >
+              {pendingAction === "password" ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Signing in…
@@ -133,7 +192,7 @@ function Login() {
               variant="ghost"
               className="w-full text-xs text-muted-foreground"
               onClick={handleCreateTestAccount}
-              disabled={creatingTest || loading}
+              disabled={anyPending}
             >
               {creatingTest ? (
                 <span className="inline-flex items-center gap-2">
