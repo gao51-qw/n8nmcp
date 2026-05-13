@@ -351,6 +351,17 @@ const es: Dict = {
       a: "El servidor de conocimiento MCP que usamos es open source. El código de la pasarela hospedada es cerrado por ahora, pero publicamos documentación detallada y el protocolo de cable es la especificación oficial de MCP — sin lock-in.",
     },
   },
+  seo: {
+    pricing: {
+      title: 'Precios — n8n-mcp',
+      description: 'Precios mensuales sencillos para el gateway n8n-mcp. Plan gratuito con 100 llamadas MCP/día, planes de pago desde $19/mes. Sin asientos, cancela cuando quieras.',
+    },
+    faq: {
+      title: 'Preguntas frecuentes — n8n-mcp',
+      description: 'Preguntas comunes sobre n8n-mcp: clientes de IA compatibles, seguridad, precios, autohospedaje y el protocolo MCP.',
+    },
+  },
+
 };
 
 export default es;

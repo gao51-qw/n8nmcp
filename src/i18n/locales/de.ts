@@ -351,6 +351,17 @@ const de: Dict = {
       a: "Der MCP-Knowledge-Server, den wir nutzen, ist Open Source. Der Code des gehosteten Gateways ist aktuell geschlossen, aber wir veröffentlichen detaillierte Docs und das Wire-Protokoll ist die offizielle MCP-Spec — kein Lock-in.",
     },
   },
+  seo: {
+    pricing: {
+      title: 'Preise — n8n-mcp',
+      description: 'Einfache Monatspreise für das n8n-mcp Gateway. Kostenloser Plan mit 100 MCP-Aufrufen/Tag, bezahlte Pläne ab $19/Monat. Keine Sitzplätze, jederzeit kündbar.',
+    },
+    faq: {
+      title: 'FAQ — n8n-mcp',
+      description: 'Häufige Fragen zu n8n-mcp: unterstützte KI-Clients, Sicherheit, Preise, Self-Hosting und das MCP-Protokoll.',
+    },
+  },
+
 };
 
 export default de;
