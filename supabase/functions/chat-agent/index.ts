@@ -39,9 +39,9 @@ function buildSourceFooter(status: KnowledgeStatus): string {
   const total = s.totalNodes ?? s.total ?? "?";
   const ai = s.aiTools ?? s.ai_tools ?? "?";
   if (status.mode === "live") {
-    return `---\n<sub>📡 **Source:** live MCP \`/health\` (statsCount) · ${total} nodes · ${ai} AI tools · fetched ${ts}</sub>`;
+    return `---\n*📡 Source: live MCP \`/health\` (statsCount) · ${total} nodes · ${ai} AI tools · fetched ${ts}*`;
   }
-  return `---\n<sub>⚠️ **Source:** cached snapshot (${FALLBACK_STATS.generatedAt}) · ${total} nodes · ${ai} AI tools · live MCP unavailable: ${status.reason} · fetched ${ts}</sub>`;
+  return `---\n*⚠️ Source: cached snapshot (${FALLBACK_STATS.generatedAt}) · ${total} nodes · ${ai} AI tools · live MCP unavailable: ${status.reason} · fetched ${ts}*`;
 }
 
 async function fetchKnowledgeStatus(): Promise<KnowledgeStatus> {
