@@ -13,6 +13,7 @@ import {
   Sparkles,
   Plug,
   MessagesSquare,
+  Activity,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -105,6 +106,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 }`}
               >
                 <Megaphone className="h-4 w-4" /> Announcements
+              </Link>
+              <Link
+                to="/admin/deployment"
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                  location.pathname === "/admin/deployment"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                }`}
+              >
+                <Activity className="h-4 w-4" /> Deployment
               </Link>
             </>
           )}
