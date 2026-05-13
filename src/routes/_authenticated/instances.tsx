@@ -98,20 +98,30 @@ function InstancesPage() {
 
   const test = useMutation({
     mutationFn: (id: string) => testInstance({ data: { id } }),
-    onSuccess: (r) => {
-      toast.success(`Status: ${r.status}`, { description: `${r.detail} · ${r.latency_ms}ms` });
+    onMutate: (id) => {
+      const tId = toast.loading("Testing connection…", { description: id });
+      return { tId };
+    },
+    onSuccess: (r, _id, ctx) => {
+      toast.success(`Status: ${r.status}`, {
+        id: ctx?.tId,
+        description: `${r.detail} · ${r.latency_ms}ms`,
+      });
       qc.invalidateQueries({ queryKey: ["instances"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _id, ctx) =>
+      toast.error("Connection test failed", { id: ctx?.tId, description: e.message }),
   });
 
   const del = useMutation({
     mutationFn: (id: string) => deleteInstance({ data: { id } }),
-    onSuccess: () => {
-      toast.success("Instance deleted");
+    onMutate: () => ({ tId: toast.loading("Deleting instance…") }),
+    onSuccess: (_d, _id, ctx) => {
+      toast.success("Instance deleted", { id: ctx?.tId });
       qc.invalidateQueries({ queryKey: ["instances"] });
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error, _id, ctx) =>
+      toast.error("Delete failed", { id: ctx?.tId, description: e.message }),
   });
 
   return (
@@ -181,6 +191,8 @@ function InstancesPage() {
         <Dialog
           open={open}
           onOpenChange={(v) => {
+            // Prevent closing while a submit is in flight
+            if (!v && (window as any).__instanceDialogPending) return;
             setOpen(v);
             if (!v) setEditing(null);
           }}
@@ -254,8 +266,15 @@ function InstancesPage() {
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => del.mutate(i.id)}>
+                      <AlertDialogCancel disabled={del.isPending}>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={del.isPending}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          del.mutate(i.id);
+                        }}
+                      >
+                        {del.isPending && <Loader2 className="mr-1 size-4 animate-spin" />}
                         Delete
                       </AlertDialogAction>
                     </AlertDialogFooter>
