@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { format, startOfMonth, subDays, subMonths } from "date-fns";
-import * as XLSX from "xlsx";
+import writeXlsxFile from "write-excel-file/browser";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { QuotaCard } from "@/components/quota-card";
@@ -139,13 +139,28 @@ function Usage() {
     triggerDownload(blob, `usage_${granularity}_${from}_${to}.csv`);
   };
 
-  const downloadXLSX = () => {
+  const downloadXLSX = async () => {
     const data = exportRows();
     if (data.length === 0) return;
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Usage");
-    XLSX.writeFile(wb, `usage_${granularity}_${from}_${to}.xlsx`);
+    const headers = Object.keys(data[0]);
+    const sheetData = [
+      headers.map((h) => ({
+        type: String,
+        value: h,
+        fontWeight: "bold" as const,
+      })),
+      ...data.map((row) =>
+        headers.map((h) => ({
+          type: String,
+          value: String((row as Record<string, unknown>)[h] ?? ""),
+        })),
+      ),
+    ];
+    await writeXlsxFile(sheetData, {
+      sheet: "Usage",
+      stickyRowsCount: 1,
+      fileName: `usage_${granularity}_${from}_${to}.xlsx`,
+    } as never);
   };
 
   const setPreset = (p: "7d" | "30d" | "90d" | "12m") => {
