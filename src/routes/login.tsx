@@ -2,6 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
+import { createTestAccount } from "@/lib/test-account.functions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [creatingTest, setCreatingTest] = useState(false);
 
   useEffect(() => {
     if (user) navigate({ to: "/dashboard" });
@@ -40,6 +42,22 @@ function Login() {
       redirect_uri: window.location.origin + "/dashboard",
     });
     if (result.error) toast.error(`${provider} sign-in failed`);
+  };
+
+  const handleCreateTestAccount = async () => {
+    setCreatingTest(true);
+    try {
+      const creds = await createTestAccount();
+      setEmail(creds.email);
+      setPassword(creds.password);
+      // Already on /login — ensure URL reflects it for consistency.
+      navigate({ to: "/login" });
+      toast.success("Test account ready — click Sign in to continue.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create test account");
+    } finally {
+      setCreatingTest(false);
+    }
   };
 
   return (
@@ -108,6 +126,25 @@ function Login() {
           <p className="mt-4 text-center text-sm text-muted-foreground">
             No account? <Link to="/signup" className="text-primary hover:underline">Sign up</Link>
           </p>
+
+          <div className="mt-4 border-t border-border pt-4">
+            <Button
+              type="button"
+              variant="ghost"
+              className="w-full text-xs text-muted-foreground"
+              onClick={handleCreateTestAccount}
+              disabled={creatingTest || loading}
+            >
+              {creatingTest ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  Creating test account…
+                </span>
+              ) : (
+                "New test account"
+              )}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
