@@ -12,6 +12,94 @@ import {
   localizedUrl,
   resolveLocale,
 } from "@/lib/seo-i18n";
+import {
+  buildBreadcrumbJsonLd,
+  buildDocsTechArticleJsonLd,
+} from "@/lib/seo-jsonld";
+
+/** Per-route docs page metadata keys (must have title/description/h1). */
+type DocsPageKey =
+  | "index"
+  | "gettingStarted"
+  | "concepts"
+  | "clients"
+  | "apiKeys"
+  | "n8nInstances"
+  | "tools"
+  | "quotas"
+  | "security";
+
+const HREFLANG_INLANGUAGE: Record<Locale, string> = {
+  en: "en",
+  zh: "zh-Hans",
+  ja: "ja",
+  es: "es",
+  de: "de",
+};
+
+/**
+ * One-stop head() builder for a docs route. Resolves the locale from the
+ * URL param, pulls title/description/breadcrumb-name from the matching docs
+ * dict, and emits unique meta + canonical/hreflang links + JSON-LD per
+ * locale so each language is a distinct, non-duplicated page.
+ */
+export function buildDocsRouteHead(args: {
+  rawLocale: unknown;
+  pageKey: DocsPageKey;
+  /** Key into `nav.items` used for the breadcrumb leaf name. */
+  navItemKey: keyof DocsDict["nav"]["items"];
+  /** Logical path (no locale prefix), e.g. "/docs/clients" or "/docs". */
+  logicalPath: string;
+}) {
+  const locale = resolveLocale(args.rawLocale);
+  const t = DOCS_DICTIONARIES[locale] ?? en;
+  const page = t[args.pageKey];
+  const { title, description } = page;
+  const url = localizedUrl(args.logicalPath, locale);
+  const docsRoot = t.nav.items.overview;
+  const isIndex = args.logicalPath.replace(/\/+$/, "") === "/docs";
+  const breadcrumb = isIndex
+    ? [{ name: "Home", path: "/" }, { name: docsRoot, path: "/docs" }]
+    : [
+        { name: "Home", path: "/" },
+        { name: docsRoot, path: "/docs" },
+        { name: t.nav.items[args.navItemKey], path: args.logicalPath },
+      ];
+
+  return {
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:url", content: url },
+      { property: "og:type", content: isIndex ? "website" : "article" },
+      { property: "og:locale", content: OG_LOCALE[locale] },
+      ...LOCALES.filter((l) => l !== locale).map((l) => ({
+        property: "og:locale:alternate",
+        content: OG_LOCALE[l],
+      })),
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: description },
+    ],
+    links: buildAlternateLinks(args.logicalPath, locale),
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({
+          title,
+          description,
+          path: args.logicalPath,
+          inLanguage: HREFLANG_INLANGUAGE[locale],
+        }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd(breadcrumb),
+      },
+    ],
+  };
+}
 
 export type DocsDict = typeof en;
 
