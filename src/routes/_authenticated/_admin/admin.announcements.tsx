@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import writeXlsxFile from "write-excel-file";
+import writeXlsxFile from "write-excel-file/browser";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -165,7 +165,7 @@ function buildFieldChanges(
   }));
 }
 
-function exportAudit(
+async function exportAudit(
   entries: ExportEntry[],
   format: "csv" | "json" | "xlsx",
 ) {
