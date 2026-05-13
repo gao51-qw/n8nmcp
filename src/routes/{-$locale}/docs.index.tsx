@@ -44,9 +44,6 @@ const CARDS: { to: string; title: string; desc: string }[] = [
   { to: "/docs/tools", title: "MCP tools reference", desc: "All runtime, knowledge and management tools the gateway exposes." },
   { to: "/docs/quotas", title: "Quotas & billing", desc: "Tier limits, usage tracking and upgrades." },
   { to: "/docs/security", title: "Security", desc: "Encryption at rest, SSRF protections, RLS and audit." },
-  { to: "/docs/admin", title: "Admin guide", desc: "Manage users, announcements, deployment and roles." },
-  { to: "/docs/self-hosting", title: "Self-hosting", desc: "Run the gateway in Docker on your own VPS." },
-  { to: "/docs/troubleshooting", title: "Troubleshooting", desc: "Common errors and how to fix them." },
 ];
 
 function DocsIndex() {
