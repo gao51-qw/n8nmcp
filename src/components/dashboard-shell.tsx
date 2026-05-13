@@ -14,7 +14,9 @@ import {
   Plug,
   MessagesSquare,
   Activity,
+  UserMinus,
 } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useEffect, useState, type ReactNode } from "react";
@@ -37,6 +39,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const { location } = useRouterState();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -47,6 +50,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       .eq("role", "admin")
       .maybeSingle()
       .then(({ data }) => setIsAdmin(!!data));
+    supabase
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", user.id)
+      .maybeSingle()
+      .then(({ data }) => setAvatarUrl(data?.avatar_url ?? null));
   }, [user]);
 
   const handleSignOut = async () => {
@@ -98,6 +107,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 <Users className="h-4 w-4" /> Users
               </Link>
               <Link
+                to="/admin/deletion-requests"
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                  location.pathname === "/admin/deletion-requests"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                }`}
+              >
+                <UserMinus className="h-4 w-4" /> Deletion Requests
+              </Link>
+              <Link
                 to="/admin/announcements"
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
                   location.pathname === "/admin/announcements"
@@ -121,9 +140,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           )}
         </nav>
         <div className="border-t border-sidebar-border p-3">
-          <div className="mb-2 px-3 text-xs text-sidebar-foreground/60 truncate">
-            {user?.email}
-          </div>
+          <Link
+            to="/settings"
+            className="mb-2 flex items-center gap-2 rounded-md px-3 py-2 text-xs text-sidebar-foreground/80 hover:bg-sidebar-accent/50"
+          >
+            <Avatar className="h-6 w-6">
+              {avatarUrl && <AvatarImage src={avatarUrl} />}
+              <AvatarFallback className="text-[10px]">
+                {(user?.email ?? "?").charAt(0).toUpperCase()}
+              </AvatarFallback>
+            </Avatar>
+            <span className="truncate">{user?.email}</span>
+          </Link>
           <Button variant="ghost" size="sm" className="w-full justify-start" onClick={handleSignOut}>
             <LogOut className="mr-2 h-4 w-4" /> Sign out
           </Button>
