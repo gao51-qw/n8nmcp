@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 import { Link } from "@/i18n/link";
 import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
+import { useDocsT } from "@/i18n/docs-dict";
 
 const TITLE = "Documentation — n8n-mcp";
 const DESC =
@@ -35,33 +36,20 @@ export const Route = createFileRoute("/{-$locale}/docs/")({
   component: DocsIndex,
 });
 
-const CARDS: { to: string; title: string; desc: string }[] = [
-  { to: "/docs/getting-started", title: "Getting started", desc: "Sign up, mint a key, connect your first client in 5 minutes." },
-  { to: "/docs/concepts", title: "Concepts", desc: "How the MCP gateway, API keys and n8n instances fit together." },
-  { to: "/docs/clients", title: "Connect a client", desc: "Config snippets for Claude, ChatGPT, Cursor, VS Code and more." },
-  { to: "/docs/api-keys", title: "API keys", desc: "Create, rotate and revoke platform tokens." },
-  { to: "/docs/n8n-instances", title: "n8n instances", desc: "Add your self-hosted or cloud n8n with encrypted credentials." },
-  { to: "/docs/tools", title: "MCP tools reference", desc: "All runtime, knowledge and management tools the gateway exposes." },
-  { to: "/docs/quotas", title: "Quotas & billing", desc: "Tier limits, usage tracking and upgrades." },
-  { to: "/docs/security", title: "Security", desc: "Encryption at rest, SSRF protections, RLS and audit." },
-];
-
 function DocsIndex() {
+  const t = useDocsT().index;
   return (
     <>
-      <h1>Documentation</h1>
-      <p className="lead text-muted-foreground">
-        n8n-mcp is a hosted Model Context Protocol gateway in front of your n8n instance.
-        Any MCP-capable client can list and call your workflows as typed tools, and use the
-        bundled knowledge base of ~1,650 n8n nodes to author new ones.
-      </p>
+      <h1>{t.h1}</h1>
+      <p className="lead text-muted-foreground">{t.lead}</p>
       <p className="text-muted-foreground">
-        Pick a topic below, or jump straight to{" "}
-        <Link to="/docs/getting-started">Getting started</Link>.
+        {t.pickPrefix}
+        <Link to="/docs/getting-started">{t.pickLink}</Link>
+        {t.pickSuffix}
       </p>
 
       <div className="not-prose mt-8 grid gap-3 sm:grid-cols-2">
-        {CARDS.map((c) => (
+        {t.cards.map((c) => (
           <Link
             key={c.to}
             to={c.to}
