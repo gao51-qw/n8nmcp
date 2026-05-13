@@ -55,6 +55,10 @@ function AnnouncementPreview() {
       if (error) throw error;
       return data as Announcement;
     },
+    // Keyed by id; the only mutation paths invalidate via
+    // ["admin-announcements"]. Treat as effectively immutable per id.
+    staleTime: Infinity,
+    gcTime: 30 * 60_000,
   });
 
   // Time we'll show in the article — mirrors what /whats-new will render once

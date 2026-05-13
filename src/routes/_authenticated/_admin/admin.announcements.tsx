@@ -514,6 +514,10 @@ function AdminAnnouncements() {
       }
       return { entries: list, actors };
     },
+    // Audit log is append-only; admin mutations invalidate it. 2 minutes
+    // is plenty fresh for an admin-only history view.
+    staleTime: 2 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const handleExportAll = async (format: "csv" | "json" | "xlsx") => {

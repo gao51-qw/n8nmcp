@@ -33,6 +33,10 @@ function ChatPage() {
       if (error) throw error;
       return data ?? [];
     },
+    // Mutations on this page invalidate ["chat-conversations"]; safe to
+    // keep cached aggressively to remove sidebar flicker.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   // Auto-select first conversation
@@ -52,6 +56,9 @@ function ChatPage() {
       if (error) throw error;
       return (data ?? []) as Message[];
     },
+    // Per-conversation message log; new messages invalidate this key.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const usage = useQuery({

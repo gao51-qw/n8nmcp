@@ -38,6 +38,11 @@ function AdminDeployment() {
     queryKey: ["admin-deployment-info"],
     queryFn: () => fetchInfo(),
     refetchInterval: 30_000,
+    // Match the polling interval so re-entering the page within 30s
+    // serves cached data instantly instead of triggering a duplicate
+    // foreground fetch and a brief loading state.
+    staleTime: 30_000,
+    gcTime: 30 * 60_000,
   });
 
   return (
