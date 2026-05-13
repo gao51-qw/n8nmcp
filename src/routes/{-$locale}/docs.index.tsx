@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Documentation — n8n-mcp";
 const DESC =
@@ -8,7 +9,7 @@ const DESC =
 const URL = "https://n8nmcp.lovable.app/docs";
 
 export const Route = createFileRoute("/{-$locale}/docs/")({
-  head: () => ({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/{-$locale}/docs/")({
       { name: "twitter:title", content: TITLE },
       { name: "twitter:description", content: DESC },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/docs", resolveLocale(params.locale)),
     scripts: [
       {
         type: "application/ld+json",

@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Privacy Policy — n8n-mcp";
 const DESC =
@@ -8,7 +9,7 @@ const DESC =
 const URL = "https://n8nmcp.lovable.app/privacy";
 
 export const Route = createFileRoute("/{-$locale}/privacy")({
-  head: () => ({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/{-$locale}/privacy")({
       { name: "twitter:description", content: DESC },
       { name: "robots", content: "index,follow" },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/privacy", resolveLocale(params.locale)),
   }),
   component: Privacy,
 });

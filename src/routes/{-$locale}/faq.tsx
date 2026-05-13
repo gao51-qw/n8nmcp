@@ -21,9 +21,10 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/context";
 import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 export const Route = createFileRoute("/{-$locale}/faq")({
-  head: () => {
+  head: ({ params }) => {
     const TITLE = "FAQ — n8n-mcp";
     const DESC =
       "Common questions about n8n-mcp: supported AI clients, security, pricing, self-hosting and the MCP protocol.";
@@ -39,7 +40,7 @@ export const Route = createFileRoute("/{-$locale}/faq")({
         { name: "twitter:title", content: TITLE },
         { name: "twitter:description", content: DESC },
       ],
-      links: [{ rel: "canonical", href: URL }],
+      links: buildAlternateLinks("/faq", resolveLocale(params.locale)),
       scripts: [
         {
           type: "application/ld+json",

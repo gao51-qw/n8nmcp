@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { getAllPosts, getAllTags, formatPostDate } from "@/lib/blog";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
 import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
@@ -98,7 +99,7 @@ export const Route = createFileRoute("/{-$locale}/blog/")({
       })),
     };
   },
-  head: ({ loaderData }) => {
+  head: ({ params, loaderData }) => {
     const TITLE = "Blog — n8n-mcp";
     const DESC =
       "Release notes, deep-dives and tutorials from the n8n-mcp team — building an MCP gateway for n8n.";
