@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AuthRedirectOverlay } from "@/components/auth-redirect-overlay";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({ meta: [{ title: "Sign up — n8n-mcp" }] }),
@@ -49,6 +50,7 @@ function Signup() {
   const handleOAuth = async (provider: "google" | "apple") => {
     if (anyPending) return;
     setPendingAction(provider);
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
       const result = await lovable.auth.signInWithOAuth(provider, {
         redirect_uri: window.location.origin + "/dashboard",
@@ -65,6 +67,9 @@ function Signup() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center px-4">
+      <AuthRedirectOverlay
+        provider={pendingAction === "google" || pendingAction === "apple" ? pendingAction : null}
+      />
       <div className="absolute right-4 top-4"><ThemeToggle /></div>
       <div className="w-full max-w-sm space-y-6">
         <Link to="/" className="flex items-center justify-center gap-2 font-semibold">
