@@ -26,6 +26,7 @@ import { Route as Char123LocaleChar125FaqRouteImport } from './routes/{-$locale}
 import { Route as Char123LocaleChar125DocsRouteImport } from './routes/{-$locale}/docs'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
+import { Route as AuthenticatedTicketsRouteImport } from './routes/_authenticated/tickets'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedInstancesRouteImport } from './routes/_authenticated/instances'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -142,6 +143,11 @@ const AuthenticatedWhatsNewRoute = AuthenticatedWhatsNewRouteImport.update({
 const AuthenticatedUsageRoute = AuthenticatedUsageRouteImport.update({
   id: '/usage',
   path: '/usage',
+  getParentRoute: () => AuthenticatedRoute,
+} as any)
+const AuthenticatedTicketsRoute = AuthenticatedTicketsRouteImport.update({
+  id: '/tickets',
+  path: '/tickets',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
 const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
@@ -312,6 +318,7 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/instances': typeof AuthenticatedInstancesRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tickets': typeof AuthenticatedTicketsRoute
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/{-$locale}/docs': typeof Char123LocaleChar125DocsRouteWithChildren
@@ -357,6 +364,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof AuthenticatedDashboardRoute
   '/instances': typeof AuthenticatedInstancesRoute
   '/settings': typeof AuthenticatedSettingsRoute
+  '/tickets': typeof AuthenticatedTicketsRoute
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/{-$locale}/faq': typeof Char123LocaleChar125FaqRoute
@@ -403,6 +411,7 @@ export interface FileRoutesById {
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
   '/_authenticated/instances': typeof AuthenticatedInstancesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
+  '/_authenticated/tickets': typeof AuthenticatedTicketsRoute
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/{-$locale}/docs': typeof Char123LocaleChar125DocsRouteWithChildren
@@ -450,6 +459,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/instances'
     | '/settings'
+    | '/tickets'
     | '/usage'
     | '/whats-new'
     | '/{-$locale}/docs'
@@ -495,6 +505,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/instances'
     | '/settings'
+    | '/tickets'
     | '/usage'
     | '/whats-new'
     | '/{-$locale}/faq'
@@ -540,6 +551,7 @@ export interface FileRouteTypes {
     | '/_authenticated/dashboard'
     | '/_authenticated/instances'
     | '/_authenticated/settings'
+    | '/_authenticated/tickets'
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/{-$locale}/docs'
@@ -711,6 +723,13 @@ declare module '@tanstack/react-router' {
       path: '/usage'
       fullPath: '/usage'
       preLoaderRoute: typeof AuthenticatedUsageRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
+    '/_authenticated/tickets': {
+      id: '/_authenticated/tickets'
+      path: '/tickets'
+      fullPath: '/tickets'
+      preLoaderRoute: typeof AuthenticatedTicketsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
     '/_authenticated/settings': {
@@ -952,6 +971,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedInstancesRoute: typeof AuthenticatedInstancesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
+  AuthenticatedTicketsRoute: typeof AuthenticatedTicketsRoute
   AuthenticatedUsageRoute: typeof AuthenticatedUsageRoute
   AuthenticatedWhatsNewRoute: typeof AuthenticatedWhatsNewRoute
 }
@@ -965,6 +985,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedInstancesRoute: AuthenticatedInstancesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
+  AuthenticatedTicketsRoute: AuthenticatedTicketsRoute,
   AuthenticatedUsageRoute: AuthenticatedUsageRoute,
   AuthenticatedWhatsNewRoute: AuthenticatedWhatsNewRoute,
 }
