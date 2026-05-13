@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "Quotas & billing — n8n-mcp docs";
 const DESC = "Per-key request quotas, plan limits, and how usage is metered across MCP tool calls.";
@@ -15,6 +16,16 @@ export const Route = createFileRoute("/docs/quotas")({
       { property: "og:type", content: "article" },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/quotas' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'Quotas & billing', path: '/docs/quotas' }]),
+      },
+    ],
   }),
   component: Page,
 });

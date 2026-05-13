@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "MCP tools reference — n8n-mcp docs";
 const DESC = "Complete reference of runtime, knowledge and management tools exposed by the n8n-mcp gateway.";
@@ -15,6 +16,16 @@ export const Route = createFileRoute("/docs/tools")({
       { property: "og:type", content: "article" },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/tools' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'MCP tools reference', path: '/docs/tools' }]),
+      },
+    ],
   }),
   component: Page,
 });

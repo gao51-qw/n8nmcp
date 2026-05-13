@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "Platform API keys — n8n-mcp docs";
 const DESC = "Create, label, rotate and revoke nmcp_ platform API keys used by your MCP clients.";
@@ -15,6 +16,16 @@ export const Route = createFileRoute("/docs/api-keys")({
       { property: "og:type", content: "article" },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/api-keys' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'API keys', path: '/docs/api-keys' }]),
+      },
+    ],
   }),
   component: Page,
 });

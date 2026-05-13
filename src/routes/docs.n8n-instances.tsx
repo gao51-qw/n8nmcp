@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "n8n instances — n8n-mcp docs";
 const DESC = "Connect your self-hosted or n8n.cloud instance, store API keys encrypted, and protect against SSRF.";
@@ -15,6 +16,16 @@ export const Route = createFileRoute("/docs/n8n-instances")({
       { property: "og:type", content: "article" },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/n8n-instances' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'n8n instances', path: '/docs/n8n-instances' }]),
+      },
+    ],
   }),
   component: Page,
 });

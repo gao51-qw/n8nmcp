@@ -37,6 +37,7 @@ import {
   Search,
 } from "lucide-react";
 import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
+import { buildWebSiteJsonLd } from "@/lib/seo-jsonld";
 import n8nStats from "@/data/n8n-stats.json";
 
 export const Route = createFileRoute("/")({
@@ -82,6 +83,10 @@ export const Route = createFileRoute("/")({
         {
           type: "application/ld+json",
           children: JSON.stringify(faqSchema),
+        },
+        {
+          type: "application/ld+json",
+          children: buildWebSiteJsonLd(),
         },
       ],
     };

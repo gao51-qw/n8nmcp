@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "Getting started — n8n-mcp docs";
 const DESC = "Sign up, create a platform API key, connect your n8n instance and wire up your first MCP client in under five minutes.";
@@ -17,6 +18,16 @@ export const Route = createFileRoute("/docs/getting-started")({
       { name: "twitter:description", content: DESC },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/getting-started' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'Getting started', path: '/docs/getting-started' }]),
+      },
+    ],
   }),
   component: Page,
 });

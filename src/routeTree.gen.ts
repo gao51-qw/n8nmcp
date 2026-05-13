@@ -16,6 +16,8 @@ import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
+import { Route as LlmsFullDottxtRouteImport } from './routes/llms-full[.]txt'
 import { Route as ImprintRouteImport } from './routes/imprint'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as DocsRouteImport } from './routes/docs'
@@ -85,6 +87,16 @@ const PricingRoute = PricingRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LlmsDottxtRoute = LlmsDottxtRouteImport.update({
+  id: '/llms.txt',
+  path: '/llms.txt',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LlmsFullDottxtRoute = LlmsFullDottxtRouteImport.update({
+  id: '/llms-full.txt',
+  path: '/llms-full.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ImprintRoute = ImprintRouteImport.update({
@@ -273,6 +285,8 @@ export interface FileRoutesByFullPath {
   '/docs': typeof DocsRouteWithChildren
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
+  '/llms-full.txt': typeof LlmsFullDottxtRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
@@ -314,6 +328,8 @@ export interface FileRoutesByTo {
   '/admin-setup': typeof AdminSetupRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
+  '/llms-full.txt': typeof LlmsFullDottxtRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
@@ -358,6 +374,8 @@ export interface FileRoutesById {
   '/docs': typeof DocsRouteWithChildren
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
+  '/llms-full.txt': typeof LlmsFullDottxtRoute
+  '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
   '/pricing': typeof PricingRoute
   '/privacy': typeof PrivacyRoute
@@ -403,6 +421,8 @@ export interface FileRouteTypes {
     | '/docs'
     | '/faq'
     | '/imprint'
+    | '/llms-full.txt'
+    | '/llms.txt'
     | '/login'
     | '/pricing'
     | '/privacy'
@@ -444,6 +464,8 @@ export interface FileRouteTypes {
     | '/admin-setup'
     | '/faq'
     | '/imprint'
+    | '/llms-full.txt'
+    | '/llms.txt'
     | '/login'
     | '/pricing'
     | '/privacy'
@@ -487,6 +509,8 @@ export interface FileRouteTypes {
     | '/docs'
     | '/faq'
     | '/imprint'
+    | '/llms-full.txt'
+    | '/llms.txt'
     | '/login'
     | '/pricing'
     | '/privacy'
@@ -532,6 +556,8 @@ export interface RootRouteChildren {
   DocsRoute: typeof DocsRouteWithChildren
   FaqRoute: typeof FaqRoute
   ImprintRoute: typeof ImprintRoute
+  LlmsFullDottxtRoute: typeof LlmsFullDottxtRoute
+  LlmsDottxtRoute: typeof LlmsDottxtRoute
   LoginRoute: typeof LoginRoute
   PricingRoute: typeof PricingRoute
   PrivacyRoute: typeof PrivacyRoute
@@ -594,6 +620,20 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms.txt': {
+      id: '/llms.txt'
+      path: '/llms.txt'
+      fullPath: '/llms.txt'
+      preLoaderRoute: typeof LlmsDottxtRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/llms-full.txt': {
+      id: '/llms-full.txt'
+      path: '/llms-full.txt'
+      fullPath: '/llms-full.txt'
+      preLoaderRoute: typeof LlmsFullDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/imprint': {
@@ -945,6 +985,8 @@ const rootRouteChildren: RootRouteChildren = {
   DocsRoute: DocsRouteWithChildren,
   FaqRoute: FaqRoute,
   ImprintRoute: ImprintRoute,
+  LlmsFullDottxtRoute: LlmsFullDottxtRoute,
+  LlmsDottxtRoute: LlmsDottxtRoute,
   LoginRoute: LoginRoute,
   PricingRoute: PricingRoute,
   PrivacyRoute: PrivacyRoute,
