@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/context";
 import { Link } from "@/i18n/link";
-import { buildLocalizedHead } from "@/lib/seo-i18n";
+import { buildLocalizedHead, resolveLocale } from "@/lib/seo-i18n";
 
 export const Route = createFileRoute("/{-$locale}/faq")({
   head: ({ params }) => {
@@ -30,12 +30,13 @@ export const Route = createFileRoute("/{-$locale}/faq")({
       logicalPath: "/faq",
       pickStrings: (t) => t.seo.faq,
     });
+    const locale = resolveLocale(params.locale);
     return {
       ...base,
       scripts: [
         {
           type: "application/ld+json",
-          children: JSON.stringify(buildFaqJsonLd()),
+          children: JSON.stringify(buildFaqJsonLd(locale)),
         },
       ],
     };
