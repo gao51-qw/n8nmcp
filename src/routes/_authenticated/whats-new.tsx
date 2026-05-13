@@ -27,6 +27,37 @@ type Announcement = {
   published_at: string;
 };
 
+type ErrorStage = "db_query" | "seed_fetch" | "db_requery";
+
+const STAGE_LABELS: Record<ErrorStage, string> = {
+  db_query: "Database query failed",
+  seed_fetch: "Seed data fetch failed",
+  db_requery: "Database re-query after seeding failed",
+};
+
+const STAGE_DESCRIPTIONS: Record<ErrorStage, string> = {
+  db_query: "Could not read announcements from the database.",
+  seed_fetch: "The table was empty and the default seed loader failed.",
+  db_requery: "Seeding succeeded but reading the new rows failed.",
+};
+
+class StagedError extends Error {
+  stage: ErrorStage;
+  cause?: unknown;
+  constructor(stage: ErrorStage, cause: unknown) {
+    const msg =
+      cause instanceof Error
+        ? cause.message
+        : typeof cause === "string"
+          ? cause
+          : "Unknown error";
+    super(msg);
+    this.name = "StagedError";
+    this.stage = stage;
+    this.cause = cause;
+  }
+}
+
 export const Route = createFileRoute("/_authenticated/whats-new")({
   head: () => ({ meta: [{ title: "What's New — n8n-mcp" }] }),
   component: WhatsNew,
@@ -55,22 +86,48 @@ function WhatsNew() {
     queryFn: async () => {
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
-      let { data, count, error } = await supabase
-        .from("announcements")
-        .select("*", { count: "exact" })
-        .eq("status", "published")
-        .order("published_at", { ascending: false })
-        .range(from, to);
-      if (error) {
+      let data: Announcement[] | null = null;
+      let count: number | null = null;
+      try {
+        const res = await supabase
+          .from("announcements")
+          .select("*", { count: "exact" })
+          .eq("status", "published")
+          .order("published_at", { ascending: false })
+          .range(from, to);
+        if (res.error) throw res.error;
+        data = res.data as Announcement[] | null;
+        count = res.count;
+      } catch (e) {
         setErrorAt(new Date().toISOString());
-        throw error;
+        // eslint-disable-next-line no-console
+        console.error("[whats-new] failure", {
+          stage: "db_query",
+          stageLabel: STAGE_LABELS.db_query,
+          message: (e as Error)?.message,
+          page,
+        });
+        throw new StagedError("db_query", e);
       }
       let source: string = "database";
       let seeded = false;
       // If the very first page is empty, ask the server to backfill from the
       // default seed source, then re-query so the user sees content.
       if (page === 0 && (count ?? 0) === 0) {
-        const result = await ensureSeeded();
+        let result;
+        try {
+          result = await ensureSeeded();
+        } catch (e) {
+          setErrorAt(new Date().toISOString());
+          // eslint-disable-next-line no-console
+          console.error("[whats-new] failure", {
+            stage: "seed_fetch",
+            stageLabel: STAGE_LABELS.seed_fetch,
+            message: (e as Error)?.message,
+            page,
+          });
+          throw new StagedError("seed_fetch", e);
+        }
         source = result.source;
         seeded = result.seeded;
         // eslint-disable-next-line no-console
@@ -81,14 +138,27 @@ function WhatsNew() {
           fetchedAt: result.fetchedAt,
         });
         if (seeded) {
-          const refetch = await supabase
-            .from("announcements")
-            .select("*", { count: "exact" })
-            .eq("status", "published")
-            .order("published_at", { ascending: false })
-            .range(from, to);
-          data = refetch.data;
-          count = refetch.count;
+          try {
+            const refetch = await supabase
+              .from("announcements")
+              .select("*", { count: "exact" })
+              .eq("status", "published")
+              .order("published_at", { ascending: false })
+              .range(from, to);
+            if (refetch.error) throw refetch.error;
+            data = refetch.data as Announcement[] | null;
+            count = refetch.count;
+          } catch (e) {
+            setErrorAt(new Date().toISOString());
+            // eslint-disable-next-line no-console
+            console.error("[whats-new] failure", {
+              stage: "db_requery",
+              stageLabel: STAGE_LABELS.db_requery,
+              message: (e as Error)?.message,
+              page,
+            });
+            throw new StagedError("db_requery", e);
+          }
         }
       } else {
         // eslint-disable-next-line no-console
@@ -109,13 +179,38 @@ function WhatsNew() {
     retry: 1,
   });
 
-  const errorObj = error as Error | undefined;
+  const errorObj = error as (Error & { stage?: ErrorStage; cause?: unknown }) | undefined;
+  const errorStage: ErrorStage | undefined = errorObj?.stage;
+  const stageLabel = errorStage ? STAGE_LABELS[errorStage] : "Couldn't load announcements";
+  const stageDescription = errorStage ? STAGE_DESCRIPTIONS[errorStage] : null;
   const errorName = errorObj?.name ?? "Error";
   const errorMessage = errorObj?.message ?? "Unknown error";
   const errorStack = errorObj?.stack;
   const errorJson = (() => {
     try {
-      return JSON.stringify(errorObj, Object.getOwnPropertyNames(errorObj ?? {}), 2);
+      const cause = errorObj?.cause;
+      const payload = {
+        ...(errorObj
+          ? Object.fromEntries(
+              Object.getOwnPropertyNames(errorObj).map((k) => [
+                k,
+                (errorObj as unknown as Record<string, unknown>)[k],
+              ]),
+            )
+          : {}),
+        ...(cause && cause instanceof Error
+          ? {
+              cause: {
+                name: cause.name,
+                message: cause.message,
+                stack: cause.stack,
+              },
+            }
+          : cause !== undefined
+            ? { cause }
+            : {}),
+      };
+      return JSON.stringify(payload, null, 2);
     } catch {
       return null;
     }
@@ -172,8 +267,18 @@ function WhatsNew() {
           <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-destructive/10">
             <AlertTriangle className="h-6 w-6 text-destructive" />
           </div>
-          <h2 className="mt-4 text-lg font-semibold">Couldn't load announcements</h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+          <h2 className="mt-4 text-lg font-semibold">{stageLabel}</h2>
+          {errorStage ? (
+            <div className="mx-auto mt-2 inline-flex items-center gap-1 rounded-full border border-destructive/30 bg-destructive/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+              stage: {errorStage}
+            </div>
+          ) : null}
+          {stageDescription ? (
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              {stageDescription}
+            </p>
+          ) : null}
+          <p className="mx-auto mt-1 max-w-md text-xs text-muted-foreground">
             {errorMessage ||
               "The request failed. Check your connection and try again."}
           </p>
@@ -300,6 +405,10 @@ function WhatsNew() {
           </DialogHeader>
           <div className="space-y-4 text-sm">
             <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+              <span className="text-muted-foreground">Stage</span>
+              <span className="font-mono text-xs">
+                {errorStage ? `${errorStage} — ${STAGE_LABELS[errorStage]}` : "unknown"}
+              </span>
               <span className="text-muted-foreground">Time</span>
               <span className="font-mono text-xs">
                 {errorAt ? `${formatLocalLong(errorAt)} (${errorAt})` : "—"}
