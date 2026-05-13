@@ -1,13 +1,41 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { useRef, useState } from "react";
-import { Check, Copy } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Check, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 
 function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
+  const [parsedObj, setParsedObj] = useState<any>(null);
+
+  const getText = () => ref.current?.innerText ?? "";
+
+  const tryParseJson = (): { ok: true; obj: any; text: string } | { ok: false } => {
+    const text = getText().trim();
+    if (!text || (text[0] !== "{" && text[0] !== "[")) return { ok: false };
+    try {
+      return { ok: true, obj: JSON.parse(text), text };
+    } catch {
+      return { ok: false };
+    }
+  };
+
+  const looksLikeN8n = (obj: any) =>
+    obj && typeof obj === "object" && Array.isArray(obj.nodes) && obj.connections;
+
+  useEffect(() => {
+    const p = tryParseJson();
+    if (p.ok && looksLikeN8n(p.obj)) {
+      setParsedObj(p.obj);
+      setShowDownload(true);
+    } else {
+      setParsedObj(null);
+      setShowDownload(false);
+    }
+  }, [props.children]);
 
   const onCopy = async () => {
     const text = ref.current?.innerText ?? "";
@@ -21,17 +49,51 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
     }
   };
 
+  const onDownload = () => {
+    const obj = parsedObj ?? (tryParseJson().ok ? (tryParseJson() as any).obj : null);
+    if (!obj) {
+      toast.error("无法解析为 JSON", { duration: 1200 });
+      return;
+    }
+    const pretty = JSON.stringify(obj, null, 2);
+    const rawName = typeof obj?.name === "string" && obj.name.trim() ? obj.name.trim() : "n8n-workflow";
+    const safe = rawName.replace(/[^\w\u4e00-\u9fa5.\- ]+/g, "_").slice(0, 80);
+    const blob = new Blob([pretty], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${safe}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast.success("已开始下载", { duration: 1000 });
+  };
+
   return (
     <div className="group relative my-3">
-      <button
-        type="button"
-        onClick={onCopy}
-        aria-label={copied ? "Copied" : "Copy code"}
-        className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-background/80 px-2 py-1 text-[11px] font-medium text-muted-foreground opacity-0 backdrop-blur transition hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
-      >
-        {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
-        {copied ? "Copied" : "Copy"}
-      </button>
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+        {showDownload && (
+          <button
+            type="button"
+            onClick={onDownload}
+            aria-label="Download .json"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-background/80 px-2 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur transition hover:text-foreground"
+          >
+            <Download className="h-3 w-3" />
+            .json
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onCopy}
+          aria-label={copied ? "Copied" : "Copy code"}
+          className="inline-flex items-center gap-1 rounded-md border border-border bg-background/80 px-2 py-1 text-[11px] font-medium text-muted-foreground backdrop-blur transition hover:text-foreground"
+        >
+          {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
       <pre
         ref={ref}
         className="overflow-x-auto rounded-md border border-border bg-muted/60 p-3 pr-16 font-mono text-xs leading-relaxed text-foreground"
