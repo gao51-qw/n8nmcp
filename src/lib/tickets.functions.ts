@@ -142,7 +142,10 @@ export const getTicket = createServerFn({ method: "POST" })
       const p = profMap.get(r.author_id);
       return {
         ...(r as unknown as TicketReplyRow),
-        author_name: p?.display_name ?? p?.email ?? null,
+        // Never leak admin email addresses to ticket owners.
+        author_name: r.is_admin
+          ? (p?.display_name ?? "Support Team")
+          : (p?.display_name ?? p?.email ?? null),
         author_avatar: p?.avatar_url ?? null,
       };
     });

@@ -35,7 +35,10 @@ export const adminListUsers = createServerFn({ method: "POST" })
       .select("id, email, display_name, avatar_url, created_at", { count: "exact" })
       .order("created_at", { ascending });
     if (data.search) {
-      const term = `%${data.search.replace(/[%,]/g, "")}%`;
+      // Strip all PostgREST filter-structural characters to prevent .or() injection.
+      // Keep only letters, numbers, spaces, and a small set of safe email/name chars.
+      const safe = data.search.replace(/[^\w\s@.\-+]/g, "");
+      const term = `%${safe}%`;
       q = q.or(`email.ilike.${term},display_name.ilike.${term}`);
     }
     const from = (data.page - 1) * data.pageSize;
