@@ -1,6 +1,43 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
+import { useRef, useState } from "react";
+import { Check, Copy } from "lucide-react";
+
+function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
+  const ref = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+
+  const onCopy = async () => {
+    const text = ref.current?.innerText ?? "";
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  return (
+    <div className="group relative my-3">
+      <button
+        type="button"
+        onClick={onCopy}
+        aria-label={copied ? "Copied" : "Copy code"}
+        className="absolute right-2 top-2 z-10 inline-flex items-center gap-1 rounded-md border border-border bg-background/80 px-2 py-1 text-[11px] font-medium text-muted-foreground opacity-0 backdrop-blur transition hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        {copied ? <Check className="h-3 w-3 text-success" /> : <Copy className="h-3 w-3" />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+      <pre
+        ref={ref}
+        className="overflow-x-auto rounded-md border border-border bg-muted/60 p-3 pr-16 font-mono text-xs leading-relaxed text-foreground"
+        {...props}
+      />
+    </div>
+  );
+}
 
 /**
  * Safe Markdown renderer for announcement bodies.
@@ -52,12 +89,7 @@ export function Markdown({ children, className = "" }: { children: string; class
               </code>
             );
           },
-          pre: ({ node, ...p }) => (
-            <pre
-              className="my-3 overflow-x-auto rounded-md border border-border bg-muted/60 p-3 font-mono text-xs leading-relaxed text-foreground"
-              {...p}
-            />
-          ),
+          pre: ({ node, ...p }) => <CodeBlock {...p} />,
           table: ({ node, ...p }) => (
             <div className="my-3 overflow-x-auto">
               <table className="w-full border-collapse text-xs" {...p} />
