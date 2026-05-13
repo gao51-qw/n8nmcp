@@ -31,14 +31,6 @@ export const DOCS_NAV: DocSection[] = [
       { to: "/docs/security", label: "Security" },
     ],
   },
-  {
-    label: "Operations",
-    items: [
-      { to: "/docs/admin", label: "Admin guide" },
-      { to: "/docs/self-hosting", label: "Self-hosting" },
-      { to: "/docs/troubleshooting", label: "Troubleshooting" },
-    ],
-  },
 ];
 
 export function DocsLayout({ children }: { children: React.ReactNode }) {
