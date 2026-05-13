@@ -27,6 +27,7 @@ import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as DocsGettingStartedRouteImport } from './routes/docs.getting-started'
 import { Route as DocsConceptsRouteImport } from './routes/docs.concepts'
 import { Route as DocsClientsRouteImport } from './routes/docs.clients'
+import { Route as DocsApiKeysRouteImport } from './routes/docs.api-keys'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
@@ -133,6 +134,11 @@ const DocsConceptsRoute = DocsConceptsRouteImport.update({
 const DocsClientsRoute = DocsClientsRouteImport.update({
   id: '/clients',
   path: '/clients',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsApiKeysRoute = DocsApiKeysRouteImport.update({
+  id: '/api-keys',
+  path: '/api-keys',
   getParentRoute: () => DocsRoute,
 } as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
@@ -253,6 +259,7 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/api-keys': typeof DocsApiKeysRoute
   '/docs/clients': typeof DocsClientsRoute
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
@@ -288,6 +295,7 @@ export interface FileRoutesByTo {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/api-keys': typeof DocsApiKeysRoute
   '/docs/clients': typeof DocsClientsRoute
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
@@ -327,6 +335,7 @@ export interface FileRoutesById {
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/api-keys': typeof DocsApiKeysRoute
   '/docs/clients': typeof DocsClientsRoute
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
@@ -365,6 +374,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/docs/api-keys'
     | '/docs/clients'
     | '/docs/concepts'
     | '/docs/getting-started'
@@ -400,6 +410,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/docs/api-keys'
     | '/docs/clients'
     | '/docs/concepts'
     | '/docs/getting-started'
@@ -438,6 +449,7 @@ export interface FileRouteTypes {
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/blog/$slug'
+    | '/docs/api-keys'
     | '/docs/clients'
     | '/docs/concepts'
     | '/docs/getting-started'
@@ -598,6 +610,13 @@ declare module '@tanstack/react-router' {
       path: '/clients'
       fullPath: '/docs/clients'
       preLoaderRoute: typeof DocsClientsRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/api-keys': {
+      id: '/docs/api-keys'
+      path: '/api-keys'
+      fullPath: '/docs/api-keys'
+      preLoaderRoute: typeof DocsApiKeysRouteImport
       parentRoute: typeof DocsRoute
     }
     '/blog/$slug': {
@@ -795,6 +814,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 )
 
 interface DocsRouteChildren {
+  DocsApiKeysRoute: typeof DocsApiKeysRoute
   DocsClientsRoute: typeof DocsClientsRoute
   DocsConceptsRoute: typeof DocsConceptsRoute
   DocsGettingStartedRoute: typeof DocsGettingStartedRoute
@@ -802,6 +822,7 @@ interface DocsRouteChildren {
 }
 
 const DocsRouteChildren: DocsRouteChildren = {
+  DocsApiKeysRoute: DocsApiKeysRoute,
   DocsClientsRoute: DocsClientsRoute,
   DocsConceptsRoute: DocsConceptsRoute,
   DocsGettingStartedRoute: DocsGettingStartedRoute,
