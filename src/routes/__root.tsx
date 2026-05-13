@@ -18,6 +18,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
 import { NavPerfOverlay } from "@/components/nav-perf-overlay";
 import { getPublicSiteSettings } from "@/lib/site-settings.functions";
+import { LocaleProvider } from "@/i18n/context";
 
 function NotFoundComponent() {
   return (
@@ -197,7 +198,8 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
+        <LocaleProvider>
+          <TooltipProvider>
           <main id="main" tabIndex={-1} className="outline-none">
             {/*
               No keyed wrapper / entrance animation here.
@@ -212,7 +214,8 @@ function RootComponent() {
           </main>
           <Toaster richColors position="top-right" />
           <NavPerfOverlay />
-        </TooltipProvider>
+          </TooltipProvider>
+        </LocaleProvider>
       </AuthProvider>
     </QueryClientProvider>
   );

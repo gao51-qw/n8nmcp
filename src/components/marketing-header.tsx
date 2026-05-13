@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Menu, Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { LanguageSwitcher } from "@/components/language-switcher";
+import { useT } from "@/i18n/context";
 import {
   Sheet,
   SheetContent,
@@ -16,24 +18,25 @@ type NavLink =
   | { kind: "internal"; to: string; hash?: string; label: string }
   | { kind: "external"; href: string; label: string };
 
-const NAV_LINKS: NavLink[] = [
-  { kind: "internal", to: "/", hash: "features", label: "Features" },
-  { kind: "internal", to: "/", hash: "diy", label: "vs DIY" },
-  { kind: "internal", to: "/", hash: "architecture", label: "Architecture" },
-  { kind: "internal", to: "/pricing", label: "Pricing" },
-  { kind: "internal", to: "/docs", label: "Docs" },
-  { kind: "internal", to: "/blog", label: "Blog" },
-  { kind: "internal", to: "/", hash: "community", label: "Community" },
-  { kind: "internal", to: "/faq", label: "FAQ" },
-  { kind: "external", href: "https://github.com/czlonkowski/n8n-mcp", label: "GitHub" },
-];
-
 export function MarketingHeader() {
   const { user } = useAuth();
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   const close = () => setOpen(false);
+
+  const NAV_LINKS: NavLink[] = [
+    { kind: "internal", to: "/", hash: "features", label: t.nav.features },
+    { kind: "internal", to: "/", hash: "diy", label: t.nav.diy },
+    { kind: "internal", to: "/", hash: "architecture", label: t.nav.architecture },
+    { kind: "internal", to: "/pricing", label: t.nav.pricing },
+    { kind: "internal", to: "/docs", label: t.nav.docs },
+    { kind: "internal", to: "/blog", label: t.nav.blog },
+    { kind: "internal", to: "/", hash: "community", label: t.nav.community },
+    { kind: "internal", to: "/faq", label: t.nav.faq },
+    { kind: "external", href: "https://github.com/czlonkowski/n8n-mcp", label: t.nav.github },
+  ];
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
@@ -66,14 +69,15 @@ export function MarketingHeader() {
         </nav>
 
         <div className="flex items-center gap-2">
+          <LanguageSwitcher compact />
           <ThemeToggle />
           <div className="hidden items-center gap-2 md:flex" suppressHydrationWarning>
             {!mounted ? null : user ? (
-              <Button asChild size="sm"><Link to="/dashboard">Dashboard</Link></Button>
+              <Button asChild size="sm"><Link to="/dashboard">{t.nav.dashboard}</Link></Button>
             ) : (
               <>
-                <Button asChild variant="ghost" size="sm"><Link to="/login">Sign in</Link></Button>
-                <Button asChild size="sm"><Link to="/signup">Get started</Link></Button>
+                <Button asChild variant="ghost" size="sm"><Link to="/login">{t.nav.signIn}</Link></Button>
+                <Button asChild size="sm"><Link to="/signup">{t.nav.getStarted}</Link></Button>
               </>
             )}
           </div>
@@ -81,13 +85,13 @@ export function MarketingHeader() {
           {/* Mobile menu */}
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="md:hidden" aria-label="Open menu">
+              <Button variant="ghost" size="icon" className="md:hidden" aria-label={t.nav.openMenu}>
                 <Menu className="h-5 w-5" />
               </Button>
             </SheetTrigger>
             <SheetContent side="right" className="w-[85%] max-w-sm">
               <SheetHeader>
-                <SheetTitle>Menu</SheetTitle>
+                <SheetTitle>{t.nav.menu}</SheetTitle>
               </SheetHeader>
               <nav className="mt-6 flex flex-col gap-1 text-base">
                 {NAV_LINKS.map((l) =>
@@ -118,15 +122,15 @@ export function MarketingHeader() {
               <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6" suppressHydrationWarning>
                 {!mounted ? null : user ? (
                   <Button asChild onClick={close}>
-                    <Link to="/dashboard">Dashboard</Link>
+                    <Link to="/dashboard">{t.nav.dashboard}</Link>
                   </Button>
                 ) : (
                   <>
                     <Button asChild variant="outline" onClick={close}>
-                      <Link to="/login">Sign in</Link>
+                      <Link to="/login">{t.nav.signIn}</Link>
                     </Button>
                     <Button asChild onClick={close}>
-                      <Link to="/signup">Get started</Link>
+                      <Link to="/signup">{t.nav.getStarted}</Link>
                     </Button>
                   </>
                 )}

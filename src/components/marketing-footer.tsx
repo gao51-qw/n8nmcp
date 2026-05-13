@@ -1,39 +1,41 @@
 import { Link } from "@tanstack/react-router";
 import { Sparkles } from "lucide-react";
-
-const SECTIONS = [
-  {
-    title: "Product",
-    links: [
-      { label: "Pricing", to: "/pricing" as const },
-      { label: "Docs", to: "/docs" as const },
-      { label: "Sign in", to: "/login" as const },
-      { label: "Get started", to: "/signup" as const },
-    ],
-  },
-  {
-    title: "Resources",
-    links: [
-      { label: "MCP protocol", href: "https://modelcontextprotocol.io" },
-      { label: "n8n", href: "https://n8n.io" },
-      { label: "GitHub", href: "https://github.com/czlonkowski/n8n-mcp" },
-      { label: "Star history", href: "https://star-history.com/#czlonkowski/n8n-mcp&Date" },
-      { label: "Status", href: "https://status.lovable.app" },
-    ],
-  },
-  {
-    title: "Legal",
-    links: [
-      { label: "Terms of Service", to: "/terms" as const },
-      { label: "Privacy Policy", to: "/privacy" as const },
-      { label: "Cookies", to: "/privacy" as const, hash: "cookies" },
-      { label: "Imprint", to: "/imprint" as const },
-      { label: "Contact", href: "mailto:hello@n8nmcp.app" },
-    ],
-  },
-];
+import { useT } from "@/i18n/context";
 
 export function MarketingFooter() {
+  const t = useT();
+  const SECTIONS = [
+    {
+      title: t.footer.sections.product,
+      links: [
+        { label: t.footer.links.pricing, to: "/pricing" as const },
+        { label: t.footer.links.docs, to: "/docs" as const },
+        { label: t.footer.links.signIn, to: "/login" as const },
+        { label: t.footer.links.getStarted, to: "/signup" as const },
+      ],
+    },
+    {
+      title: t.footer.sections.resources,
+      links: [
+        { label: t.footer.links.mcp, href: "https://modelcontextprotocol.io" },
+        { label: t.footer.links.n8n, href: "https://n8n.io" },
+        { label: t.footer.links.github, href: "https://github.com/czlonkowski/n8n-mcp" },
+        { label: t.footer.links.starHistory, href: "https://star-history.com/#czlonkowski/n8n-mcp&Date" },
+        { label: t.footer.links.status, href: "https://status.lovable.app" },
+      ],
+    },
+    {
+      title: t.footer.sections.legal,
+      links: [
+        { label: t.footer.links.terms, to: "/terms" as const },
+        { label: t.footer.links.privacy, to: "/privacy" as const },
+        { label: t.footer.links.cookies, to: "/privacy" as const, hash: "cookies" },
+        { label: t.footer.links.imprint, to: "/imprint" as const },
+        { label: t.footer.links.contact, href: "mailto:hello@n8nmcp.app" },
+      ],
+    },
+  ];
+
   return (
     <footer className="border-t border-border/60 bg-background">
       <div className="mx-auto max-w-7xl px-6 py-14">
@@ -49,7 +51,7 @@ export function MarketingFooter() {
               <span className="text-base">n8n-mcp</span>
             </Link>
             <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-              Hosted MCP gateway for n8n. Plug your workflows into any AI client in seconds.
+              {t.footer.tagline}
             </p>
           </div>
 
@@ -82,13 +84,13 @@ export function MarketingFooter() {
 
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border/60 pt-6 text-xs text-muted-foreground md:flex-row">
           <p>
-            © {new Date().getFullYear()} n8n-mcp. Not affiliated with n8n GmbH.
+            © {new Date().getFullYear()} {t.footer.copyright}
             <span className="ml-2 opacity-70">v{APP_VERSION}</span>
           </p>
           <div className="flex items-center gap-4">
-            <Link to="/terms" className="hover:text-foreground">Terms</Link>
-            <Link to="/privacy" className="hover:text-foreground">Privacy</Link>
-            <a href="mailto:support@n8nmcp.app" className="hover:text-foreground">Support</a>
+            <Link to="/terms" className="hover:text-foreground">{t.footer.links.termsShort}</Link>
+            <Link to="/privacy" className="hover:text-foreground">{t.footer.links.privacyShort}</Link>
+            <a href="mailto:support@n8nmcp.app" className="hover:text-foreground">{t.footer.links.support}</a>
           </div>
         </div>
       </div>
