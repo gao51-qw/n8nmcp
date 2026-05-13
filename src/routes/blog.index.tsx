@@ -38,6 +38,11 @@ export const Route = createFileRoute("/blog/")({
     middlewares: [stripSearchParams({ page: 1, q: "", tags: [] })],
   },
   loaderDeps: ({ search }) => ({ page: search.page, q: search.q, tags: search.tags }),
+  // Blog index is built from a bundled, build-time-static post list, so the
+  // loader output for a given (page, q, tags) tuple is invariant. Cache
+  // forever; pagination/search changes hit a different cache entry.
+  staleTime: Infinity,
+  gcTime: Infinity,
   loader: ({ deps }): {
     page: number;
     totalPages: number;
