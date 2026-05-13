@@ -5,6 +5,13 @@ import ja from "./locales/docs/ja";
 import es from "./locales/docs/es";
 import de from "./locales/docs/de";
 import type { Locale } from "./config";
+import { LOCALES } from "./config";
+import {
+  OG_LOCALE,
+  buildAlternateLinks,
+  localizedUrl,
+  resolveLocale,
+} from "@/lib/seo-i18n";
 
 export type DocsDict = typeof en;
 
@@ -19,4 +26,41 @@ export const DOCS_DICTIONARIES: Record<Locale, DocsDict> = {
 export function useDocsT(): DocsDict {
   const { locale } = useLocale();
   return DOCS_DICTIONARIES[locale] ?? en;
+}
+
+/**
+ * Build a locale-aware docs head() payload — title/description/OG come from
+ * the matching docs translation dict so each language ships unique metadata
+ * (no English fallback bleed-through, no duplicate content across locales).
+ */
+export function buildDocsHead(args: {
+  rawLocale: unknown;
+  logicalPath: string; // e.g. "/docs/clients"
+  pick: (t: DocsDict) => { title: string; description: string };
+  ogType?: string;
+  scripts?: Array<{ type: string; children: string }>;
+}) {
+  const locale = resolveLocale(args.rawLocale);
+  const t = DOCS_DICTIONARIES[locale] ?? en;
+  const { title, description } = args.pick(t);
+  const url = localizedUrl(args.logicalPath, locale);
+  return {
+    meta: [
+      { title },
+      { name: "description", content: description },
+      { property: "og:title", content: title },
+      { property: "og:description", content: description },
+      { property: "og:url", content: url },
+      { property: "og:type", content: args.ogType ?? "article" },
+      { property: "og:locale", content: OG_LOCALE[locale] },
+      ...LOCALES.filter((l) => l !== locale).map((l) => ({
+        property: "og:locale:alternate",
+        content: OG_LOCALE[l],
+      })),
+      { name: "twitter:title", content: title },
+      { name: "twitter:description", content: description },
+    ],
+    links: buildAlternateLinks(args.logicalPath, locale),
+    ...(args.scripts ? { scripts: args.scripts } : {}),
+  };
 }
