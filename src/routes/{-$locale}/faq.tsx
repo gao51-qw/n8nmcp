@@ -21,26 +21,17 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/context";
 import { Link } from "@/i18n/link";
-import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
+import { buildLocalizedHead } from "@/lib/seo-i18n";
 
 export const Route = createFileRoute("/{-$locale}/faq")({
   head: ({ params }) => {
-    const TITLE = "FAQ — n8n-mcp";
-    const DESC =
-      "Common questions about n8n-mcp: supported AI clients, security, pricing, self-hosting and the MCP protocol.";
-    const URL = "https://n8nmcp.lovable.app/faq";
+    const base = buildLocalizedHead({
+      rawLocale: params.locale,
+      logicalPath: "/faq",
+      pickStrings: (t) => t.seo.faq,
+    });
     return {
-      meta: [
-        { title: TITLE },
-        { name: "description", content: DESC },
-        { property: "og:title", content: TITLE },
-        { property: "og:description", content: DESC },
-        { property: "og:url", content: URL },
-        { property: "og:type", content: "website" },
-        { name: "twitter:title", content: TITLE },
-        { name: "twitter:description", content: DESC },
-      ],
-      links: buildAlternateLinks("/faq", resolveLocale(params.locale)),
+      ...base,
       scripts: [
         {
           type: "application/ld+json",
