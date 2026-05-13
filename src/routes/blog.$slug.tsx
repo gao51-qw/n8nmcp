@@ -6,6 +6,7 @@ import { mdxComponents } from "@/components/mdx-components";
 import { ShareButtons } from "@/components/share-buttons";
 import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
+import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
@@ -99,8 +100,20 @@ export const Route = createFileRoute("/blog/$slug")({
               "@type": "Organization",
               name: SITE_NAME,
               url: SITE,
+              logo: {
+                "@type": "ImageObject",
+                url: `${SITE}/favicon.ico`,
+              },
             },
           }),
+        },
+        {
+          type: "application/ld+json",
+          children: buildBreadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            { name: "Blog", path: "/blog" },
+            { name: loaderData.title, path: `/blog/${loaderData.slug}` },
+          ]),
         },
       ],
     };
