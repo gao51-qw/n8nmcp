@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "Connect any MCP client — n8n-mcp docs";
 const DESC = "Configuration snippets for Claude Desktop, Claude Code, ChatGPT, Cursor, Windsurf, VS Code, Continue, Cline, Zed, Gemini CLI and Codex CLI.";
@@ -15,6 +16,16 @@ export const Route = createFileRoute("/docs/clients")({
       { property: "og:type", content: "article" },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/clients' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'Connect a client', path: '/docs/clients' }]),
+      },
+    ],
   }),
   component: Page,
 });

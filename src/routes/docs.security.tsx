@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "Security — n8n-mcp docs";
 const DESC = "Encryption at rest, SSRF protection, RLS policies, and the gateway's threat model.";
@@ -15,6 +16,16 @@ export const Route = createFileRoute("/docs/security")({
       { property: "og:type", content: "article" },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs/security' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }, { name: 'Security', path: '/docs/security' }]),
+      },
+    ],
   }),
   component: Page,
 });

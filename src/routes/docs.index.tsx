@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 const TITLE = "Documentation — n8n-mcp";
 const DESC =
@@ -18,6 +19,16 @@ export const Route = createFileRoute("/docs/")({
       { name: "twitter:description", content: DESC },
     ],
     links: [{ rel: "canonical", href: URL }],
+    scripts: [
+      {
+        type: "application/ld+json",
+        children: buildDocsTechArticleJsonLd({ title: TITLE, description: DESC, path: '/docs' }),
+      },
+      {
+        type: "application/ld+json",
+        children: buildBreadcrumbJsonLd([{ name: "Home", path: "/" }, { name: "Docs", path: "/docs" }]),
+      },
+    ],
   }),
   component: DocsIndex,
 });
