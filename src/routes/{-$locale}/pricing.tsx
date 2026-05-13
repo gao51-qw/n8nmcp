@@ -12,10 +12,7 @@ export const Route = createFileRoute("/{-$locale}/pricing")({
     buildLocalizedHead({
       rawLocale: params.locale,
       logicalPath: "/pricing",
-      pickStrings: (t) => ({
-        title: `${t.pricingPage.title} — n8n-mcp`,
-        description: t.pricingPage.subtitle,
-      }),
+      pickStrings: (t) => t.seo.pricing,
     }),
   component: Pricing,
 });
