@@ -3,6 +3,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
 import { useRef, useState } from "react";
 import { Check, Copy } from "lucide-react";
+import { toast } from "sonner";
 
 function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   const ref = useRef<HTMLPreElement>(null);
@@ -13,9 +14,10 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(true);
+      toast.success("已复制到剪贴板", { duration: 1000 });
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      /* ignore */
+      toast.error("复制失败", { duration: 1000 });
     }
   };
 
