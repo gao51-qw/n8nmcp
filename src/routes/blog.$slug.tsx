@@ -16,6 +16,10 @@ function absoluteUrl(maybeRelative: string): string {
 }
 
 export const Route = createFileRoute("/blog/$slug")({
+  // Blog posts are bundled at build time — the data never changes between
+  // navigations, so cache the loader result forever.
+  staleTime: Infinity,
+  gcTime: Infinity,
   loader: ({ params }) => {
     const post = getPostBySlug(params.slug);
     if (!post) throw notFound();
