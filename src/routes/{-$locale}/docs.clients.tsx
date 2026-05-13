@@ -5,7 +5,7 @@ const TITLE = "Connect any MCP client — n8n-mcp docs";
 const DESC = "Configuration snippets for Claude Desktop, Claude Code, ChatGPT, Cursor, Windsurf, VS Code, Continue, Cline, Zed, Gemini CLI and Codex CLI.";
 const URL = "https://n8nmcp.lovable.app/docs/clients";
 
-export const Route = createFileRoute("/docs/clients")({
+export const Route = createFileRoute("/{-$locale}/docs/clients")({
   head: () => ({
     meta: [
       { title: TITLE },

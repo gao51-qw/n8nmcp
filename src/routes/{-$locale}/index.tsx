@@ -41,7 +41,7 @@ import { buildWebSiteJsonLd } from "@/lib/seo-jsonld";
 import n8nStats from "@/data/n8n-stats.json";
 import { useT } from "@/i18n/context";
 
-export const Route = createFileRoute("/{-$locale}/")({
+export const Route = createFileRoute("/{-$locale}/{-$locale}/")({
   head: () => {
     const TITLE = "n8n-mcp — Plug your n8n workflows into any AI client";
     const DESC =

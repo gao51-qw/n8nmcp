@@ -6,7 +6,7 @@ const DESC =
   "Complete operations manual for n8n-mcp: connect AI clients to n8n via the Model Context Protocol, manage API keys, n8n instances, quotas, security and admin tasks.";
 const URL = "https://n8nmcp.lovable.app/docs";
 
-export const Route = createFileRoute("/docs/")({
+export const Route = createFileRoute("/{-$locale}/docs/")({
   head: () => ({
     meta: [
       { title: TITLE },

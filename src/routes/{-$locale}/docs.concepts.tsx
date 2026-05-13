@@ -5,7 +5,7 @@ const TITLE = "Concepts — n8n-mcp docs";
 const DESC = "How the n8n-mcp gateway, platform API keys, n8n instances and MCP tools fit together.";
 const URL = "https://n8nmcp.lovable.app/docs/concepts";
 
-export const Route = createFileRoute("/docs/concepts")({
+export const Route = createFileRoute("/{-$locale}/docs/concepts")({
   head: () => ({
     meta: [
       { title: TITLE },

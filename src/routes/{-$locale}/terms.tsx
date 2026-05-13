@@ -7,7 +7,7 @@ const DESC =
   "Terms of Service for n8n-mcp, the hosted Model Context Protocol gateway for n8n workflows. Account, billing, acceptable use and liability.";
 const URL = "https://n8nmcp.lovable.app/terms";
 
-export const Route = createFileRoute("/terms")({
+export const Route = createFileRoute("/{-$locale}/terms")({
   head: () => ({
     meta: [
       { title: TITLE },

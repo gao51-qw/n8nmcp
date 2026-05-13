@@ -21,7 +21,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/context";
 
-export const Route = createFileRoute("/faq")({
+export const Route = createFileRoute("/{-$locale}/faq")({
   head: () => {
     const TITLE = "FAQ — n8n-mcp";
     const DESC =

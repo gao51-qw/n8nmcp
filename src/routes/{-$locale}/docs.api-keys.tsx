@@ -5,7 +5,7 @@ const TITLE = "Platform API keys — n8n-mcp docs";
 const DESC = "Create, label, rotate and revoke nmcp_ platform API keys used by your MCP clients.";
 const URL = "https://n8nmcp.lovable.app/docs/api-keys";
 
-export const Route = createFileRoute("/docs/api-keys")({
+export const Route = createFileRoute("/{-$locale}/docs/api-keys")({
   head: () => ({
     meta: [
       { title: TITLE },

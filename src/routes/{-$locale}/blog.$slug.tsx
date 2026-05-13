@@ -16,7 +16,7 @@ function absoluteUrl(maybeRelative: string): string {
   return `${SITE}${maybeRelative.startsWith("/") ? "" : "/"}${maybeRelative}`;
 }
 
-export const Route = createFileRoute("/blog/$slug")({
+export const Route = createFileRoute("/{-$locale}/blog/$slug")({
   // Blog posts are bundled at build time — the data never changes between
   // navigations, so cache the loader result forever.
   staleTime: Infinity,

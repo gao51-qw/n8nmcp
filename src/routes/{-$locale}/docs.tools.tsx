@@ -5,7 +5,7 @@ const TITLE = "MCP tools reference — n8n-mcp docs";
 const DESC = "Complete reference of runtime, knowledge and management tools exposed by the n8n-mcp gateway.";
 const URL = "https://n8nmcp.lovable.app/docs/tools";
 
-export const Route = createFileRoute("/docs/tools")({
+export const Route = createFileRoute("/{-$locale}/docs/tools")({
   head: () => ({
     meta: [
       { title: TITLE },

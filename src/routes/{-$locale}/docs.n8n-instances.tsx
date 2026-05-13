@@ -5,7 +5,7 @@ const TITLE = "n8n instances — n8n-mcp docs";
 const DESC = "Connect your self-hosted or n8n.cloud instance, store API keys encrypted, and protect against SSRF.";
 const URL = "https://n8nmcp.lovable.app/docs/n8n-instances";
 
-export const Route = createFileRoute("/docs/n8n-instances")({
+export const Route = createFileRoute("/{-$locale}/docs/n8n-instances")({
   head: () => ({
     meta: [
       { title: TITLE },

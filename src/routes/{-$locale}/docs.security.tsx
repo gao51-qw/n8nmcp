@@ -5,7 +5,7 @@ const TITLE = "Security — n8n-mcp docs";
 const DESC = "Encryption at rest, SSRF protection, RLS policies, and the gateway's threat model.";
 const URL = "https://n8nmcp.lovable.app/docs/security";
 
-export const Route = createFileRoute("/docs/security")({
+export const Route = createFileRoute("/{-$locale}/docs/security")({
   head: () => ({
     meta: [
       { title: TITLE },

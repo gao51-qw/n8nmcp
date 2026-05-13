@@ -7,7 +7,7 @@ const DESC =
   "How n8n-mcp collects, uses and protects your data, n8n credentials and workflow metadata. AES-256-GCM at rest, no third-party trackers.";
 const URL = "https://n8nmcp.lovable.app/privacy";
 
-export const Route = createFileRoute("/privacy")({
+export const Route = createFileRoute("/{-$locale}/privacy")({
   head: () => ({
     meta: [
       { title: TITLE },

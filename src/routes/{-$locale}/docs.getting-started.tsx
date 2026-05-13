@@ -5,7 +5,7 @@ const TITLE = "Getting started — n8n-mcp docs";
 const DESC = "Sign up, create a platform API key, connect your n8n instance and wire up your first MCP client in under five minutes.";
 const URL = "https://n8nmcp.lovable.app/docs/getting-started";
 
-export const Route = createFileRoute("/docs/getting-started")({
+export const Route = createFileRoute("/{-$locale}/docs/getting-started")({
   head: () => ({
     meta: [
       { title: TITLE },

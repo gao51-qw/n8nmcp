@@ -10,7 +10,7 @@ const DESC =
   "Simple per-month pricing for the n8n-mcp gateway. Free tier with 100 MCP calls/day, paid plans from $19/mo. No seats, cancel anytime.";
 const URL = "https://n8nmcp.lovable.app/pricing";
 
-export const Route = createFileRoute("/{-$locale}/pricing")({
+export const Route = createFileRoute("/{-$locale}/{-$locale}/pricing")({
   head: () => ({
     meta: [
       { title: TITLE },

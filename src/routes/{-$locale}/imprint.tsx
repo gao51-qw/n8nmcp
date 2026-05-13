@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 
-export const Route = createFileRoute("/imprint")({
+export const Route = createFileRoute("/{-$locale}/imprint")({
   head: () => {
     const TITLE = "Imprint — n8n-mcp";
     const DESC =

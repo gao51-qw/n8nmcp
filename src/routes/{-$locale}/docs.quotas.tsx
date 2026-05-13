@@ -5,7 +5,7 @@ const TITLE = "Quotas & billing — n8n-mcp docs";
 const DESC = "Per-key request quotas, plan limits, and how usage is metered across MCP tool calls.";
 const URL = "https://n8nmcp.lovable.app/docs/quotas";
 
-export const Route = createFileRoute("/docs/quotas")({
+export const Route = createFileRoute("/{-$locale}/docs/quotas")({
   head: () => ({
     meta: [
       { title: TITLE },
