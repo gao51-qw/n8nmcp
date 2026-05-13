@@ -167,7 +167,12 @@ function RootComponent() {
       <AuthProvider>
         <TooltipProvider>
           <main id="main" tabIndex={-1} className="outline-none">
-            <Outlet />
+            <div
+              key={pathname}
+              className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300 motion-safe:ease-out"
+            >
+              <Outlet />
+            </div>
           </main>
           <Toaster richColors position="top-right" />
         </TooltipProvider>
