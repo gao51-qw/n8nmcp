@@ -6,10 +6,17 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Megaphone, RefreshCw, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Info, Loader2, Megaphone, RefreshCw, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { formatLocal, formatLocalLong } from "@/lib/format-datetime";
 import { ensureAnnouncementsSeeded } from "@/lib/announcements.functions";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const PAGE_SIZE = 5;
 
@@ -39,6 +46,8 @@ function relativeTime(iso: string) {
 
 function WhatsNew() {
   const [page, setPage] = useState(0);
+  const [errorDetailsOpen, setErrorDetailsOpen] = useState(false);
+  const [errorAt, setErrorAt] = useState<string | null>(null);
   const ensureSeeded = useServerFn(ensureAnnouncementsSeeded);
 
   const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
@@ -52,7 +61,10 @@ function WhatsNew() {
         .eq("status", "published")
         .order("published_at", { ascending: false })
         .range(from, to);
-      if (error) throw error;
+      if (error) {
+        setErrorAt(new Date().toISOString());
+        throw error;
+      }
       let source: string = "database";
       let seeded = false;
       // If the very first page is empty, ask the server to backfill from the
@@ -96,6 +108,18 @@ function WhatsNew() {
     },
     retry: 1,
   });
+
+  const errorObj = error as Error | undefined;
+  const errorName = errorObj?.name ?? "Error";
+  const errorMessage = errorObj?.message ?? "Unknown error";
+  const errorStack = errorObj?.stack;
+  const errorJson = (() => {
+    try {
+      return JSON.stringify(errorObj, Object.getOwnPropertyNames(errorObj ?? {}), 2);
+    } catch {
+      return null;
+    }
+  })();
 
   const total = data?.total ?? 0;
   const items = data?.items ?? [];
@@ -150,10 +174,10 @@ function WhatsNew() {
           </div>
           <h2 className="mt-4 text-lg font-semibold">Couldn't load announcements</h2>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            {(error as Error)?.message ||
+            {errorMessage ||
               "The request failed. Check your connection and try again."}
           </p>
-          <div className="mt-5 flex items-center justify-center gap-2">
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <Button
               size="sm"
               variant="outline"
@@ -166,6 +190,14 @@ function WhatsNew() {
                 <RefreshCw className="mr-1 h-4 w-4" />
               )}
               Retry
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setErrorDetailsOpen(true)}
+            >
+              <Info className="mr-1 h-4 w-4" />
+              View details
             </Button>
             <Button asChild variant="ghost" size="sm">
               <Link to="/dashboard">Back to dashboard</Link>
@@ -254,6 +286,94 @@ function WhatsNew() {
           </div>
         </>
       )}
+
+      <Dialog open={errorDetailsOpen} onOpenChange={setErrorDetailsOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Error details
+            </DialogTitle>
+            <DialogDescription>
+              Diagnostic information for the failed announcements request.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm">
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+              <span className="text-muted-foreground">Time</span>
+              <span className="font-mono text-xs">
+                {errorAt ? `${formatLocalLong(errorAt)} (${errorAt})` : "—"}
+              </span>
+              <span className="text-muted-foreground">Type</span>
+              <span className="font-mono text-xs">{errorName}</span>
+              <span className="text-muted-foreground">Page</span>
+              <span className="font-mono text-xs">{page + 1}</span>
+            </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-muted-foreground">
+                Message
+              </div>
+              <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-3 text-xs">
+                {errorMessage}
+              </pre>
+            </div>
+            {errorStack ? (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                  Stack
+                </div>
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-3 text-[11px]">
+                  {errorStack}
+                </pre>
+              </div>
+            ) : null}
+            {errorJson && errorJson !== "{}" ? (
+              <div>
+                <div className="mb-1 text-xs font-medium text-muted-foreground">
+                  Raw
+                </div>
+                <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-muted/40 p-3 text-[11px]">
+                  {errorJson}
+                </pre>
+              </div>
+            ) : null}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const text = [
+                    `Time: ${errorAt ?? "-"}`,
+                    `Type: ${errorName}`,
+                    `Message: ${errorMessage}`,
+                    errorStack ? `Stack:\n${errorStack}` : "",
+                  ]
+                    .filter(Boolean)
+                    .join("\n");
+                  void navigator.clipboard?.writeText(text);
+                }}
+              >
+                Copy
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  setErrorDetailsOpen(false);
+                  refetch();
+                }}
+                disabled={isFetching}
+              >
+                {isFetching ? (
+                  <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="mr-1 h-4 w-4" />
+                )}
+                Retry
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
