@@ -85,6 +85,20 @@ certbot 会自动改 `n8nworkflow.conf` 加上 443 段并写好 cert renewal cro
 
 MCP 知识库每周 CI 自动重建（拉最新 npm 节点）。
 
+### 一键回滚
+
+新版本上线后发现问题，可以直接回到上一个本地缓存过的镜像：
+
+```bash
+cd /opt/n8nworkflow
+./rollback.sh              # 回滚到上一个版本（带确认）
+./rollback.sh --list       # 查看本地可用历史版本
+./rollback.sh <commit-sha> # 回滚到指定 commit
+./rollback.sh --resume     # 恢复跟随 :latest，重新接入 watchtower
+```
+
+脚本会把 `.env` 里的 `APP_IMAGE_TAG` 固定到对应 sha，watchtower 不会再自动覆盖该容器，直到你执行 `--resume`。
+
 ## 5. 调试
 
 ```bash
