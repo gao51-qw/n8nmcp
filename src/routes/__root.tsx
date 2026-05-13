@@ -123,7 +123,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         ? [{ name: "google-site-verification", content: loaderData.siteSettings.gscVerification }]
         : []),
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      // Preconnect to the font CDN that ships our largest critical asset
+      // (CameraPlainVariable.woff2). Establishing the TLS connection in
+      // parallel with the HTML/CSS download shortens the critical-request
+      // chain flagged by Lighthouse.
+      { rel: "preconnect", href: "https://cdn.gpteng.co", crossOrigin: "anonymous" },
+      { rel: "dns-prefetch", href: "https://cdn.gpteng.co" },
+      { rel: "stylesheet", href: appCss },
+    ],
     scripts: [
       {
         type: "application/ld+json",
