@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ChevronLeft, ChevronRight, Megaphone, Sparkles } from "lucide-react";
+import { AlertTriangle, ChevronLeft, ChevronRight, Loader2, Megaphone, RefreshCw, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { formatLocal, formatLocalLong } from "@/lib/format-datetime";
 import { ensureAnnouncementsSeeded } from "@/lib/announcements.functions";
@@ -41,7 +41,7 @@ function WhatsNew() {
   const [page, setPage] = useState(0);
   const ensureSeeded = useServerFn(ensureAnnouncementsSeeded);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching, isError, error, refetch } = useQuery({
     queryKey: ["whats-new", page],
     queryFn: async () => {
       const from = page * PAGE_SIZE;
@@ -94,6 +94,7 @@ function WhatsNew() {
         fetchedAt: new Date().toISOString(),
       };
     },
+    retry: 1,
   });
 
   const total = data?.total ?? 0;
@@ -126,6 +127,10 @@ function WhatsNew() {
 
       {isLoading ? (
         <div className="space-y-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading announcements…
+          </div>
           {Array.from({ length: 3 }).map((_, i) => (
             <div key={i} className="rounded-xl border border-border bg-card p-6">
               <Skeleton className="h-3 w-24" />
@@ -134,6 +139,38 @@ function WhatsNew() {
               <Skeleton className="mt-1 h-4 w-5/6" />
             </div>
           ))}
+        </div>
+      ) : isError ? (
+        <div
+          role="alert"
+          className="rounded-xl border border-destructive/40 bg-destructive/5 p-10 text-center"
+        >
+          <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-destructive/10">
+            <AlertTriangle className="h-6 w-6 text-destructive" />
+          </div>
+          <h2 className="mt-4 text-lg font-semibold">Couldn't load announcements</h2>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+            {(error as Error)?.message ||
+              "The request failed. Check your connection and try again."}
+          </p>
+          <div className="mt-5 flex items-center justify-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-4 w-4" />
+              )}
+              Retry
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/dashboard">Back to dashboard</Link>
+            </Button>
+          </div>
         </div>
       ) : items.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-10 text-center">
@@ -144,9 +181,24 @@ function WhatsNew() {
           <p className="mt-1 text-sm text-muted-foreground">
             Check back later — product updates will appear here.
           </p>
-          <Button asChild variant="outline" size="sm" className="mt-5">
-            <Link to="/dashboard">Back to dashboard</Link>
-          </Button>
+          <div className="mt-5 flex items-center justify-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => refetch()}
+              disabled={isFetching}
+            >
+              {isFetching ? (
+                <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-1 h-4 w-4" />
+              )}
+              Refresh
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/dashboard">Back to dashboard</Link>
+            </Button>
+          </div>
         </div>
       ) : (
         <>
