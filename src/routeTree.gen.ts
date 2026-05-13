@@ -25,6 +25,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as DocsToolsRouteImport } from './routes/docs.tools'
+import { Route as DocsQuotasRouteImport } from './routes/docs.quotas'
 import { Route as DocsN8nInstancesRouteImport } from './routes/docs.n8n-instances'
 import { Route as DocsGettingStartedRouteImport } from './routes/docs.getting-started'
 import { Route as DocsConceptsRouteImport } from './routes/docs.concepts'
@@ -127,6 +128,11 @@ const BlogIndexRoute = BlogIndexRouteImport.update({
 const DocsToolsRoute = DocsToolsRouteImport.update({
   id: '/tools',
   path: '/tools',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsQuotasRoute = DocsQuotasRouteImport.update({
+  id: '/quotas',
+  path: '/quotas',
   getParentRoute: () => DocsRoute,
 } as any)
 const DocsN8nInstancesRoute = DocsN8nInstancesRouteImport.update({
@@ -283,6 +289,7 @@ export interface FileRoutesByFullPath {
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/docs/n8n-instances': typeof DocsN8nInstancesRoute
+  '/docs/quotas': typeof DocsQuotasRoute
   '/docs/tools': typeof DocsToolsRoute
   '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
@@ -322,6 +329,7 @@ export interface FileRoutesByTo {
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/docs/n8n-instances': typeof DocsN8nInstancesRoute
+  '/docs/quotas': typeof DocsQuotasRoute
   '/docs/tools': typeof DocsToolsRoute
   '/blog': typeof BlogIndexRoute
   '/docs': typeof DocsIndexRoute
@@ -365,6 +373,7 @@ export interface FileRoutesById {
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/docs/n8n-instances': typeof DocsN8nInstancesRoute
+  '/docs/quotas': typeof DocsQuotasRoute
   '/docs/tools': typeof DocsToolsRoute
   '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
@@ -407,6 +416,7 @@ export interface FileRouteTypes {
     | '/docs/concepts'
     | '/docs/getting-started'
     | '/docs/n8n-instances'
+    | '/docs/quotas'
     | '/docs/tools'
     | '/blog/'
     | '/docs/'
@@ -446,6 +456,7 @@ export interface FileRouteTypes {
     | '/docs/concepts'
     | '/docs/getting-started'
     | '/docs/n8n-instances'
+    | '/docs/quotas'
     | '/docs/tools'
     | '/blog'
     | '/docs'
@@ -488,6 +499,7 @@ export interface FileRouteTypes {
     | '/docs/concepts'
     | '/docs/getting-started'
     | '/docs/n8n-instances'
+    | '/docs/quotas'
     | '/docs/tools'
     | '/blog/'
     | '/docs/'
@@ -633,6 +645,13 @@ declare module '@tanstack/react-router' {
       path: '/tools'
       fullPath: '/docs/tools'
       preLoaderRoute: typeof DocsToolsRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/quotas': {
+      id: '/docs/quotas'
+      path: '/quotas'
+      fullPath: '/docs/quotas'
+      preLoaderRoute: typeof DocsQuotasRouteImport
       parentRoute: typeof DocsRoute
     }
     '/docs/n8n-instances': {
@@ -880,6 +899,7 @@ interface DocsRouteChildren {
   DocsConceptsRoute: typeof DocsConceptsRoute
   DocsGettingStartedRoute: typeof DocsGettingStartedRoute
   DocsN8nInstancesRoute: typeof DocsN8nInstancesRoute
+  DocsQuotasRoute: typeof DocsQuotasRoute
   DocsToolsRoute: typeof DocsToolsRoute
   DocsIndexRoute: typeof DocsIndexRoute
 }
@@ -890,6 +910,7 @@ const DocsRouteChildren: DocsRouteChildren = {
   DocsConceptsRoute: DocsConceptsRoute,
   DocsGettingStartedRoute: DocsGettingStartedRoute,
   DocsN8nInstancesRoute: DocsN8nInstancesRoute,
+  DocsQuotasRoute: DocsQuotasRoute,
   DocsToolsRoute: DocsToolsRoute,
   DocsIndexRoute: DocsIndexRoute,
 }
