@@ -254,11 +254,12 @@ async function exportAudit(
       }, h.length);
       return { width: Math.min(Math.max(maxLen + 2, 10), 60) };
     });
-    await writeXlsxFile(
-      sheetData,
-      { columns, sheet: "Audit log", stickyRowsCount: 1 },
-      { fileName: `announcement-audit-${stamp}.xlsx` },
-    );
+    await writeXlsxFile(sheetData, {
+      columns,
+      sheet: "Audit log",
+      stickyRowsCount: 1,
+      fileName: `announcement-audit-${stamp}.xlsx`,
+    } as never);
     return;
   }
 
