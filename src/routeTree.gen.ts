@@ -37,6 +37,7 @@ import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminDeploymentRouteImport } from './routes/_authenticated/_admin/admin.deployment'
+import { Route as AuthenticatedAdminAdminDeletionRequestsRouteImport } from './routes/_authenticated/_admin/admin.deletion-requests'
 import { Route as AuthenticatedAdminAdminAnnouncementsRouteImport } from './routes/_authenticated/_admin/admin.announcements'
 import { Route as AuthenticatedAdminAdminAnnouncementsPreviewIdRouteImport } from './routes/_authenticated/_admin/admin.announcements.preview.$id'
 
@@ -180,6 +181,12 @@ const AuthenticatedAdminAdminDeploymentRoute =
     path: '/admin/deployment',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminDeletionRequestsRoute =
+  AuthenticatedAdminAdminDeletionRequestsRouteImport.update({
+    id: '/admin/deletion-requests',
+    path: '/admin/deletion-requests',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminAnnouncementsRoute =
   AuthenticatedAdminAdminAnnouncementsRouteImport.update({
     id: '/admin/announcements',
@@ -219,6 +226,7 @@ export interface FileRoutesByFullPath {
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
+  '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
@@ -249,6 +257,7 @@ export interface FileRoutesByTo {
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
+  '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
@@ -282,6 +291,7 @@ export interface FileRoutesById {
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
+  '/_authenticated/_admin/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/_authenticated/_admin/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/_authenticated/_admin/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
@@ -314,6 +324,7 @@ export interface FileRouteTypes {
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
+    | '/admin/deletion-requests'
     | '/admin/deployment'
     | '/admin/users'
     | '/admin/announcements/preview/$id'
@@ -344,6 +355,7 @@ export interface FileRouteTypes {
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
+    | '/admin/deletion-requests'
     | '/admin/deployment'
     | '/admin/users'
     | '/admin/announcements/preview/$id'
@@ -376,6 +388,7 @@ export interface FileRouteTypes {
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/_authenticated/_admin/admin/announcements'
+    | '/_authenticated/_admin/admin/deletion-requests'
     | '/_authenticated/_admin/admin/deployment'
     | '/_authenticated/_admin/admin/users'
     | '/_authenticated/_admin/admin/announcements/preview/$id'
@@ -598,6 +611,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminDeploymentRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/deletion-requests': {
+      id: '/_authenticated/_admin/admin/deletion-requests'
+      path: '/admin/deletion-requests'
+      fullPath: '/admin/deletion-requests'
+      preLoaderRoute: typeof AuthenticatedAdminAdminDeletionRequestsRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/announcements': {
       id: '/_authenticated/_admin/admin/announcements'
       path: '/admin/announcements'
@@ -632,6 +652,7 @@ const AuthenticatedAdminAdminAnnouncementsRouteWithChildren =
 
 interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminAnnouncementsRoute: typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
+  AuthenticatedAdminAdminDeletionRequestsRoute: typeof AuthenticatedAdminAdminDeletionRequestsRoute
   AuthenticatedAdminAdminDeploymentRoute: typeof AuthenticatedAdminAdminDeploymentRoute
   AuthenticatedAdminAdminUsersRoute: typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -639,6 +660,8 @@ interface AuthenticatedAdminRouteChildren {
 const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
   AuthenticatedAdminAdminAnnouncementsRoute:
     AuthenticatedAdminAdminAnnouncementsRouteWithChildren,
+  AuthenticatedAdminAdminDeletionRequestsRoute:
+    AuthenticatedAdminAdminDeletionRequestsRoute,
   AuthenticatedAdminAdminDeploymentRoute:
     AuthenticatedAdminAdminDeploymentRoute,
   AuthenticatedAdminAdminUsersRoute: AuthenticatedAdminAdminUsersRoute,
@@ -698,3 +721,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
