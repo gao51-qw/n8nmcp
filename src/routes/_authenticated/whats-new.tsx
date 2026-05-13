@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ChevronLeft, ChevronRight, Megaphone, Sparkles } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { formatLocal, formatLocalLong } from "@/lib/format-datetime";
+import { ensureAnnouncementsSeeded } from "@/lib/announcements.functions";
 
 const PAGE_SIZE = 5;
 
@@ -37,20 +39,60 @@ function relativeTime(iso: string) {
 
 function WhatsNew() {
   const [page, setPage] = useState(0);
+  const ensureSeeded = useServerFn(ensureAnnouncementsSeeded);
 
   const { data, isLoading } = useQuery({
     queryKey: ["whats-new", page],
     queryFn: async () => {
       const from = page * PAGE_SIZE;
       const to = from + PAGE_SIZE - 1;
-      const { data, count, error } = await supabase
+      let { data, count, error } = await supabase
         .from("announcements")
         .select("*", { count: "exact" })
         .eq("status", "published")
         .order("published_at", { ascending: false })
         .range(from, to);
       if (error) throw error;
-      return { items: (data ?? []) as Announcement[], total: count ?? 0 };
+      let source: string = "database";
+      let seeded = false;
+      // If the very first page is empty, ask the server to backfill from the
+      // default seed source, then re-query so the user sees content.
+      if (page === 0 && (count ?? 0) === 0) {
+        const result = await ensureSeeded({});
+        source = result.source;
+        seeded = result.seeded;
+        // eslint-disable-next-line no-console
+        console.info("[whats-new] data source:", {
+          source,
+          seeded,
+          count: result.count,
+          fetchedAt: result.fetchedAt,
+        });
+        if (seeded) {
+          const refetch = await supabase
+            .from("announcements")
+            .select("*", { count: "exact" })
+            .eq("status", "published")
+            .order("published_at", { ascending: false })
+            .range(from, to);
+          data = refetch.data;
+          count = refetch.count;
+        }
+      } else {
+        // eslint-disable-next-line no-console
+        console.info("[whats-new] data source:", {
+          source,
+          count: count ?? 0,
+          fetchedAt: new Date().toISOString(),
+        });
+      }
+      return {
+        items: (data ?? []) as Announcement[],
+        total: count ?? 0,
+        source,
+        seeded,
+        fetchedAt: new Date().toISOString(),
+      };
     },
   });
 
@@ -69,6 +111,16 @@ function WhatsNew() {
           <p className="mt-1 text-sm text-muted-foreground">
             Product updates, sorted by most recent.
           </p>
+          {data ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Source:{" "}
+              <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                {data.source}
+              </code>
+              {data.seeded ? " · seeded defaults" : ""} · fetched{" "}
+              {formatLocal(data.fetchedAt)}
+            </p>
+          ) : null}
         </div>
       </div>
 
