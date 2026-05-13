@@ -10,6 +10,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { AuthRedirectOverlay } from "@/components/auth-redirect-overlay";
 
 export const Route = createFileRoute("/login")({
   head: () => ({ meta: [{ title: "Sign in — n8n-mcp" }] }),
@@ -55,6 +56,11 @@ function Login() {
   const handleOAuth = async (provider: "google" | "apple") => {
     if (anyPending) return;
     setPendingAction(provider);
+    // Defer the actual redirect by two frames so the overlay's fade-in has
+    // time to paint before the browser starts unloading the document. Without
+    // this delay the user sees a hard white flash before reaching the
+    // provider's page.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     try {
       const result = await lovable.auth.signInWithOAuth(provider, {
         redirect_uri: window.location.origin + "/dashboard",
@@ -63,8 +69,8 @@ function Login() {
         toast.error(`${provider} sign-in failed`);
         setPendingAction(null);
       }
-      // On success the browser is redirected to the provider; keep the
-      // spinner up so the button stays in its loading state until then.
+      // On success the browser navigates away; keep the overlay up so the
+      // transition stays visually smooth until the document unloads.
     } catch (err) {
       toast.error(err instanceof Error ? err.message : `${provider} sign-in failed`);
       setPendingAction(null);
@@ -90,6 +96,9 @@ function Login() {
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden px-4">
+      <AuthRedirectOverlay
+        provider={pendingAction === "google" || pendingAction === "apple" ? pendingAction : null}
+      />
       {/* Ambient background glow */}
       <div
         aria-hidden
