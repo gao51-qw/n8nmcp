@@ -27,11 +27,7 @@ import {
 import { setTheme, getStoredTheme, type ThemeChoice, THEME_EVENT } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { AvatarUploader } from "@/components/avatar-uploader";
-import {
-  exportMyData,
-  requestAccountDeletion,
-  deleteAccountNow,
-} from "@/lib/account.functions";
+import { exportMyData } from "@/lib/account.functions";
 import {
   changePassword,
   requestEmailChange,
@@ -73,7 +69,7 @@ function Settings() {
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="connections">Connections</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="danger">Danger zone</TabsTrigger>
+            <TabsTrigger value="danger">Data</TabsTrigger>
           </TabsList>
           <TabsContent value="profile" className="space-y-6 pt-4">
             <ProfileSection />
@@ -92,7 +88,6 @@ function Settings() {
           </TabsContent>
           <TabsContent value="danger" className="space-y-6 pt-4">
             <DataExportSection />
-            <DeleteAccountSection />
           </TabsContent>
         </Tabs>
       )}
