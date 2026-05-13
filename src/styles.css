@@ -154,6 +154,12 @@ html:not(.dark) {
     color: var(--color-foreground);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
+
+  /* Reserve space for the vertical scrollbar so navigating between pages
+     of different heights doesn't cause horizontal layout shake. */
+  html {
+    scrollbar-gutter: stable;
+  }
 }
 
 /* Unified, theme-aware thin scrollbars for code/preview blocks. */
