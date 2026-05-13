@@ -28,13 +28,14 @@ export function buildDocsTechArticleJsonLd(opts: {
   title: string;
   description: string;
   path: string;
+  inLanguage?: string;
 }): string {
   return JSON.stringify({
     "@context": "https://schema.org",
     "@type": "TechArticle",
     headline: opts.title,
     description: opts.description,
-    inLanguage: "en",
+    inLanguage: opts.inLanguage ?? "en",
     author: ORG,
     publisher: ORG,
     mainEntityOfPage: `${SITE}${opts.path}`,
