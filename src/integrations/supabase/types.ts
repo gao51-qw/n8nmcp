@@ -38,6 +38,63 @@ export type Database = {
         }
         Relationships: []
       }
+      admin_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string
+          changes: Json
+          created_at: string
+          id: string
+          summary: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          changes?: Json
+          created_at?: string
+          id?: string
+          summary?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          changes?: Json
+          created_at?: string
+          id?: string
+          summary?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
+      admin_user_notes: {
+        Row: {
+          id: string
+          note: string
+          tags: string[]
+          updated_at: string
+          updated_by: string | null
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          note?: string
+          tags?: string[]
+          updated_at?: string
+          updated_by?: string | null
+          user_id: string
+        }
+        Update: {
+          id?: string
+          note?: string
+          tags?: string[]
+          updated_at?: string
+          updated_by?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       announcement_audit_logs: {
         Row: {
           action: string
@@ -416,6 +473,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_grant_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _target_user_id: string
+        }
+        Returns: undefined
+      }
+      admin_revoke_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _target_user_id: string
+        }
+        Returns: undefined
+      }
+      admin_set_user_tier: {
+        Args: { _target_user_id: string; _tier: string }
+        Returns: undefined
+      }
       get_today_mcp_usage: { Args: { _user_id: string }; Returns: number }
       get_today_prompt_usage: { Args: { _user_id: string }; Returns: number }
       has_role: {
