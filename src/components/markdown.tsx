@@ -1,13 +1,15 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
 
 function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
+  const [showDownload, setShowDownload] = useState(false);
+  const [parsedObj, setParsedObj] = useState<any>(null);
 
   const getText = () => ref.current?.innerText ?? "";
 
@@ -24,11 +26,16 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   const looksLikeN8n = (obj: any) =>
     obj && typeof obj === "object" && Array.isArray(obj.nodes) && obj.connections;
 
-  const [isN8n, setIsN8n] = useState(false);
-  // Recompute on each render using ref text — cheap.
-  const parsed = ref.current ? tryParseJson() : { ok: false as const };
-  const showDownload = parsed.ok && looksLikeN8n(parsed.obj);
-  void isN8n; void setIsN8n;
+  useEffect(() => {
+    const p = tryParseJson();
+    if (p.ok && looksLikeN8n(p.obj)) {
+      setParsedObj(p.obj);
+      setShowDownload(true);
+    } else {
+      setParsedObj(null);
+      setShowDownload(false);
+    }
+  }, [props.children]);
 
   const onCopy = async () => {
     const text = ref.current?.innerText ?? "";
@@ -43,13 +50,13 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   };
 
   const onDownload = () => {
-    const p = tryParseJson();
-    if (!p.ok) {
+    const obj = parsedObj ?? (tryParseJson().ok ? (tryParseJson() as any).obj : null);
+    if (!obj) {
       toast.error("无法解析为 JSON", { duration: 1200 });
       return;
     }
-    const pretty = JSON.stringify(p.obj, null, 2);
-    const rawName = typeof p.obj?.name === "string" && p.obj.name.trim() ? p.obj.name.trim() : "n8n-workflow";
+    const pretty = JSON.stringify(obj, null, 2);
+    const rawName = typeof obj?.name === "string" && obj.name.trim() ? obj.name.trim() : "n8n-workflow";
     const safe = rawName.replace(/[^\w\u4e00-\u9fa5.\- ]+/g, "_").slice(0, 80);
     const blob = new Blob([pretty], { type: "application/json" });
     const url = URL.createObjectURL(blob);
