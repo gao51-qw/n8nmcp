@@ -73,7 +73,11 @@ export const adminUpdateTicket = createServerFn({ method: "POST" })
   .middleware([requireAdmin])
   .inputValidator((d) => UpdateInput.parse(d))
   .handler(async ({ data }) => {
-    const patch: Record<string, unknown> = {};
+    const patch: {
+      status?: "open" | "in_progress" | "waiting_user" | "resolved" | "closed";
+      priority?: "low" | "normal" | "high" | "urgent";
+      assigned_to?: string | null;
+    } = {};
     if (data.status !== undefined) patch.status = data.status;
     if (data.priority !== undefined) patch.priority = data.priority;
     if (data.assigned_to !== undefined) patch.assigned_to = data.assigned_to;
