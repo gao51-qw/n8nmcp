@@ -19,6 +19,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ImprintRouteImport } from './routes/imprint'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as DocsRouteImport } from './routes/docs'
+import { Route as AdminSetupRouteImport } from './routes/admin-setup'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
@@ -89,6 +90,11 @@ const FaqRoute = FaqRouteImport.update({
 const DocsRoute = DocsRouteImport.update({
   id: '/docs',
   path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminSetupRoute = AdminSetupRouteImport.update({
+  id: '/admin-setup',
+  path: '/admin-setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
@@ -202,6 +208,7 @@ const AuthenticatedAdminAdminAnnouncementsPreviewIdRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin-setup': typeof AdminSetupRoute
   '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
@@ -233,6 +240,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin-setup': typeof AdminSetupRoute
   '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
@@ -266,6 +274,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
+  '/admin-setup': typeof AdminSetupRoute
   '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
@@ -300,6 +309,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin-setup'
     | '/docs'
     | '/faq'
     | '/imprint'
@@ -331,6 +341,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin-setup'
     | '/docs'
     | '/faq'
     | '/imprint'
@@ -363,6 +374,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_authenticated'
+    | '/admin-setup'
     | '/docs'
     | '/faq'
     | '/imprint'
@@ -397,6 +409,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
+  AdminSetupRoute: typeof AdminSetupRoute
   DocsRoute: typeof DocsRoute
   FaqRoute: typeof FaqRoute
   ImprintRoute: typeof ImprintRoute
@@ -483,6 +496,13 @@ declare module '@tanstack/react-router' {
       path: '/docs'
       fullPath: '/docs'
       preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin-setup': {
+      id: '/admin-setup'
+      path: '/admin-setup'
+      fullPath: '/admin-setup'
+      preLoaderRoute: typeof AdminSetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated': {
@@ -703,6 +723,7 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
+  AdminSetupRoute: AdminSetupRoute,
   DocsRoute: DocsRoute,
   FaqRoute: FaqRoute,
   ImprintRoute: ImprintRoute,
