@@ -18,13 +18,7 @@ export const DOCS_NAV: DocSection[] = [
   },
   {
     label: "Connect a client",
-    items: [
-      { to: "/docs/clients", label: "All MCP clients" },
-      { to: "/docs/clients/claude", label: "Claude Desktop / Code" },
-      { to: "/docs/clients/chatgpt", label: "ChatGPT" },
-      { to: "/docs/clients/cursor", label: "Cursor" },
-      { to: "/docs/clients/vscode", label: "VS Code & Continue" },
-    ],
+    items: [{ to: "/docs/clients", label: "All MCP clients" }],
   },
   {
     label: "Configuration",
