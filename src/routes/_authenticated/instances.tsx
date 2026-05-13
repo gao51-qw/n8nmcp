@@ -73,6 +73,11 @@ function InstancesPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["instances"],
     queryFn: () => listInstances(),
+    // Half-static: only changes via this page's own mutations (which
+    // already invalidateQueries). Keep cached aggressively to make
+    // sidebar re-entry instant and flicker-free.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
   const [editing, setEditing] = useState<Instance | null>(null);
   const [open, setOpen] = useState(false);

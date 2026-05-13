@@ -43,6 +43,10 @@ function BillingPage() {
       const { data } = await supabase.from("subscriptions").select("tier,status,current_period_end").maybeSingle();
       return data;
     },
+    // Subscription only changes after Paddle checkout/portal — rare.
+    // Long staleTime + we manually invalidate after purchase flows.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const current = tierOf(sub.data?.tier);
