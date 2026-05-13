@@ -271,6 +271,86 @@ const zh: Dict = {
       starAlt: "{repo} 的 Star 历史",
     },
   },
+  pricingPage: {
+    title: "简单定价",
+    subtitle: "不按席位计费，没有套路。随时取消。",
+    cadenceForever: "永久",
+    cadenceMonth: "每月",
+    tiers: [
+      {
+        name: "免费版",
+        price: "$0",
+        cadenceKey: "forever",
+        features: ["每天 100 次 MCP 调用", "1 个 n8n 实例", "1 个平台 API key", "社区支持"],
+        cta: "免费开始",
+      },
+      {
+        name: "支持者版",
+        price: "$19",
+        cadenceKey: "month",
+        features: ["每天 10,000 次 MCP 调用", "5 个 n8n 实例", "无限 API key", "优先邮件支持"],
+        cta: "升级",
+      },
+      {
+        name: "Pro 版",
+        price: "$49",
+        cadenceKey: "month",
+        features: ["每天 100,000 次 MCP 调用", "无限实例", "审计日志", "SLA 与专属支持"],
+        cta: "升级到 Pro",
+      },
+    ],
+  },
+  faqPage: {
+    eyebrow: "常见问题",
+    title: "常见问题解答",
+    subtitlePrefix: "全部来自真实用户。还是没解决？",
+    subtitleEmail: "发邮件给我们",
+    searchPlaceholder: "搜索问题、答案或标签…",
+    searchAria: "搜索常见问题",
+    clearSearch: "清除搜索",
+    all: "全部",
+    countTemplate: "共 {total} 条，显示 {shown} 条",
+    clearFilters: "清除筛选",
+    empty: "没有匹配的问题——换个关键词试试。",
+    ctaTitle: "准备好试一下了吗？",
+    ctaSubtitle: "免费版每天 100 次 MCP 调用，无需信用卡。",
+    ctaPrimary: "免费开始",
+    ctaSecondary: "阅读文档",
+  },
+  faqCategories: {
+    general: "通用",
+    clients: "客户端",
+    security: "安全",
+    pricing: "定价",
+    selfHosting: "自托管",
+    openSource: "开源",
+  },
+  faqItems: {
+    "vs-mcp-node": {
+      q: "n8n-mcp 和我自己跑 n8n 的 MCP 节点有什么区别？",
+      a: "我们在你的 n8n 实例前托管了一个多租户的 MCP 网关。你得到稳定的 URL、按工具路由、加密保存的凭据、使用配额和可观测性——而无需把 n8n API key 暴露给 AI 客户端。",
+    },
+    "supported-clients": {
+      q: "支持哪些 AI 客户端？",
+      a: "任何通过 Streamable HTTP 说 Model Context Protocol 的客户端——Claude、Claude Code、ChatGPT、Cursor、Windsurf、VS Code、Gemini CLI、Codex CLI、LM Studio、Continue、Cline、Zed 等等。",
+    },
+    "api-key-safety": {
+      q: "我的 n8n API key 安全吗？",
+      a: "安全。密钥落库前已用 AES-256-GCM 静态加密；只有在网关转发请求到你的实例时，才会在内存中临时解密。",
+    },
+    "paid-plan-needed": {
+      q: "需要付费才能开始用吗？",
+      a: "不需要。免费版每天提供 100 次 MCP 调用以及 1 个 n8n 实例。无需信用卡。",
+    },
+    "private-network": {
+      q: "我的 n8n 在私有网络里，能用吗？",
+      a: "网关需要能访问到你的 n8n HTTPS 端点。如果你的 n8n 在私有网络里，可以通过隧道（Cloudflare Tunnel、Tailscale Funnel）暴露出来，或者在同一网络内自行运行网关。",
+    },
+    "source-available": {
+      q: "源代码开放吗？",
+      a: "我们使用的 MCP 知识服务器是开源的。托管网关代码暂未开源，但我们提供详尽文档，且通信协议遵循官方 MCP 规范——绝无锁定。",
+    },
+  },
 };
 
 export default zh;

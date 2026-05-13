@@ -271,6 +271,86 @@ const ja: Dict = {
       starAlt: "{repo} の Star 履歴",
     },
   },
+  pricingPage: {
+    title: "シンプルな料金",
+    subtitle: "席課金なし、隠れ費用なし。いつでも解約可能。",
+    cadenceForever: "永久",
+    cadenceMonth: "月額",
+    tiers: [
+      {
+        name: "Free",
+        price: "$0",
+        cadenceKey: "forever",
+        features: ["1 日 100 MCP コール", "1 つの n8n インスタンス", "1 つのプラットフォーム API キー", "コミュニティサポート"],
+        cta: "無料で始める",
+      },
+      {
+        name: "Supporter",
+        price: "$19",
+        cadenceKey: "month",
+        features: ["1 日 10,000 MCP コール", "5 つの n8n インスタンス", "API キー無制限", "優先メールサポート"],
+        cta: "アップグレード",
+      },
+      {
+        name: "Pro",
+        price: "$49",
+        cadenceKey: "month",
+        features: ["1 日 100,000 MCP コール", "無制限インスタンス", "監査ログ", "SLA と専用サポート"],
+        cta: "Pro にする",
+      },
+    ],
+  },
+  faqPage: {
+    eyebrow: "FAQ",
+    title: "よくある質問",
+    subtitlePrefix: "実ユーザーから寄せられた質問です。それでも解決しない場合は",
+    subtitleEmail: "メールでお問い合わせください",
+    searchPlaceholder: "質問・回答・タグを検索…",
+    searchAria: "FAQ を検索",
+    clearSearch: "検索をクリア",
+    all: "すべて",
+    countTemplate: "{total} 件中 {shown} 件を表示",
+    clearFilters: "フィルターをクリア",
+    empty: "該当する質問はありません。別のキーワードでお試しください。",
+    ctaTitle: "試してみますか？",
+    ctaSubtitle: "1 日 100 MCP コールの無料プラン。クレジットカード不要。",
+    ctaPrimary: "無料で始める",
+    ctaSecondary: "ドキュメントを読む",
+  },
+  faqCategories: {
+    general: "一般",
+    clients: "クライアント",
+    security: "セキュリティ",
+    pricing: "料金",
+    selfHosting: "セルフホスト",
+    openSource: "オープンソース",
+  },
+  faqItems: {
+    "vs-mcp-node": {
+      q: "n8n-mcp は自分で n8n の MCP ノードを動かすのと何が違いますか？",
+      a: "あなたの n8n の前にマルチテナントの MCP ゲートウェイをホストします。安定した URL、ツール別ルーティング、暗号化された認証情報、利用クォータと可観測性が手に入り、AI クライアントに n8n API キーを渡す必要がありません。",
+    },
+    "supported-clients": {
+      q: "対応する AI クライアントは？",
+      a: "Streamable HTTP で Model Context Protocol を話すクライアントなら何でも — Claude、Claude Code、ChatGPT、Cursor、Windsurf、VS Code、Gemini CLI、Codex CLI、LM Studio、Continue、Cline、Zed など。",
+    },
+    "api-key-safety": {
+      q: "n8n API キーは安全ですか？",
+      a: "はい。DB に届く前に AES-256-GCM で保存時暗号化されます。復号はゲートウェイがリクエストを転送する瞬間にメモリ内でのみ行われます。",
+    },
+    "paid-plan-needed": {
+      q: "始めるのに有料プランは必要ですか？",
+      a: "いいえ。無料プランで 1 日 100 MCP コールと n8n インスタンス 1 つが使えます。クレジットカード不要。",
+    },
+    "private-network": {
+      q: "プライベートネットワーク内のセルフホスト n8n でも使えますか？",
+      a: "ゲートウェイは n8n の HTTPS エンドポイントに到達できる必要があります。プライベートネットワーク内なら、トンネル（Cloudflare Tunnel、Tailscale Funnel）で公開するか、同じネットワーク内でゲートウェイを動かしてください。",
+    },
+    "source-available": {
+      q: "ソースコードは公開されていますか？",
+      a: "利用している MCP ナレッジサーバーはオープンソースです。ホステッドゲートウェイ自体は今のところクローズドですが、詳細なドキュメントを公開しており、通信プロトコルは公式 MCP 仕様 — ロックインはありません。",
+    },
+  },
 };
 
 export default ja;

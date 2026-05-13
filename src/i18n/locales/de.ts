@@ -271,6 +271,86 @@ const de: Dict = {
       starAlt: "{repo} Star-Verlauf",
     },
   },
+  pricingPage: {
+    title: "Einfache Preise",
+    subtitle: "Keine Seats, keine Überraschungen. Jederzeit kündbar.",
+    cadenceForever: "für immer",
+    cadenceMonth: "pro Monat",
+    tiers: [
+      {
+        name: "Free",
+        price: "$0",
+        cadenceKey: "forever",
+        features: ["100 MCP-Calls / Tag", "1 n8n-Instanz", "1 Plattform-API-Key", "Community-Support"],
+        cta: "Kostenlos starten",
+      },
+      {
+        name: "Supporter",
+        price: "$19",
+        cadenceKey: "month",
+        features: ["10.000 MCP-Calls / Tag", "5 n8n-Instanzen", "Unbegrenzte API-Keys", "Bevorzugter E-Mail-Support"],
+        cta: "Upgrade",
+      },
+      {
+        name: "Pro",
+        price: "$49",
+        cadenceKey: "month",
+        features: ["100.000 MCP-Calls / Tag", "Unbegrenzte Instanzen", "Audit-Logs", "SLA & privater Support"],
+        cta: "Pro werden",
+      },
+    ],
+  },
+  faqPage: {
+    eyebrow: "FAQ",
+    title: "Häufig gestellte Fragen",
+    subtitlePrefix: "Echte Fragen von echten Nutzern. Trotzdem hängen geblieben?",
+    subtitleEmail: "schreib uns",
+    searchPlaceholder: "Fragen, Antworten oder Tags durchsuchen…",
+    searchAria: "FAQ durchsuchen",
+    clearSearch: "Suche löschen",
+    all: "Alle",
+    countTemplate: "{shown} von {total} Fragen",
+    clearFilters: "Filter zurücksetzen",
+    empty: "Keine Treffer — versuch ein anderes Stichwort.",
+    ctaTitle: "Bereit zum Ausprobieren?",
+    ctaSubtitle: "Free-Plan mit 100 MCP-Calls/Tag. Keine Kreditkarte nötig.",
+    ctaPrimary: "Kostenlos starten",
+    ctaSecondary: "Dokumentation lesen",
+  },
+  faqCategories: {
+    general: "Allgemein",
+    clients: "Clients",
+    security: "Sicherheit",
+    pricing: "Preise",
+    selfHosting: "Self-Hosting",
+    openSource: "Open Source",
+  },
+  faqItems: {
+    "vs-mcp-node": {
+      q: "Was unterscheidet n8n-mcp davon, n8n's MCP-Node selbst zu betreiben?",
+      a: "Wir hosten ein Multi-Tenant-MCP-Gateway vor deiner n8n-Instanz. Du bekommst eine stabile URL, Tool-Routing, verschlüsselte Credentials, Quoten und Observability — ohne deinen n8n-API-Key an KI-Clients zu geben.",
+    },
+    "supported-clients": {
+      q: "Welche KI-Clients werden unterstützt?",
+      a: "Alles, was Model Context Protocol über Streamable HTTP spricht — Claude, Claude Code, ChatGPT, Cursor, Windsurf, VS Code, Gemini CLI, Codex CLI, LM Studio, Continue, Cline, Zed und mehr.",
+    },
+    "api-key-safety": {
+      q: "Ist mein n8n-API-Key sicher?",
+      a: "Ja. Keys werden mit AES-256-GCM at rest verschlüsselt, bevor sie die DB erreichen. Entschlüsselt wird nur im Speicher innerhalb des Gateways, wenn eine Anfrage an deine Instanz weitergeleitet wird.",
+    },
+    "paid-plan-needed": {
+      q: "Brauche ich einen Bezahl-Plan, um loszulegen?",
+      a: "Nein. Der Free-Plan beinhaltet 100 MCP-Calls pro Tag und eine n8n-Instanz. Keine Kreditkarte nötig.",
+    },
+    "private-network": {
+      q: "Geht das mit selbstgehostetem n8n hinter einem privaten Netzwerk?",
+      a: "Das Gateway muss deinen n8n-HTTPS-Endpunkt erreichen können. Liegt n8n im privaten Netz, exponiere es per Tunnel (Cloudflare Tunnel, Tailscale Funnel) oder betreibe das Gateway im selben Netz.",
+    },
+    "source-available": {
+      q: "Ist der Quellcode offen?",
+      a: "Der MCP-Knowledge-Server, den wir nutzen, ist Open Source. Der Code des gehosteten Gateways ist aktuell geschlossen, aber wir veröffentlichen detaillierte Docs und das Wire-Protokoll ist die offizielle MCP-Spec — kein Lock-in.",
+    },
+  },
 };
 
 export default de;
