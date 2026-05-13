@@ -168,12 +168,16 @@ function RootComponent() {
       <AuthProvider>
         <TooltipProvider>
           <main id="main" tabIndex={-1} className="outline-none">
-            <div
-              key={pathname}
-              className="motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-300 motion-safe:ease-out"
-            >
-              <Outlet />
-            </div>
+            {/*
+              No keyed wrapper / entrance animation here.
+              Previously this div had key={pathname} + animate-in +
+              slide-in-from-bottom, which forced a remount and a 300ms
+              translate-Y on EVERY sidebar click. That is exactly the
+              "页面弹出/抖动" the user reported. Page transitions should
+              feel instant; any per-route animation belongs inside the
+              individual route component, not at the router boundary.
+            */}
+            <Outlet />
           </main>
           <Toaster richColors position="top-right" />
           <NavPerfOverlay />
