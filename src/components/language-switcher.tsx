@@ -1,5 +1,9 @@
 import * as React from "react";
 import { Globe, Check } from "lucide-react";
+import {
+  useRouterState,
+  useNavigate,
+} from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -9,13 +13,25 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { LOCALES, LOCALE_LABELS } from "@/i18n/config";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/i18n/config";
 import { useLocale } from "@/i18n/context";
+import { stripLocalePrefix, localizedPath } from "@/lib/seo-i18n";
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale, t } = useLocale();
+  const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const search = useRouterState({ select: (s) => s.location.search });
+  const hash = useRouterState({ select: (s) => s.location.hash });
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
+
+  const switchTo = (target: Locale) => {
+    setLocale(target); // remember preference
+    const logical = stripLocalePrefix(pathname);
+    const next = localizedPath(logical, target);
+    navigate({ to: next, search: search as any, hash: hash || undefined });
+  };
 
   return (
     <DropdownMenu>
@@ -40,7 +56,7 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
         {LOCALES.map((l) => (
           <DropdownMenuItem
             key={l}
-            onClick={() => setLocale(l)}
+            onClick={() => switchTo(l)}
             className="flex items-center justify-between gap-3"
           >
             <span>{LOCALE_LABELS[l]}</span>
