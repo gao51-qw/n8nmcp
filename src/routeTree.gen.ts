@@ -24,6 +24,8 @@ import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
+import { Route as DocsGettingStartedRouteImport } from './routes/docs.getting-started'
+import { Route as DocsConceptsRouteImport } from './routes/docs.concepts'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
@@ -116,6 +118,16 @@ const BlogIndexRoute = BlogIndexRouteImport.update({
   id: '/blog/',
   path: '/blog/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DocsGettingStartedRoute = DocsGettingStartedRouteImport.update({
+  id: '/getting-started',
+  path: '/getting-started',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsConceptsRoute = DocsConceptsRouteImport.update({
+  id: '/concepts',
+  path: '/concepts',
+  getParentRoute: () => DocsRoute,
 } as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
   id: '/blog/$slug',
@@ -235,6 +247,8 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/concepts': typeof DocsConceptsRoute
+  '/docs/getting-started': typeof DocsGettingStartedRoute
   '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
@@ -267,6 +281,8 @@ export interface FileRoutesByTo {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/concepts': typeof DocsConceptsRoute
+  '/docs/getting-started': typeof DocsGettingStartedRoute
   '/blog': typeof BlogIndexRoute
   '/docs': typeof DocsIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
@@ -303,6 +319,8 @@ export interface FileRoutesById {
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/concepts': typeof DocsConceptsRoute
+  '/docs/getting-started': typeof DocsGettingStartedRoute
   '/blog/': typeof BlogIndexRoute
   '/docs/': typeof DocsIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
@@ -338,6 +356,8 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/docs/concepts'
+    | '/docs/getting-started'
     | '/blog/'
     | '/docs/'
     | '/api/public/mcp'
@@ -370,6 +390,8 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/docs/concepts'
+    | '/docs/getting-started'
     | '/blog'
     | '/docs'
     | '/api/public/mcp'
@@ -405,6 +427,8 @@ export interface FileRouteTypes {
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/blog/$slug'
+    | '/docs/concepts'
+    | '/docs/getting-started'
     | '/blog/'
     | '/docs/'
     | '/api/public/mcp'
@@ -542,6 +566,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/blog/'
       preLoaderRoute: typeof BlogIndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/docs/getting-started': {
+      id: '/docs/getting-started'
+      path: '/getting-started'
+      fullPath: '/docs/getting-started'
+      preLoaderRoute: typeof DocsGettingStartedRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/concepts': {
+      id: '/docs/concepts'
+      path: '/concepts'
+      fullPath: '/docs/concepts'
+      preLoaderRoute: typeof DocsConceptsRouteImport
+      parentRoute: typeof DocsRoute
     }
     '/blog/$slug': {
       id: '/blog/$slug'
@@ -738,10 +776,14 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 )
 
 interface DocsRouteChildren {
+  DocsConceptsRoute: typeof DocsConceptsRoute
+  DocsGettingStartedRoute: typeof DocsGettingStartedRoute
   DocsIndexRoute: typeof DocsIndexRoute
 }
 
 const DocsRouteChildren: DocsRouteChildren = {
+  DocsConceptsRoute: DocsConceptsRoute,
+  DocsGettingStartedRoute: DocsGettingStartedRoute,
   DocsIndexRoute: DocsIndexRoute,
 }
 
@@ -769,3 +811,13 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}
