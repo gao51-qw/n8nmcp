@@ -1,35 +1,7 @@
 // Master English dictionary. All other locales must mirror this shape
-// exactly — TypeScript enforces it via the `Dict` type in src/i18n/dict.ts.
-// NOTE: no `as const` — we want string-typed values so other locales can
-// supply their own translations without literal-type collisions.
-type DictShape = {
-  nav: Record<
-    "features" | "diy" | "architecture" | "pricing" | "docs" | "blog"
-    | "community" | "faq" | "github" | "signIn" | "getStarted" | "dashboard"
-    | "menu" | "openMenu" | "language",
-    string
-  >;
-  footer: {
-    tagline: string;
-    sections: Record<"product" | "resources" | "legal", string>;
-    links: Record<
-      "pricing" | "docs" | "signIn" | "getStarted" | "mcp" | "n8n" | "github"
-      | "starHistory" | "status" | "terms" | "privacy" | "cookies" | "imprint"
-      | "contact" | "termsShort" | "privacyShort" | "support",
-      string
-    >;
-    copyright: string;
-  };
-  home: {
-    hero: Record<
-      "badge" | "titleLineOne" | "titleLineTwo" | "subtitle"
-      | "ctaPrimary" | "ctaSecondary" | "compareWithDiy" | "seeArchitecture",
-      string
-    >;
-  };
-};
+// exactly — TypeScript enforces it via `Dict = typeof en` in dict.ts.
 
-const en: DictShape = {
+const en = {
   nav: {
     features: "Features",
     diy: "vs DIY",
@@ -49,11 +21,7 @@ const en: DictShape = {
   },
   footer: {
     tagline: "Hosted MCP gateway for n8n. Plug your workflows into any AI client in seconds.",
-    sections: {
-      product: "Product",
-      resources: "Resources",
-      legal: "Legal",
-    },
+    sections: { product: "Product", resources: "Resources", legal: "Legal" },
     links: {
       pricing: "Pricing",
       docs: "Docs",
@@ -84,8 +52,229 @@ const en: DictShape = {
         "n8n-mcp turns your self-hosted n8n into a Model Context Protocol server. Connect Claude, ChatGPT, Cursor and any MCP-compatible client with one URL and one API key — no drag-and-drop required.",
       ctaPrimary: "Start for free",
       ctaSecondary: "Read the docs",
-      compareWithDiy: "Compare with DIY",
-      seeArchitecture: "See architecture",
+      compareWithDiy: "See DIY comparison →",
+      seeArchitecture: "View architecture →",
+      noCard: "No credit card required · 100 calls/day on Free",
+    },
+    stats: {
+      nodes: "n8n nodes covered",
+      nodesSource: "{core} core + {community} community nodes",
+      clients: "supported AI clients",
+      clientsSource: "Any MCP-compliant client",
+      latency: "median tool call",
+      latencySource: "p50, EU edge, last 30 days",
+      sourcesPrefix: "Sources: node count from",
+      sourcesKb: "n8n-mcp knowledge base",
+      sourcesSuffix: "; latency measured on the hosted gateway over the last 30 days.",
+    },
+    twoWays: {
+      eyebrow: "Choose your way",
+      title: "Two ways to use n8n-mcp",
+      subtitle:
+        "Use our Chat Agent to build workflows instantly, or connect your favorite AI tools via MCP for full control.",
+      poweredByPrefix: "Powered by the open-source",
+      poweredBySuffix: "knowledge server, plus a hosted runtime gateway — not a fork, a complement.",
+      chat: {
+        badge: "Just launched",
+        eyebrow: "Recommended",
+        title: "Chat Agent",
+        body: "A full AI agent that builds, validates and deploys production-ready n8n workflows from a single prompt. No setup, no learning curve.",
+        example:
+          '"Send me a Slack summary of my Google Calendar events every morning at 8am"',
+        cta: "Try Chat Agent",
+      },
+      mcp: {
+        eyebrow: "For power users",
+        title: "MCP Servers",
+        body: "Connect Claude, Cursor, Windsurf or any MCP-compatible AI tool directly to your n8n instance. Full control from your favorite IDE.",
+        steps: [
+          { t: "Sign up", d: "Create a free account on the dashboard" },
+          { t: "Connect", d: "Paste your n8n URL + API key, encrypted at rest" },
+          { t: "Build", d: "Your AI tool can now create & manage workflows" },
+        ],
+        cta: "Get started",
+      },
+    },
+    features: {
+      items: [
+        { title: "Universal MCP", body: "Streamable HTTP MCP server compatible with every major AI client." },
+        { title: "All your workflows", body: "List, run, debug and inspect every workflow in your n8n instance." },
+        { title: "Encrypted at rest", body: "Your n8n API key is encrypted with AES-256-GCM before it touches the database." },
+        { title: "Sub-second latency", body: "Edge-deployed gateway with per-tool routing keeps tool calls fast." },
+        { title: "Open protocol", body: "Built on the official MCP spec — no proprietary lock-in." },
+        { title: "Multi-instance", body: "Connect as many n8n instances as you want from one account." },
+      ],
+      notSame: "Not the same as:",
+      zapierTip:
+        "Zapier hosts MCP for Zapier's Zaps. We host MCP for your existing n8n — self-hosted, no platform lock-in.",
+      pipedreamTip:
+        "They expose connector-grain tools (one tool per API endpoint). We expose your workflow-grain tools — your existing n8n logic, reused as-is.",
+      n8nCloudTip:
+        "Only serves n8n Cloud workspaces. We work for self-hosted, Cloud, and multi-instance setups in one account.",
+    },
+    pricing: {
+      eyebrow: "Simple pricing",
+      title: "Start free, upgrade anytime",
+      subtitle: "Generous free tier for everyone. Upgrade when you need more calls.",
+      free: {
+        name: "Free",
+        cadence: "forever",
+        features: [
+          "100 MCP calls / day",
+          "1 n8n instance",
+          "1 platform API key",
+          "Community support",
+        ],
+        cta: "Start free",
+      },
+      supporter: {
+        name: "Supporter",
+        cadence: "per month",
+        features: [
+          "10,000 MCP calls / day",
+          "5 n8n instances",
+          "Unlimited API keys",
+          "Priority email support",
+        ],
+        cta: "Become a Supporter",
+        badge: "Most popular",
+      },
+      morePrefix: "Need more?",
+      moreLink: "See full pricing",
+    },
+    faq: {
+      eyebrow: "FAQ",
+      title: "Got questions?",
+      subtitle: "Real questions from real users.",
+      searchPlaceholder: "Search questions…",
+      searchAria: "Search FAQ",
+      empty: "No questions match — try another keyword.",
+    },
+    finalCta: {
+      eyebrow: "Free tier available",
+      title: "Your next workflow is one prompt away",
+      subtitle: "Connect your first n8n instance in under 60 seconds.",
+      primary: "Create your account",
+      secondary: "Read the docs",
+    },
+  },
+  marketing: {
+    logoWall: { works: "Works with your favorite AI tools" },
+    diy: {
+      eyebrow: "Why a gateway",
+      title: "DIY MCP node vs. n8n-mcp Gateway",
+      subtitle: "You can absolutely roll your own. Here's what you skip when you let us host it.",
+      view: { auto: "Auto", desktop: "Desktop", mobile: "Mobile" },
+      headers: { capability: "Capability", diy: "DIY n8n MCP node", gateway: "n8n-mcp Gateway" },
+      mobile: { diy: "DIY", gateway: "Gateway" },
+      rows: [
+        { label: "Deployment", diy: "Wire up the MCP node, expose a URL, keep it alive yourself", gateway: "One hosted URL, instant — works with every n8n instance" },
+        { label: "Credentials", diy: "Your raw n8n API key handed to every AI client", gateway: "AES-256-GCM encrypted at rest, only the gateway sees it" },
+        { label: "Multi-client", diy: "Re-configure auth & URL per client", gateway: "One URL works for Claude, ChatGPT, Cursor, Windsurf…" },
+        { label: "Observability", diy: "Dig through n8n execution logs", gateway: "Per-call logs, quotas and usage analytics" },
+      ],
+    },
+    arch: {
+      eyebrow: "Architecture",
+      title: "Reach a self-hosted n8n behind any network",
+      subtitle: "The gateway only needs an HTTPS endpoint. Public, tunneled, or fully private — pick the path that fits your setup.",
+      nodes: {
+        client: "AI Client", clientSub: "Claude · Cursor · ChatGPT",
+        gateway: "n8n-mcp Gateway", gatewaySub: "Edge · multi-tenant",
+        publicN8n: "Public n8n", publicSub: "HTTPS endpoint",
+        tunnel: "Tunnel", tunnelSub: "Cloudflare · Tailscale",
+        privateVpc: "Private VPC", privateSub: "Self-hosted only",
+      },
+      badges: { ssrf: "SSRF guarded", aes: "AES-256-GCM at rest", zero: "Zero workflow data stored" },
+      security: {
+        eyebrow: "Security & data flow",
+        title: "What the gateway holds — and what it deliberately doesn't",
+        subtitle: "Three boundaries you can rely on when an AI client calls one of your n8n workflows through n8n-mcp.",
+        pillars: [
+          {
+            title: "AES-256-GCM at rest",
+            scope: "Applies to: n8n base URL & API key per instance",
+            bullets: [
+              "Encrypted before insert with a per-row IV",
+              "Decrypted only inside the gateway request handler",
+              "Never logged, never returned to the client UI",
+            ],
+            boundary: "Boundary: workflow inputs/outputs are not persisted — only your credentials are stored, encrypted.",
+          },
+          {
+            title: "SSRF protection",
+            scope: "Applies to: every outbound fetch to a user-controlled URL",
+            bullets: [
+              "Hostname resolved & checked against private/loopback ranges",
+              "Tunnels (Cloudflare, Tailscale Funnel) allow-listed by domain",
+              "Redirects re-validated at every hop",
+            ],
+            boundary: "Boundary: the gateway will refuse to call 127.0.0.1, 10.0.0.0/8, link-local, or metadata endpoints.",
+          },
+          {
+            title: "Zero workflow data stored",
+            scope: "Applies to: every MCP tool call proxied through the gateway",
+            bullets: [
+              "Request & response bodies stream through, never written to DB",
+              "Audit log keeps only call metadata: tool, status, latency, byte counts",
+              "No prompt, no payload, no n8n execution data is retained",
+            ],
+            boundary: "Boundary: if you need full payload retention, that's on n8n's execution log — not the gateway.",
+          },
+        ],
+      },
+    },
+    evolution: {
+      eyebrow: "The evolution",
+      title: "From frustration to flow",
+      subtitle: "Plain prompting only gets you so far. With a real MCP gateway your AI client gets first-class access to n8n.",
+      withoutLabel: "Without MCP",
+      withLabel: "With n8n-mcp",
+      pairs: [
+        {
+          pain: { title: "Copy-pasting JSON", body: "AI generates workflow JSON that you copy into n8n. It looks right, but fails with cryptic errors from hallucinated properties." },
+          flow: { title: "Direct deployment", body: "AI creates workflows directly in your n8n instance. No copy-paste, no import errors. Just working automation." },
+        },
+        {
+          pain: { title: "Screenshotting workflows", body: "Want AI to improve a workflow? Screenshot it, paste it back, explain the context. Every. Single. Time." },
+          flow: { title: "Live workflow access", body: "AI reads your existing workflows, understands the context, and makes targeted improvements. No screenshots needed." },
+        },
+        {
+          pain: { title: "Outdated node configs", body: "n8n updates weekly. AI training data is months old. Generated workflows use deprecated options and missing parameters." },
+          flow: { title: "Always current", body: "Documentation synced with the latest n8n releases. Every node, every parameter, always accurate." },
+        },
+        {
+          pain: { title: "Blind debugging", body: "Workflow failed? AI can't see execution logs. You're stuck copy-pasting error messages and hoping for the best." },
+          flow: { title: "Smart self-correction", body: "Validation tools give AI real feedback. It catches its own mistakes and fixes them before you even notice." },
+        },
+      ],
+    },
+    cache: {
+      eyebrow: "Collective knowledge",
+      title: "Every workflow makes everyone faster",
+      subtitle: "Every workflow built on the platform feeds a shared cache. When your agent picks a proven pattern and tweaks a few fields, you skip the tokens — and the wait — of generating from scratch.",
+      steps: [
+        { title: "Request", desc: "User describes a workflow" },
+        { title: "Search cache", desc: "Scan known patterns" },
+        { title: "Match found", desc: "Proven pattern reused" },
+        { title: "Instant deploy", desc: "Pushed to your n8n in seconds" },
+        { title: "Customize", desc: "Agent adapts it to your needs" },
+      ],
+      privacyLabel: "Privacy-first, always.",
+      badges: [
+        "Patterns only, not your data",
+        "Self-hosted AI screening",
+        "Nothing leaves n8n-mcp",
+      ],
+    },
+    community: {
+      eyebrow: "Community",
+      title: "Loved by the community",
+      subtitle: "See how developers use n8n-mcp to build workflows with AI.",
+      starHistory: "Star history",
+      oss: "Open source · MIT licensed",
+      viewGithub: "View on GitHub →",
+      starAlt: "{repo} star history",
     },
   },
 };
