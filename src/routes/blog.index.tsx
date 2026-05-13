@@ -10,9 +10,16 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getAllPosts, getAllTags, formatPostDate } from "@/lib/blog";
+import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
+const PUBLISHER = {
+  "@type": "Organization",
+  name: SITE_NAME,
+  url: SITE,
+  logo: { "@type": "ImageObject", url: `${SITE}/favicon.ico` },
+};
 const PER_PAGE = 6;
 
 type PostCard = {
@@ -134,14 +141,46 @@ export const Route = createFileRoute("/blog/")({
             name: TITLE,
             description: DESC,
             url: `${SITE}/blog`,
+            publisher: PUBLISHER,
             blogPost: posts.map((p) => ({
               "@type": "BlogPosting",
               headline: p.title,
               description: p.description,
               datePublished: p.date,
+              dateModified: p.date,
+              ...(p.author
+                ? { author: { "@type": "Person", name: p.author } }
+                : {}),
+              ...(p.tags.length
+                ? { keywords: p.tags.join(", ") }
+                : {}),
               url: `${SITE}/blog/${p.slug}`,
+              mainEntityOfPage: `${SITE}/blog/${p.slug}`,
+              publisher: PUBLISHER,
             })),
           }),
+        },
+        {
+          type: "application/ld+json",
+          children: JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "ItemList",
+            itemListOrder: "https://schema.org/ItemListOrderDescending",
+            numberOfItems: posts.length,
+            itemListElement: posts.map((p, i) => ({
+              "@type": "ListItem",
+              position: (page - 1) * PER_PAGE + i + 1,
+              url: `${SITE}/blog/${p.slug}`,
+              name: p.title,
+            })),
+          }),
+        },
+        {
+          type: "application/ld+json",
+          children: buildBreadcrumbJsonLd([
+            { name: "Home", path: "/" },
+            { name: "Blog", path: "/blog" },
+          ]),
         },
       ],
     };
