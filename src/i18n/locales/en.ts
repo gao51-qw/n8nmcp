@@ -1,6 +1,35 @@
 // Master English dictionary. All other locales must mirror this shape
 // exactly — TypeScript enforces it via the `Dict` type in src/i18n/dict.ts.
-const en = {
+// NOTE: no `as const` — we want string-typed values so other locales can
+// supply their own translations without literal-type collisions.
+type DictShape = {
+  nav: Record<
+    "features" | "diy" | "architecture" | "pricing" | "docs" | "blog"
+    | "community" | "faq" | "github" | "signIn" | "getStarted" | "dashboard"
+    | "menu" | "openMenu" | "language",
+    string
+  >;
+  footer: {
+    tagline: string;
+    sections: Record<"product" | "resources" | "legal", string>;
+    links: Record<
+      "pricing" | "docs" | "signIn" | "getStarted" | "mcp" | "n8n" | "github"
+      | "starHistory" | "status" | "terms" | "privacy" | "cookies" | "imprint"
+      | "contact" | "termsShort" | "privacyShort" | "support",
+      string
+    >;
+    copyright: string;
+  };
+  home: {
+    hero: Record<
+      "badge" | "titleLineOne" | "titleLineTwo" | "subtitle"
+      | "ctaPrimary" | "ctaSecondary" | "compareWithDiy" | "seeArchitecture",
+      string
+    >;
+  };
+};
+
+const en: DictShape = {
   nav: {
     features: "Features",
     diy: "vs DIY",
@@ -59,6 +88,6 @@ const en = {
       seeArchitecture: "See architecture",
     },
   },
-} as const;
+};
 
 export default en;
