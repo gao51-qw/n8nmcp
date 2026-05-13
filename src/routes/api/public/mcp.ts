@@ -14,6 +14,7 @@ import {
   shortWindowAllow,
 } from "@/lib/mcp.server";
 import { isUpstreamConfigured } from "@/lib/mcp-upstream.server";
+import { log } from "@/lib/logger.server";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -66,7 +67,8 @@ function jsonResp(payload: unknown, status = 200): Response {
 
 async function handleRpc(
   req: JsonRpcReq,
-  ctx: Awaited<ReturnType<typeof authenticateBearer>>
+  ctx: Awaited<ReturnType<typeof authenticateBearer>>,
+  source: { ip: string; ua: string },
 ): Promise<unknown> {
   if (!ctx) return rpcError(req.id, -32001, "Unauthorized");
 
@@ -89,7 +91,17 @@ async function handleRpc(
       return rpcResult(req.id, {});
 
     case "tools/list": {
+      const t0 = Date.now();
       const tools = await getMergedTools();
+      log.info("mcp.gateway.request", {
+        method: "tools/list",
+        user_id: ctx.user_id,
+        key_id: ctx.key_id,
+        ip: source.ip,
+        ua: source.ua,
+        latency_ms: Date.now() - t0,
+        tool_count: tools.length,
+      });
       return rpcResult(req.id, { tools });
     }
 
@@ -103,7 +115,11 @@ async function handleRpc(
       const inst = await getDefaultInstance(ctx.user_id);
 
       try {
-        const result = await dispatchTool(name, args, inst);
+        const result = await dispatchTool(name, args, inst, {
+          user_id: ctx.user_id,
+          key_id: ctx.key_id,
+          source: "tools/call",
+        });
 
         if (result.needsInstance) {
           await recordCall({
@@ -112,6 +128,18 @@ async function handleRpc(
             status: "error",
             latency_ms: Date.now() - started,
             error_message: "no n8n instance configured",
+            upstream: result.upstream,
+            category: result.category,
+          });
+          log.warn("mcp.gateway.request", {
+            method: "tools/call",
+            tool: name,
+            user_id: ctx.user_id,
+            key_id: ctx.key_id,
+            ip: source.ip,
+            ua: source.ua,
+            latency_ms: Date.now() - started,
+            status: "needs_instance",
             upstream: result.upstream,
             category: result.category,
           });
@@ -124,6 +152,18 @@ async function handleRpc(
           tool_name: name,
           status: "ok",
           latency_ms: Date.now() - started,
+          upstream: result.upstream,
+          category: result.category,
+        });
+        log.info("mcp.gateway.request", {
+          method: "tools/call",
+          tool: name,
+          user_id: ctx.user_id,
+          key_id: ctx.key_id,
+          ip: source.ip,
+          ua: source.ua,
+          latency_ms: Date.now() - started,
+          status: "ok",
           upstream: result.upstream,
           category: result.category,
         });
@@ -146,8 +186,20 @@ async function handleRpc(
           latency_ms: Date.now() - started,
           error_message: msg,
         });
+        log.warn("mcp.gateway.request", {
+          method: "tools/call",
+          tool: name,
+          user_id: ctx.user_id,
+          key_id: ctx.key_id,
+          ip: source.ip,
+          ua: source.ua,
+          latency_ms: Date.now() - started,
+          status: "error",
+          err: msg,
+        });
+        // Never surface raw upstream/internal error text to the client.
         return rpcResult(req.id, {
-          content: [{ type: "text", text: msg }],
+          content: [{ type: "text", text: "Tool execution failed. Check gateway logs." }],
           isError: true,
         });
       }
@@ -172,7 +224,16 @@ export const Route = createFileRoute("/api/public/mcp")({
 
       POST: async ({ request }) => {
         const auth = await authenticateBearer(request);
+        const ip =
+          request.headers.get("cf-connecting-ip") ||
+          request.headers.get("x-real-ip") ||
+          (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
+          "unknown";
+        const ua = (request.headers.get("user-agent") ?? "").slice(0, 200);
+        const source = { ip, ua };
+
         if (!auth) {
+          log.warn("mcp.gateway.unauthorized", { ip, ua });
           return jsonResp(rpcError(null, -32001, "Unauthorized: invalid or missing Bearer key"), 401);
         }
 
@@ -222,7 +283,7 @@ export const Route = createFileRoute("/api/public/mcp")({
           }
           // Notifications (no id) → no response body required
           const isNotification = r.id === undefined || r.id === null;
-          const out = await handleRpc(r, auth);
+          const out = await handleRpc(r, auth, source);
           if (!isNotification) responses.push(out);
         }
 

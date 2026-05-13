@@ -11,6 +11,7 @@ import {
   isUpstreamConfigured,
   listUpstreamTools,
   type UpstreamTool,
+  type CallerCtx,
 } from "./mcp-upstream.server";
 
 export type AuthedKey = {
@@ -246,7 +247,9 @@ export async function runTool(
         throw new Error("Knowledge base is not configured on this gateway; cannot resolve template.");
       }
       // 1) fetch template JSON from the upstream knowledge base
-      const tpl = (await callUpstreamTool("get_workflow_template", { id }, null)) as {
+      const tpl = (await callUpstreamTool("get_workflow_template", { id }, null, {
+        source: "import_workflow_template",
+      })) as {
         content?: Array<{ type: string; text: string }>;
       };
       const raw = tpl?.content?.[0]?.text;
@@ -297,7 +300,7 @@ export const TOOLS = LOCAL_TOOLS;
 export async function getMergedTools(): Promise<
   Array<{ name: string; description?: string; inputSchema?: unknown }>
 > {
-  const upstream: UpstreamTool[] = await listUpstreamTools();
+  const upstream: UpstreamTool[] = await listUpstreamTools(false);
   const merged: Array<{ name: string; description?: string; inputSchema?: unknown }> = [
     ...LOCAL_TOOLS,
   ];
@@ -324,6 +327,7 @@ export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
   inst: Inst | null,
+  caller?: CallerCtx,
 ): Promise<DispatchResult> {
   if (LOCAL_NAMES.has(name)) {
     if (!inst) {
@@ -358,6 +362,7 @@ export async function dispatchTool(
     name,
     args,
     management && inst ? { base_url: inst.base_url, api_key: inst.api_key } : null,
+    caller,
   );
   return {
     output: out,
