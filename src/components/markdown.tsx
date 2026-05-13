@@ -11,7 +11,17 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   const [showDownload, setShowDownload] = useState(false);
   const [parsedObj, setParsedObj] = useState<any>(null);
 
-  const getText = () => ref.current?.innerText ?? "";
+  const getText = () => {
+    const pre = ref.current;
+    if (!pre) return "";
+    // Prefer the inner <code> element's textContent — preserves exact source
+    // (newlines, leading whitespace) instead of innerText which collapses
+    // whitespace and applies CSS-driven line breaks.
+    const code = pre.querySelector("code");
+    const raw = (code?.textContent ?? pre.textContent ?? "");
+    // Normalize CRLF → LF and strip a single trailing newline added by Markdown.
+    return raw.replace(/\r\n/g, "\n").replace(/\n$/, "");
+  };
 
   const tryParseJson = (): { ok: true; obj: any; text: string } | { ok: false } => {
     const text = getText().trim();
