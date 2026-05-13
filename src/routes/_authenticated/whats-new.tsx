@@ -58,7 +58,7 @@ function WhatsNew() {
       // If the very first page is empty, ask the server to backfill from the
       // default seed source, then re-query so the user sees content.
       if (page === 0 && (count ?? 0) === 0) {
-        const result = await ensureSeeded({});
+        const result = await ensureSeeded();
         source = result.source;
         seeded = result.seeded;
         // eslint-disable-next-line no-console
