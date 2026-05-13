@@ -5,7 +5,6 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type BuildInfo = {
   sha: string | null;
@@ -55,15 +54,13 @@ function buildInfo(): BuildInfo {
 export const getDeploymentInfo = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<BuildInfo> => {
-    // Admin-only — gateway already authenticates user; verify role here.
-    const { data: role } = await supabaseAdmin
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", context.user.id)
-      .eq("role", "admin")
-      .maybeSingle();
-    if (!role) {
-      throw new Error("Forbidden");
-    }
+    // Admin-only — verify role server-side using the user's own JWT.
+    const { supabase, userId } = context;
+    const { data: isAdmin, error } = await supabase.rpc("has_role", {
+      _user_id: userId,
+      _role: "admin",
+    });
+    if (error) throw new Response("Forbidden", { status: 403 });
+    if (isAdmin !== true) throw new Response("Forbidden", { status: 403 });
     return buildInfo();
   });
