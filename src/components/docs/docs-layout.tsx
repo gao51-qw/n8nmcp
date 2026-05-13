@@ -78,7 +78,7 @@ export function DocsLayout({ children }: { children: React.ReactNode }) {
         </aside>
 
         <main className="min-w-0 flex-1">
-          <article className="prose prose-invert max-w-3xl">
+          <article className="docs-prose max-w-3xl">
             {children}
           </article>
 
