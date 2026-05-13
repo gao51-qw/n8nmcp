@@ -1467,6 +1467,18 @@ function AdminAnnouncements() {
             )}
           </div>
           <DialogFooter>
+            {editing && (
+              <Button variant="outline" asChild>
+                <a
+                  href={`/admin/announcements/preview/${editing.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink className="mr-1 h-4 w-4" />
+                  Preview on site
+                </a>
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setEditing(null)}>
               Cancel
             </Button>
