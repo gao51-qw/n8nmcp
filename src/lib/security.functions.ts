@@ -4,6 +4,15 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { createClient } from "@supabase/supabase-js";
 import { z } from "zod";
 
+export type SessionRow = {
+  id: string;
+  created_at: string | null;
+  updated_at: string | null;
+  user_agent: string | null;
+  ip: string | null;
+  not_after: string | null;
+};
+
 /**
  * Verify the user's current password by attempting a temp sign-in with a
  * non-persisting client, then update the password via admin API. We do this
@@ -61,9 +70,9 @@ export const listMySessions = createServerFn({ method: "GET" })
       .order("updated_at", { ascending: false });
     if (error) {
       console.error("[listMySessions]", error);
-      return { sessions: [] as Array<Record<string, unknown>> };
+      return { sessions: [] as SessionRow[] };
     }
-    return { sessions: (data as unknown as Array<Record<string, unknown>>) ?? [] };
+    return { sessions: (data as unknown as SessionRow[]) ?? [] };
   });
 
 export const revokeMySession = createServerFn({ method: "POST" })
