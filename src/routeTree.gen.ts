@@ -26,6 +26,7 @@ import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as DocsGettingStartedRouteImport } from './routes/docs.getting-started'
 import { Route as DocsConceptsRouteImport } from './routes/docs.concepts'
+import { Route as DocsClientsRouteImport } from './routes/docs.clients'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
@@ -127,6 +128,11 @@ const DocsGettingStartedRoute = DocsGettingStartedRouteImport.update({
 const DocsConceptsRoute = DocsConceptsRouteImport.update({
   id: '/concepts',
   path: '/concepts',
+  getParentRoute: () => DocsRoute,
+} as any)
+const DocsClientsRoute = DocsClientsRouteImport.update({
+  id: '/clients',
+  path: '/clients',
   getParentRoute: () => DocsRoute,
 } as any)
 const BlogSlugRoute = BlogSlugRouteImport.update({
@@ -247,6 +253,7 @@ export interface FileRoutesByFullPath {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/clients': typeof DocsClientsRoute
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/blog/': typeof BlogIndexRoute
@@ -281,6 +288,7 @@ export interface FileRoutesByTo {
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/clients': typeof DocsClientsRoute
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/blog': typeof BlogIndexRoute
@@ -319,6 +327,7 @@ export interface FileRoutesById {
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
+  '/docs/clients': typeof DocsClientsRoute
   '/docs/concepts': typeof DocsConceptsRoute
   '/docs/getting-started': typeof DocsGettingStartedRoute
   '/blog/': typeof BlogIndexRoute
@@ -356,6 +365,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/docs/clients'
     | '/docs/concepts'
     | '/docs/getting-started'
     | '/blog/'
@@ -390,6 +400,7 @@ export interface FileRouteTypes {
     | '/usage'
     | '/whats-new'
     | '/blog/$slug'
+    | '/docs/clients'
     | '/docs/concepts'
     | '/docs/getting-started'
     | '/blog'
@@ -427,6 +438,7 @@ export interface FileRouteTypes {
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
     | '/blog/$slug'
+    | '/docs/clients'
     | '/docs/concepts'
     | '/docs/getting-started'
     | '/blog/'
@@ -579,6 +591,13 @@ declare module '@tanstack/react-router' {
       path: '/concepts'
       fullPath: '/docs/concepts'
       preLoaderRoute: typeof DocsConceptsRouteImport
+      parentRoute: typeof DocsRoute
+    }
+    '/docs/clients': {
+      id: '/docs/clients'
+      path: '/clients'
+      fullPath: '/docs/clients'
+      preLoaderRoute: typeof DocsClientsRouteImport
       parentRoute: typeof DocsRoute
     }
     '/blog/$slug': {
@@ -776,12 +795,14 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
 )
 
 interface DocsRouteChildren {
+  DocsClientsRoute: typeof DocsClientsRoute
   DocsConceptsRoute: typeof DocsConceptsRoute
   DocsGettingStartedRoute: typeof DocsGettingStartedRoute
   DocsIndexRoute: typeof DocsIndexRoute
 }
 
 const DocsRouteChildren: DocsRouteChildren = {
+  DocsClientsRoute: DocsClientsRoute,
   DocsConceptsRoute: DocsConceptsRoute,
   DocsGettingStartedRoute: DocsGettingStartedRoute,
   DocsIndexRoute: DocsIndexRoute,
