@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { log } from "@/lib/logger.server";
 import {
@@ -19,6 +20,7 @@ export type EnsureSeededResult = {
  * Otherwise reports source="database". Logs the fetch source either way.
  */
 export const ensureAnnouncementsSeeded = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
   .handler(async (): Promise<EnsureSeededResult> => {
     const fetchedAt = new Date().toISOString();
 
