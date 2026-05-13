@@ -16,6 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
+import { NavPerfOverlay } from "@/components/nav-perf-overlay";
 
 function NotFoundComponent() {
   return (
@@ -175,6 +176,7 @@ function RootComponent() {
             </div>
           </main>
           <Toaster richColors position="top-right" />
+          <NavPerfOverlay />
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>
