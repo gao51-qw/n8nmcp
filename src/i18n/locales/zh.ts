@@ -351,6 +351,17 @@ const zh: Dict = {
       a: "我们使用的 MCP 知识服务器是开源的。托管网关代码暂未开源，但我们提供详尽文档，且通信协议遵循官方 MCP 规范——绝无锁定。",
     },
   },
+  seo: {
+    pricing: {
+      title: '价格 — n8n-mcp',
+      description: 'n8n-mcp 网关的月度订阅:免费套餐每天 100 次 MCP 调用,付费版本起价 $19/月,按需取消,无席位限制。',
+    },
+    faq: {
+      title: '常见问题 — n8n-mcp',
+      description: '关于 n8n-mcp 的常见问题:支持的 AI 客户端、安全性、价格、私有部署以及 MCP 协议。',
+    },
+  },
+
 };
 
 export default zh;

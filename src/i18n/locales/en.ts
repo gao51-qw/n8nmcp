@@ -357,6 +357,17 @@ const en = {
       a: "The MCP knowledge server we use is open source. The hosted gateway code is closed for now but we publish detailed docs and the wire protocol is the official MCP spec — no lock-in.",
     },
   },
+  seo: {
+    pricing: {
+      title: 'Pricing — n8n-mcp',
+      description: 'Simple per-month pricing for the n8n-mcp gateway. Free tier with 100 MCP calls/day, paid plans from $19/mo. No seats, cancel anytime.',
+    },
+    faq: {
+      title: 'FAQ — n8n-mcp',
+      description: 'Common questions about n8n-mcp: supported AI clients, security, pricing, self-hosting and the MCP protocol.',
+    },
+  },
+
 };
 
 export default en;
