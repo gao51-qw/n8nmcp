@@ -36,7 +36,7 @@ import {
   MessageSquare,
   Search,
 } from "lucide-react";
-import { FAQ, buildFaqJsonLd } from "@/lib/faq-data";
+import { buildFaqJsonLd, getLocalizedFaq } from "@/lib/faq-data";
 import { buildWebSiteJsonLd } from "@/lib/seo-jsonld";
 import n8nStats from "@/data/n8n-stats.json";
 import { useT } from "@/i18n/context";
@@ -62,7 +62,7 @@ export const Route = createFileRoute("/")({
       ],
     };
 
-    const faqSchema = buildFaqJsonLd(FAQ);
+    const faqSchema = buildFaqJsonLd();
 
     return {
       meta: [
@@ -99,13 +99,14 @@ export const Route = createFileRoute("/")({
 function Landing() {
   const [faqQuery, setFaqQuery] = useState("");
   const t = useT();
+  const localizedFaq = useMemo(() => getLocalizedFaq(t), [t]);
   const filteredFaq = useMemo(() => {
     const q = faqQuery.trim().toLowerCase();
-    if (!q) return FAQ;
-    return FAQ.filter(
+    if (!q) return localizedFaq;
+    return localizedFaq.filter(
       (f) => f.q.toLowerCase().includes(q) || f.a.toLowerCase().includes(q),
     );
-  }, [faqQuery]);
+  }, [faqQuery, localizedFaq]);
 
   return (
     <div className="min-h-screen">
