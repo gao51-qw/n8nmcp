@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { CountUp } from "@/components/marketing/count-up";
 import { Input } from "@/components/ui/input";
@@ -40,6 +40,7 @@ import { buildFaqJsonLd, getLocalizedFaq } from "@/lib/faq-data";
 import { buildWebSiteJsonLd } from "@/lib/seo-jsonld";
 import n8nStats from "@/data/n8n-stats.json";
 import { useT } from "@/i18n/context";
+import { Link } from "@/i18n/link";
 
 export const Route = createFileRoute("/{-$locale}/")({
   head: () => {

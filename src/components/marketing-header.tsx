@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link } from "@tanstack/react-router";
+
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { Menu, Sparkles } from "lucide-react";
@@ -7,6 +7,7 @@ import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useT } from "@/i18n/context";
 import {
+import { Link } from "@/i18n/link";
   Sheet,
   SheetContent,
   SheetHeader,

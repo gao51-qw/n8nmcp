@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
 
 const TITLE = "Platform API keys — n8n-mcp docs";
 const DESC = "Create, label, rotate and revoke nmcp_ platform API keys used by your MCP clients.";

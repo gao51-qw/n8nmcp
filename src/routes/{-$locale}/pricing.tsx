@@ -1,9 +1,10 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { useT } from "@/i18n/context";
+import { Link } from "@/i18n/link";
 
 const TITLE = "Pricing — n8n-mcp";
 const DESC =

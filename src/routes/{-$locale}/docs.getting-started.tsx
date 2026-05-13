@@ -1,5 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
 
 const TITLE = "Getting started — n8n-mcp docs";
 const DESC = "Sign up, create a platform API key, connect your n8n instance and wire up your first MCP client in under five minutes.";

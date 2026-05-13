@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, stripSearchParams, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, notFound, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getAllPosts, getAllTags, formatPostDate } from "@/lib/blog";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";

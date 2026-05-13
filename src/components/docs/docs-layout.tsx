@@ -1,8 +1,9 @@
 import * as React from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useRouterState } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { cn } from "@/lib/utils";
+import { Link } from "@/i18n/link";
 
 type DocLink = { to: string; label: string };
 type DocSection = { label: string; items: DocLink[] };

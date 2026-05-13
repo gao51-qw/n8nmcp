@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { ShareButtons } from "@/components/share-buttons";
 import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
