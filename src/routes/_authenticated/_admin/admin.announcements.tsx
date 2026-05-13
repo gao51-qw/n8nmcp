@@ -45,6 +45,7 @@ import {
   CalendarX,
   Clock,
   Eye,
+  ExternalLink,
   FileText,
   History,
   Loader2,
@@ -938,6 +939,20 @@ function AdminAnnouncements() {
         <Markdown className="mt-1">{a.body}</Markdown>
       </div>
       <div className="flex shrink-0 gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          asChild
+          title="Preview on frontend (new tab)"
+        >
+          <a
+            href={`/admin/announcements/preview/${a.id}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </Button>
         {a.status !== "published" && (
           <Button
             size="icon"
@@ -1452,6 +1467,18 @@ function AdminAnnouncements() {
             )}
           </div>
           <DialogFooter>
+            {editing && (
+              <Button variant="outline" asChild>
+                <a
+                  href={`/admin/announcements/preview/${editing.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink className="mr-1 h-4 w-4" />
+                  Preview on site
+                </a>
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setEditing(null)}>
               Cancel
             </Button>
