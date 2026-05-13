@@ -300,7 +300,7 @@ export const TOOLS = LOCAL_TOOLS;
 export async function getMergedTools(): Promise<
   Array<{ name: string; description?: string; inputSchema?: unknown }>
 > {
-  const upstream: UpstreamTool[] = await listUpstreamTools();
+  const upstream: UpstreamTool[] = await listUpstreamTools(false);
   const merged: Array<{ name: string; description?: string; inputSchema?: unknown }> = [
     ...LOCAL_TOOLS,
   ];
@@ -327,6 +327,7 @@ export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
   inst: Inst | null,
+  caller?: CallerCtx,
 ): Promise<DispatchResult> {
   if (LOCAL_NAMES.has(name)) {
     if (!inst) {
@@ -361,6 +362,7 @@ export async function dispatchTool(
     name,
     args,
     management && inst ? { base_url: inst.base_url, api_key: inst.api_key } : null,
+    caller,
   );
   return {
     output: out,
