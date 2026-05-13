@@ -15,6 +15,7 @@ import {
   MessagesSquare,
   Activity,
   UserMinus,
+  LineChart,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -135,6 +136,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 }`}
               >
                 <Activity className="h-4 w-4" /> Deployment
+              </Link>
+              <Link
+                to="/admin/integrations"
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                  location.pathname === "/admin/integrations"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                }`}
+              >
+                <LineChart className="h-4 w-4" /> SEO Integrations
               </Link>
             </>
           )}

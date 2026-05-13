@@ -17,6 +17,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { applyTheme, getStoredTheme } from "@/lib/theme";
 import { NavPerfOverlay } from "@/components/nav-perf-overlay";
+import { getPublicSiteSettings } from "@/lib/site-settings.functions";
 
 function NotFoundComponent() {
   return (
@@ -76,7 +77,22 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
 }
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
-  head: () => ({
+  // Load site-wide integration settings (GA4 / GSC) so we can inject the
+  // tracking script + verification meta tag into <head> during SSR. The
+  // root loader only runs once per navigation and we cache aggressively so
+  // this doesn't become a per-page round-trip.
+  loader: async () => {
+    try {
+      const siteSettings = await getPublicSiteSettings();
+      return { siteSettings };
+    } catch {
+      return {
+        siteSettings: { ga4MeasurementId: null, gscVerification: null } as const,
+      };
+    }
+  },
+  staleTime: 5 * 60_000,
+  head: ({ loaderData }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -99,6 +115,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2fe62c52-3f83-4199-b5d9-615ed7ed10df/id-preview-fcaba1f0--647c0212-1ada-432a-820b-9bc428006c49.lovable.app-1778483476360.png" },
       { name: "description", content: "N8N-MCP is an application that helps users manage and compare n8n nodes and build a blog." },
       { property: "og:description", content: "N8N-MCP is an application that helps users manage and compare n8n nodes and build a blog." },
+      ...(loaderData?.siteSettings?.gscVerification
+        ? [{ name: "google-site-verification", content: loaderData.siteSettings.gscVerification }]
+        : []),
     ],
     links: [{ rel: "stylesheet", href: appCss }],
     scripts: [
@@ -113,6 +132,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
           sameAs: ["https://github.com/czlonkowski/n8n-mcp"],
         }),
       },
+      ...(loaderData?.siteSettings?.ga4MeasurementId
+        ? [
+            {
+              src: `https://www.googletagmanager.com/gtag/js?id=${loaderData.siteSettings.ga4MeasurementId}`,
+              async: true,
+            },
+            {
+              children: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${loaderData.siteSettings.ga4MeasurementId}');`,
+            },
+          ]
+        : []),
     ],
   }),
   shellComponent: RootShell,
