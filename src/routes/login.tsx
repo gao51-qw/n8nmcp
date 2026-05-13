@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { createTestAccount } from "@/lib/test-account.functions";
@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
+import { CheckCircle2 } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { AuthRedirectOverlay } from "@/components/auth-redirect-overlay";
 
@@ -30,6 +31,14 @@ function Login() {
   const [pendingAction, setPendingAction] = useState<
     "password" | "google" | "apple" | null
   >(null);
+  // Submit lifecycle for the password form. Drives the press/shake/success
+  // affordances independently of the network-pending state above.
+  const [submitState, setSubmitState] = useState<
+    "idle" | "submitting" | "success" | "error"
+  >("idle");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [failureCount, setFailureCount] = useState(0);
+  const formRef = useRef<HTMLFormElement>(null);
 
   const anyPending = loading || creatingTest || pendingAction !== null;
 
@@ -42,15 +51,29 @@ function Login() {
     if (anyPending) return;
     setLoading(true);
     setPendingAction("password");
+    setSubmitState("submitting");
+    setErrorMessage(null);
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
+
     if (error) {
       setLoading(false);
       setPendingAction(null);
-      return toast.error(error.message);
+      setSubmitState("error");
+      setErrorMessage(error.message);
+      setFailureCount((n) => n + 1);
+      toast.error(error.message);
+      return;
     }
-    // Keep the spinner up; the useEffect on `user` will navigate, and the
-    // route transition will unmount this component naturally.
-    navigate({ to: "/dashboard" });
+
+    // Hold a brief success state so the checkmark + page-transition feel
+    // intentional, then navigate. The keyed Outlet wrapper in __root.tsx
+    // already animates the swap to /dashboard.
+    setSubmitState("success");
+    setErrorMessage(null);
+    setTimeout(() => {
+      navigate({ to: "/dashboard" });
+    }, 420);
   };
 
   const handleOAuth = async (provider: "google" | "apple") => {
@@ -165,28 +188,82 @@ function Login() {
             <div className="h-px flex-1 bg-border" /> OR <div className="h-px flex-1 bg-border" />
           </div>
 
-          <form onSubmit={handleSubmit} className="space-y-3">
+          {/* `key={failureCount}` re-mounts the form whenever a sign-in fails,
+              which restarts the shake animation even on consecutive failures. */}
+          <form
+            ref={formRef}
+            key={failureCount}
+            onSubmit={handleSubmit}
+            className={
+              "space-y-3" + (submitState === "error" ? " animate-shake-x" : "")
+            }
+            aria-describedby={errorMessage ? "login-error" : undefined}
+          >
             <div>
               <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                aria-invalid={submitState === "error" || undefined}
+              />
             </div>
             <div>
               <Label htmlFor="password">Password</Label>
-              <Input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              <Input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                aria-invalid={submitState === "error" || undefined}
+              />
             </div>
+            {errorMessage ? (
+              <div
+                id="login-error"
+                role="alert"
+                className="flex items-start justify-between gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200"
+              >
+                <span className="flex-1">{errorMessage}</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setErrorMessage(null);
+                    setSubmitState("idle");
+                    formRef.current?.requestSubmit();
+                  }}
+                  className="shrink-0 rounded px-1 font-medium underline underline-offset-2 hover:no-underline focus-visible:outline-none"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
             <Button
               type="submit"
-              className="w-full"
-              disabled={anyPending}
+              className={
+                "press-flash w-full transition-colors duration-200" +
+                (submitState === "success"
+                  ? " bg-success text-primary-foreground hover:bg-success"
+                  : "")
+              }
+              disabled={anyPending || submitState === "success"}
               aria-busy={pendingAction === "password"}
             >
-              {pendingAction === "password" ? (
+              {submitState === "success" ? (
+                <span className="inline-flex items-center gap-2 motion-safe:animate-in motion-safe:zoom-in-95 motion-safe:duration-200">
+                  <CheckCircle2 className="h-4 w-4" />
+                  Signed in
+                </span>
+              ) : pendingAction === "password" ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
                   Signing in…
                 </span>
               ) : (
-                "Sign in"
+                <span>{failureCount > 0 ? "Try again" : "Sign in"}</span>
               )}
             </Button>
           </form>
