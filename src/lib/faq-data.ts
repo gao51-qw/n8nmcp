@@ -57,14 +57,19 @@ export function getLocalizedFaq(t: FaqDict): LocalizedFaqItem[] {
   });
 }
 
-// Canonical English JSON-LD for SEO — search engines see one consistent
-// FAQPage schema regardless of the visitor's UI locale.
-import enDict from "@/i18n/locales/en";
-export function buildFaqJsonLd() {
-  const items = getLocalizedFaq(enDict as unknown as FaqDict);
+// Locale-aware JSON-LD for SEO. Search engines crawl each localized URL
+// (/, /zh/faq, /ja/faq, ...) and should see the FAQPage schema in the
+// matching language so rich results match the page content.
+import { DICTIONARIES } from "@/i18n/dict";
+import { DEFAULT_LOCALE, type Locale } from "@/i18n/config";
+
+export function buildFaqJsonLd(locale: Locale = DEFAULT_LOCALE) {
+  const dict = DICTIONARIES[locale] as unknown as FaqDict;
+  const items = getLocalizedFaq(dict);
   return {
     "@context": "https://schema.org",
     "@type": "FAQPage",
+    inLanguage: locale,
     mainEntity: items.map((f) => ({
       "@type": "Question",
       name: f.q,
