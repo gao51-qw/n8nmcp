@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
+import writeXlsxFile from "write-excel-file";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -240,30 +240,26 @@ function exportAudit(
 
   if (format === "xlsx") {
     const aoa = [headers, ...rows];
-    const ws = XLSX.utils.aoa_to_sheet(aoa);
-    ws["!cols"] = headers.map((h) => {
+    const sheetData = aoa.map((row, rowIdx) =>
+      row.map((cell) => ({
+        value: cell == null ? "" : String(cell),
+        fontWeight: rowIdx === 0 ? ("bold" as const) : undefined,
+      })),
+    );
+    const columns = headers.map((h) => {
       const maxLen = aoa.reduce((m, row) => {
         const cell = row[headers.indexOf(h)];
         const len = cell ? String(cell).length : 0;
         return Math.max(m, len);
       }, h.length);
-      return { wch: Math.min(Math.max(maxLen + 2, 10), 60) };
+      return { width: Math.min(Math.max(maxLen + 2, 10), 60) };
     });
-    ws["!freeze"] = { xSplit: 0, ySplit: 1 };
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Audit log");
-    const buf = XLSX.write(wb, { bookType: "xlsx", type: "array" }) as ArrayBuffer;
-    const blob = new Blob([buf], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    await writeXlsxFile(sheetData, {
+      columns,
+      sheet: "Audit log",
+      stickyRowsCount: 1,
+      fileName: `announcement-audit-${stamp}.xlsx`,
     });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `announcement-audit-${stamp}.xlsx`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
     return;
   }
 
