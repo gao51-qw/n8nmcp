@@ -150,18 +150,18 @@ function Landing() {
               hash="diy"
               className="rounded-full border border-border bg-card/40 px-3 py-1 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
             >
-              See DIY comparison →
+              {t.home.hero.compareWithDiy}
             </Link>
             <Link
               to="/"
               hash="architecture"
               className="rounded-full border border-border bg-card/40 px-3 py-1 text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
             >
-              View architecture →
+              {t.home.hero.seeArchitecture}
             </Link>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            No credit card required · 100 calls/day on Free
+            {t.home.hero.noCard}
           </p>
 
           {/* Stats */}
@@ -170,21 +170,23 @@ function Landing() {
               {
                 value: n8nStats.totalNodes,
                 suffix: "",
-                label: "n8n nodes covered",
-                source: `${n8nStats.coreNodes.toLocaleString()} core + ${n8nStats.communityNodes.toLocaleString()} community nodes`,
+                label: t.home.stats.nodes,
+                source: t.home.stats.nodesSource
+                  .replace("{core}", n8nStats.coreNodes.toLocaleString())
+                  .replace("{community}", n8nStats.communityNodes.toLocaleString()),
               },
               {
                 value: 20,
                 suffix: "+",
-                label: "supported AI clients",
-                source: "Any MCP-compliant client",
+                label: t.home.stats.clients,
+                source: t.home.stats.clientsSource,
               },
               {
                 value: 200,
                 prefix: "<",
                 suffix: "ms",
-                label: "median tool call",
-                source: "p50, EU edge, last 30 days",
+                label: t.home.stats.latency,
+                source: t.home.stats.latencySource,
               },
             ].map((s) => (
               <div key={s.label}>
@@ -199,16 +201,16 @@ function Landing() {
             ))}
           </div>
           <p className="mx-auto mt-6 max-w-xl text-[11px] text-muted-foreground/70">
-            Sources: node count from{" "}
+            {t.home.stats.sourcesPrefix}{" "}
             <a
               href="https://github.com/czlonkowski/n8n-mcp"
               target="_blank"
               rel="noreferrer"
               className="underline hover:text-foreground"
             >
-              n8n-mcp knowledge base
+              {t.home.stats.sourcesKb}
             </a>
-            ; latency measured on the hosted gateway over the last 30 days.
+            {t.home.stats.sourcesSuffix}
           </p>
         </div>
       </section>
@@ -219,17 +221,16 @@ function Landing() {
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="text-center">
           <p className="text-xs uppercase tracking-widest text-primary">
-            Choose your way
+            {t.home.twoWays.eyebrow}
           </p>
           <h2 className="mt-3 text-3xl font-bold md:text-4xl">
-            Two ways to use n8n-mcp
+            {t.home.twoWays.title}
           </h2>
           <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-            Use our Chat Agent to build workflows instantly, or connect your
-            favorite AI tools via MCP for full control.
+            {t.home.twoWays.subtitle}
           </p>
           <p className="mx-auto mt-3 max-w-2xl text-xs text-muted-foreground/70">
-            Powered by the open-source{" "}
+            {t.home.twoWays.poweredByPrefix}{" "}
             <a
               href="https://github.com/czlonkowski/n8n-mcp"
               target="_blank"
@@ -238,8 +239,7 @@ function Landing() {
             >
               czlonkowski/n8n-mcp
             </a>{" "}
-            knowledge server, plus a hosted runtime gateway — not a fork, a
-            complement.
+            {t.home.twoWays.poweredBySuffix}
           </p>
         </div>
 
@@ -250,56 +250,47 @@ function Landing() {
             style={{ boxShadow: "var(--shadow-glow)" }}
           >
             <span className="absolute right-4 top-4 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground">
-              Just launched
+              {t.home.twoWays.chat.badge}
             </span>
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
-              <MessageSquare className="h-4 w-4" /> Recommended
+              <MessageSquare className="h-4 w-4" /> {t.home.twoWays.chat.eyebrow}
             </div>
-            <h3 className="mt-3 text-2xl font-semibold">Chat Agent</h3>
+            <h3 className="mt-3 text-2xl font-semibold">{t.home.twoWays.chat.title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              A full AI agent that builds, validates and deploys
-              production-ready n8n workflows from a single prompt. No setup, no
-              learning curve.
+              {t.home.twoWays.chat.body}
             </p>
             <div className="mt-6 rounded-lg border border-border bg-background/60 p-4 text-sm text-muted-foreground">
-              "Send me a Slack summary of my Google Calendar events every
-              morning at 8am"
+              {t.home.twoWays.chat.example}
             </div>
             <Button asChild className="mt-8 w-full">
-              <Link to="/signup">Try Chat Agent</Link>
+              <Link to="/signup">{t.home.twoWays.chat.cta}</Link>
             </Button>
           </div>
 
           {/* Default card — same recipe as Pricing's free tier */}
           <div className="flex flex-col rounded-2xl border border-border bg-card/50 p-8 transition-all hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]">
             <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
-              <Terminal className="h-4 w-4" /> For power users
+              <Terminal className="h-4 w-4" /> {t.home.twoWays.mcp.eyebrow}
             </div>
-            <h3 className="mt-3 text-2xl font-semibold">MCP Servers</h3>
+            <h3 className="mt-3 text-2xl font-semibold">{t.home.twoWays.mcp.title}</h3>
             <p className="mt-2 text-sm text-muted-foreground">
-              Connect Claude, Cursor, Windsurf or any MCP-compatible AI tool
-              directly to your n8n instance. Full control from your favorite
-              IDE.
+              {t.home.twoWays.mcp.body}
             </p>
             <ol className="mt-6 space-y-3 text-sm">
-              {[
-                ["Sign up", "Create a free account on the dashboard"],
-                ["Connect", "Paste your n8n URL + API key, encrypted at rest"],
-                ["Build", "Your AI tool can now create & manage workflows"],
-              ].map(([t, d], i) => (
-                <li key={t} className="flex gap-3">
+              {t.home.twoWays.mcp.steps.map((step, i) => (
+                <li key={step.t} className="flex gap-3">
                   <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
                     {i + 1}
                   </span>
                   <div>
-                    <div className="font-medium">{t}</div>
-                    <div className="text-muted-foreground">{d}</div>
+                    <div className="font-medium">{step.t}</div>
+                    <div className="text-muted-foreground">{step.d}</div>
                   </div>
                 </li>
               ))}
             </ol>
             <Button asChild variant="outline" className="mt-auto pt-0 w-full md:mt-8">
-              <Link to="/signup">Get started</Link>
+              <Link to="/signup">{t.home.twoWays.mcp.cta}</Link>
             </Button>
           </div>
         </div>
@@ -308,27 +299,20 @@ function Landing() {
       {/* Features */}
       <section id="features" className="mx-auto max-w-6xl px-6 py-12 scroll-mt-20">
         <div className="grid gap-6 md:grid-cols-3">
-          {[
-            { icon: Bot, title: "Universal MCP", body: "Streamable HTTP MCP server compatible with every major AI client." },
-            { icon: Workflow, title: "All your workflows", body: "List, run, debug and inspect every workflow in your n8n instance." },
-            { icon: ShieldCheck, title: "Encrypted at rest", body: "Your n8n API key is encrypted with AES-256-GCM before it touches the database." },
-            { icon: Zap, title: "Sub-second latency", body: "Edge-deployed gateway with per-tool routing keeps tool calls fast." },
-            { icon: Code2, title: "Open protocol", body: "Built on the official MCP spec — no proprietary lock-in." },
-            { icon: Globe, title: "Multi-instance", body: "Connect as many n8n instances as you want from one account." },
-          ].map((f) => (
-            <div
-              key={f.title}
-              className="rounded-xl border border-border bg-card p-6 transition-colors hover:border-primary/40"
-            >
-              <f.icon className="h-6 w-6 text-primary" />
-              <h3 className="mt-4 font-semibold">{f.title}</h3>
-              <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
-            </div>
-          ))}
+          {t.home.features.items.map((f, i) => {
+            const Icon = [Bot, Workflow, ShieldCheck, Zap, Code2, Globe][i];
+            return (
+              <div key={f.title} className="rounded-xl border border-border bg-card p-6 transition-colors hover:border-primary/40">
+                <Icon className="h-6 w-6 text-primary" />
+                <h3 className="mt-4 font-semibold">{f.title}</h3>
+                <p className="mt-2 text-sm text-muted-foreground">{f.body}</p>
+              </div>
+            );
+          })}
         </div>
 
         <div className="mt-10 flex flex-wrap items-center justify-center gap-2 text-xs text-muted-foreground">
-          <span className="text-muted-foreground/70">Not the same as:</span>
+          <span className="text-muted-foreground/70">{t.home.features.notSame}</span>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -339,8 +323,7 @@ function Landing() {
               </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              Zapier hosts MCP for Zapier's Zaps. We host MCP for your existing
-              n8n — self-hosted, no platform lock-in.
+              {t.home.features.zapierTip}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -353,9 +336,7 @@ function Landing() {
               </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              They expose connector-grain tools (one tool per API endpoint). We
-              expose your workflow-grain tools — your existing n8n logic, reused
-              as-is.
+              {t.home.features.pipedreamTip}
             </TooltipContent>
           </Tooltip>
           <Tooltip>
@@ -368,8 +349,7 @@ function Landing() {
               </button>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs">
-              Only serves n8n Cloud workspaces. We work for self-hosted, Cloud,
-              and multi-instance setups in one account.
+              {t.home.features.n8nCloudTip}
             </TooltipContent>
           </Tooltip>
         </div>
@@ -387,66 +367,56 @@ function Landing() {
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="text-center">
           <p className="text-xs uppercase tracking-widest text-primary">
-            Simple pricing
+            {t.home.pricing.eyebrow}
           </p>
           <h2 className="mt-3 text-3xl font-bold md:text-4xl">
-            Start free, upgrade anytime
+            {t.home.pricing.title}
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-muted-foreground">
-            Generous free tier for everyone. Upgrade when you need more calls.
+            {t.home.pricing.subtitle}
           </p>
         </div>
 
         <div className="mx-auto mt-12 grid max-w-4xl gap-6 md:grid-cols-2 md:items-stretch">
           {[
             {
-              name: "Free",
+              name: t.home.pricing.free.name,
               price: "$0",
-              cadence: "forever",
-              features: [
-                "100 MCP calls / day",
-                "1 n8n instance",
-                "1 platform API key",
-                "Community support",
-              ],
-              cta: "Start free",
+              cadence: t.home.pricing.free.cadence,
+              features: t.home.pricing.free.features,
+              cta: t.home.pricing.free.cta,
             },
             {
-              name: "Supporter",
+              name: t.home.pricing.supporter.name,
               price: "$19",
-              cadence: "per month",
-              features: [
-                "10,000 MCP calls / day",
-                "5 n8n instances",
-                "Unlimited API keys",
-                "Priority email support",
-              ],
-              cta: "Become a Supporter",
+              cadence: t.home.pricing.supporter.cadence,
+              features: t.home.pricing.supporter.features,
+              cta: t.home.pricing.supporter.cta,
               highlight: true,
-              badge: "Most popular",
+              badge: t.home.pricing.supporter.badge,
             },
-          ].map((t) => (
+          ].map((tier) => (
             <div
-              key={t.name}
+              key={tier.name}
               className={`relative flex flex-col rounded-2xl border p-8 transition-all ${
-                t.highlight
+                tier.highlight
                   ? "border-primary bg-card"
                   : "border-border bg-card/50 hover:border-primary/40 hover:shadow-[var(--shadow-elegant)]"
               }`}
-              style={t.highlight ? { boxShadow: "var(--shadow-glow)" } : undefined}
+              style={tier.highlight ? { boxShadow: "var(--shadow-glow)" } : undefined}
             >
-              {t.highlight && t.badge && (
+              {tier.highlight && tier.badge && (
                 <span className="absolute right-4 top-4 rounded-full bg-primary px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground">
-                  {t.badge}
+                  {tier.badge}
                 </span>
               )}
-              <h3 className="text-lg font-semibold">{t.name}</h3>
+              <h3 className="text-lg font-semibold">{tier.name}</h3>
               <div className="mt-4 flex items-baseline gap-1">
-                <span className="text-4xl font-bold">{t.price}</span>
-                <span className="text-sm text-muted-foreground">/{t.cadence}</span>
+                <span className="text-4xl font-bold">{tier.price}</span>
+                <span className="text-sm text-muted-foreground">/{tier.cadence}</span>
               </div>
               <ul className="mt-6 space-y-2 text-sm">
-                {t.features.map((f) => (
+                {tier.features.map((f) => (
                   <li key={f} className="flex items-start gap-2">
                     <Check className="mt-0.5 h-4 w-4 text-primary" />
                     <span>{f}</span>
@@ -456,17 +426,17 @@ function Landing() {
               <Button
                 asChild
                 className="mt-auto w-full md:mt-8"
-                variant={t.highlight ? "default" : "outline"}
+                variant={tier.highlight ? "default" : "outline"}
               >
-                <Link to="/signup">{t.cta}</Link>
+                <Link to="/signup">{tier.cta}</Link>
               </Button>
             </div>
           ))}
         </div>
         <p className="mt-6 text-center text-xs text-muted-foreground">
-          Need more?{" "}
+          {t.home.pricing.morePrefix}{" "}
           <Link to="/pricing" className="text-primary hover:underline">
-            See full pricing
+            {t.home.pricing.moreLink}
           </Link>
         </p>
       </section>
@@ -474,10 +444,10 @@ function Landing() {
       {/* FAQ */}
       <section id="faq" className="mx-auto max-w-3xl px-6 py-20 scroll-mt-20">
         <div className="text-center">
-          <p className="text-xs uppercase tracking-widest text-primary">FAQ</p>
-          <h2 className="mt-3 text-3xl font-bold md:text-4xl">Got questions?</h2>
+          <p className="text-xs uppercase tracking-widest text-primary">{t.home.faq.eyebrow}</p>
+          <h2 className="mt-3 text-3xl font-bold md:text-4xl">{t.home.faq.title}</h2>
           <p className="mt-3 text-muted-foreground">
-            Real questions from real users.
+            {t.home.faq.subtitle}
           </p>
         </div>
         <div className="relative mx-auto mt-8 max-w-md">
@@ -485,9 +455,9 @@ function Landing() {
           <Input
             value={faqQuery}
             onChange={(e) => setFaqQuery(e.target.value)}
-            placeholder="Search questions…"
+            placeholder={t.home.faq.searchPlaceholder}
             className="pl-9"
-            aria-label="Search FAQ"
+            aria-label={t.home.faq.searchAria}
           />
         </div>
         {filteredFaq.length > 0 ? (
@@ -503,7 +473,7 @@ function Landing() {
           </Accordion>
         ) : (
           <p className="mt-10 text-center text-sm text-muted-foreground">
-            No questions match — try another keyword.
+            {t.home.faq.empty}
           </p>
         )}
       </section>
@@ -515,20 +485,20 @@ function Landing() {
           style={{ boxShadow: "var(--shadow-glow)" }}
         >
           <p className="text-xs uppercase tracking-widest text-primary">
-            Free tier available
+            {t.home.finalCta.eyebrow}
           </p>
           <h2 className="mt-3 text-3xl font-bold md:text-4xl">
-            Your next workflow is one prompt away
+            {t.home.finalCta.title}
           </h2>
           <p className="mt-3 text-muted-foreground">
-            Connect your first n8n instance in under 60 seconds.
+            {t.home.finalCta.subtitle}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Button asChild size="lg" className="h-12 px-8">
-              <Link to="/signup">Create your account</Link>
+              <Link to="/signup">{t.home.finalCta.primary}</Link>
             </Button>
             <Button asChild size="lg" variant="outline" className="h-12 px-8">
-              <Link to="/docs">Read the docs</Link>
+              <Link to="/docs">{t.home.finalCta.secondary}</Link>
             </Button>
           </div>
         </div>

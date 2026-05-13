@@ -1,62 +1,42 @@
 import { Search, Sparkles, Zap, Wand2, Send, ShieldCheck } from "lucide-react";
+import { useT } from "@/i18n/context";
 
-const STEPS = [
-  { icon: Send, title: "Request", desc: "User describes a workflow" },
-  { icon: Search, title: "Search cache", desc: "Scan known patterns" },
-  { icon: Sparkles, title: "Match found", desc: "Proven pattern reused" },
-  { icon: Zap, title: "Instant deploy", desc: "Pushed to your n8n in seconds" },
-  { icon: Wand2, title: "Customize", desc: "Agent adapts it to your needs" },
-];
-
-const BADGES = [
-  "Patterns only, not your data",
-  "Self-hosted AI screening",
-  "Nothing leaves n8n-mcp",
-];
+const ICONS = [Send, Search, Sparkles, Zap, Wand2];
 
 export function CacheSection() {
+  const t = useT();
+  const c = t.marketing.cache;
   return (
     <section className="mx-auto max-w-6xl px-6 py-20">
       <div className="text-center">
-        <p className="text-xs uppercase tracking-widest text-primary">
-          Collective knowledge
-        </p>
-        <h2 className="mt-3 text-3xl font-bold md:text-4xl">
-          Every workflow makes everyone faster
-        </h2>
-        <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">
-          Every workflow built on the platform feeds a shared cache. When your
-          agent picks a proven pattern and tweaks a few fields, you skip the
-          tokens — and the wait — of generating from scratch.
-        </p>
+        <p className="text-xs uppercase tracking-widest text-primary">{c.eyebrow}</p>
+        <h2 className="mt-3 text-3xl font-bold md:text-4xl">{c.title}</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-muted-foreground">{c.subtitle}</p>
       </div>
 
       <div className="mt-12 grid gap-3 md:grid-cols-5">
-        {STEPS.map((s, i) => (
-          <div
-            key={s.title}
-            className="rounded-xl border border-border bg-card p-5"
-          >
-            <div className="flex items-center justify-between">
-              <s.icon className="h-5 w-5 text-primary" />
-              <span className="text-xs text-muted-foreground">0{i + 1}</span>
+        {c.steps.map((s, i) => {
+          const Icon = ICONS[i];
+          return (
+            <div key={s.title} className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-center justify-between">
+                <Icon className="h-5 w-5 text-primary" />
+                <span className="text-xs text-muted-foreground">0{i + 1}</span>
+              </div>
+              <h3 className="mt-4 text-sm font-semibold">{s.title}</h3>
+              <p className="mt-1 text-xs text-muted-foreground">{s.desc}</p>
             </div>
-            <h3 className="mt-4 text-sm font-semibold">{s.title}</h3>
-            <p className="mt-1 text-xs text-muted-foreground">{s.desc}</p>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <div className="mt-10 rounded-2xl border border-border bg-card/50 p-6">
         <div className="flex flex-wrap items-center justify-center gap-3">
           <ShieldCheck className="h-5 w-5 text-primary" />
-          <span className="text-sm font-medium">Privacy-first, always.</span>
+          <span className="text-sm font-medium">{c.privacyLabel}</span>
           <div className="flex flex-wrap items-center justify-center gap-2">
-            {BADGES.map((b) => (
-              <span
-                key={b}
-                className="rounded-full border border-border bg-background/60 px-3 py-1 text-xs text-muted-foreground"
-              >
+            {c.badges.map((b) => (
+              <span key={b} className="rounded-full border border-border bg-background/60 px-3 py-1 text-xs text-muted-foreground">
                 {b}
               </span>
             ))}
