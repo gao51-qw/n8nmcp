@@ -11,6 +11,7 @@ import {
   isUpstreamConfigured,
   listUpstreamTools,
   type UpstreamTool,
+  type CallerCtx,
 } from "./mcp-upstream.server";
 
 export type AuthedKey = {
@@ -246,7 +247,9 @@ export async function runTool(
         throw new Error("Knowledge base is not configured on this gateway; cannot resolve template.");
       }
       // 1) fetch template JSON from the upstream knowledge base
-      const tpl = (await callUpstreamTool("get_workflow_template", { id }, null)) as {
+      const tpl = (await callUpstreamTool("get_workflow_template", { id }, null, {
+        source: "import_workflow_template",
+      })) as {
         content?: Array<{ type: string; text: string }>;
       };
       const raw = tpl?.content?.[0]?.text;
