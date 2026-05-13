@@ -427,3 +427,27 @@ html:not(.dark) {
     .press-flash:active::after { opacity: 0; }
   }
 }
+
+@layer components {
+  .docs-prose { color: var(--foreground); font-size: 0.95rem; line-height: 1.7; }
+  .docs-prose > * + * { margin-top: 1rem; }
+  .docs-prose h1 { font-size: 2.25rem; font-weight: 700; line-height: 1.15; margin-top: 0; letter-spacing: -0.02em; }
+  .docs-prose h2 { font-size: 1.5rem; font-weight: 600; line-height: 1.25; margin-top: 2.5rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border); letter-spacing: -0.01em; }
+  .docs-prose h3 { font-size: 1.15rem; font-weight: 600; margin-top: 1.75rem; }
+  .docs-prose p { color: var(--muted-foreground); }
+  .docs-prose .lead { font-size: 1.05rem; }
+  .docs-prose a { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+  .docs-prose a:hover { opacity: 0.85; }
+  .docs-prose ul { list-style: disc; padding-left: 1.4rem; color: var(--muted-foreground); }
+  .docs-prose ol { list-style: decimal; padding-left: 1.4rem; color: var(--muted-foreground); }
+  .docs-prose li + li { margin-top: 0.4rem; }
+  .docs-prose code { background: color-mix(in oklab, var(--muted) 70%, transparent); padding: 0.12rem 0.4rem; border-radius: 0.3rem; font-size: 0.85em; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--foreground); }
+  .docs-prose pre { background: var(--card); border: 1px solid var(--border); border-radius: 0.5rem; padding: 1rem; overflow-x: auto; font-size: 0.8rem; line-height: 1.55; }
+  .docs-prose pre code { background: transparent; padding: 0; font-size: inherit; }
+  .docs-prose table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+  .docs-prose th, .docs-prose td { border: 1px solid var(--border); padding: 0.55rem 0.7rem; text-align: left; vertical-align: top; }
+  .docs-prose th { background: color-mix(in oklab, var(--muted) 50%, transparent); font-weight: 600; }
+  .docs-prose strong { color: var(--foreground); font-weight: 600; }
+  .docs-prose .not-prose { color: inherit; font-size: 1rem; line-height: 1.5; }
+  .docs-prose .not-prose * { color: inherit; }
+}
