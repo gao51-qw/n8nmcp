@@ -14,7 +14,74 @@ const TIER_PROMPTS_DAY: Record<string, number> = {
   enterprise: -1,
 };
 
-const SYSTEM = `You are an expert n8n workflow architect. When the user describes an automation, respond conversationally explaining your plan, and when appropriate include a complete valid n8n workflow JSON inside a fenced \`\`\`json code block. Use real n8n node types (e.g. n8n-nodes-base.webhook, n8n-nodes-base.httpRequest, n8n-nodes-base.set, etc.). Keep responses focused.`;
+const SYSTEM_BASE = `You are an expert n8n workflow architect. When the user describes an automation, respond conversationally explaining your plan, and when appropriate include a complete valid n8n workflow JSON inside a fenced \`\`\`json code block. Use real n8n node types (e.g. n8n-nodes-base.webhook, n8n-nodes-base.httpRequest, n8n-nodes-base.set, etc.). Keep responses focused.`;
+
+// Bundled fallback stats — kept in sync with src/data/n8n-stats.json.
+// Used when the upstream MCP knowledge base is unreachable so the model still has
+// authoritative numbers instead of hallucinating "300-400 nodes".
+const FALLBACK_STATS = {
+  totalNodes: 1994,
+  coreNodes: 661,
+  communityNodes: 1333,
+  communityPackages: 553,
+  aiTools: 105,
+  triggers: 290,
+  generatedAt: "2026-05-12",
+};
+
+type KnowledgeStatus =
+  | { mode: "live"; stats: Record<string, unknown> }
+  | { mode: "fallback"; stats: typeof FALLBACK_STATS; reason: string };
+
+async function fetchKnowledgeStatus(): Promise<KnowledgeStatus> {
+  const mcpUrl = Deno.env.get("UPSTREAM_N8N_MCP_URL");
+  if (!mcpUrl) {
+    return { mode: "fallback", stats: FALLBACK_STATS, reason: "UPSTREAM_N8N_MCP_URL not configured (MCP not deployed yet)" };
+  }
+  const healthUrl = mcpUrl.replace(/\/mcp\/?$/, "") + "/health";
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 3000);
+    const res = await fetch(healthUrl, { signal: ctrl.signal });
+    clearTimeout(t);
+    if (!res.ok) {
+      return { mode: "fallback", stats: FALLBACK_STATS, reason: `health endpoint returned HTTP ${res.status}` };
+    }
+    const data = await res.json();
+    if (!data?.ok) {
+      return { mode: "fallback", stats: FALLBACK_STATS, reason: "health endpoint reported not-ok" };
+    }
+    return { mode: "live", stats: data };
+  } catch (e) {
+    const msg = (e as Error).name === "AbortError" ? "timeout after 3s" : (e as Error).message;
+    return { mode: "fallback", stats: FALLBACK_STATS, reason: `unreachable: ${msg}` };
+  }
+}
+
+function buildSystemPrompt(status: KnowledgeStatus): string {
+  const s = status.stats as Record<string, unknown>;
+  const numbers = [
+    `total nodes: ${s.totalNodes ?? s.total ?? "?"}`,
+    `core nodes: ${s.coreNodes ?? s.core ?? "?"}`,
+    `community nodes: ${s.communityNodes ?? s.community ?? "?"}`,
+    `AI tools: ${s.aiTools ?? s.ai_tools ?? "?"}`,
+    `triggers: ${s.triggers ?? "?"}`,
+  ].join(", ");
+
+  if (status.mode === "live") {
+    return `${SYSTEM_BASE}
+
+Authoritative knowledge-base stats (live from MCP /health): ${numbers}.
+When users ask quantitative questions about nodes, use these exact numbers — never guess.`;
+  }
+
+  return `${SYSTEM_BASE}
+
+Knowledge-base retrieval is currently UNAVAILABLE (${status.reason}). You are running with bundled fallback stats from ${FALLBACK_STATS.generatedAt}: ${numbers}.
+- For quantitative "how many nodes" questions, use these fallback numbers and append a brief note like "(based on cached snapshot from ${FALLBACK_STATS.generatedAt}; live retrieval is temporarily unavailable)".
+- For specific lookups ("how does node X work", "show me an example of Y"), tell the user the live node knowledge base is temporarily unavailable and suggest they retry shortly. Briefly mention the reason: ${status.reason}.
+- Still help with general workflow design and JSON examples from your training data.`;
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -101,6 +168,10 @@ Deno.serve(async (req) => {
         content: message,
       });
 
+    // Probe MCP knowledge base (or fall back to bundled stats)
+    const knowledge = await fetchKnowledgeStatus();
+    const systemPrompt = buildSystemPrompt(knowledge);
+
     // Call Lovable AI Gateway
     const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -111,7 +182,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-2.5-flash",
         messages: [
-          { role: "system", content: SYSTEM },
+          { role: "system", content: systemPrompt },
           ...(history ?? []).map((m) => ({ role: m.role, content: m.content })),
           { role: "user", content: message },
         ],
