@@ -8,6 +8,7 @@ import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
 import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
@@ -40,7 +41,7 @@ export const Route = createFileRoute("/{-$locale}/blog/$slug")({
       cover: post.cover,
     };
   },
-  head: ({ loaderData }) => {
+  head: ({ params, loaderData }) => {
     if (!loaderData) return {};
     const TITLE = `${loaderData.title} — n8n-mcp blog`;
     const DESC = loaderData.description;
@@ -80,7 +81,7 @@ export const Route = createFileRoute("/{-$locale}/blog/$slug")({
         { name: "twitter:description", content: DESC },
         ...(IMAGE ? [{ name: "twitter:image", content: IMAGE }] : []),
       ],
-      links: [{ rel: "canonical", href: URL }],
+      links: buildAlternateLinks(`/blog/${loaderData.slug}`, resolveLocale(params.locale)),
       scripts: [
         {
           type: "application/ld+json",
