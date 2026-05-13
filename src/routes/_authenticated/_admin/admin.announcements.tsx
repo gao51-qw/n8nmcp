@@ -2,7 +2,7 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import writeXlsxFile from "write-excel-file/browser";
+import writeXlsxFile, { type SheetData } from "write-excel-file/browser";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -240,26 +240,25 @@ async function exportAudit(
 
   if (format === "xlsx") {
     const aoa = [headers, ...rows];
-    const sheetData = aoa.map((row, rowIdx) =>
+    const sheetData: SheetData = aoa.map((row, rowIdx) =>
       row.map((cell) => ({
+        type: String,
         value: cell == null ? "" : String(cell),
         fontWeight: rowIdx === 0 ? ("bold" as const) : undefined,
       })),
     );
-    const columns = headers.map((h) => {
+    const columns = headers.map((h, idx) => {
       const maxLen = aoa.reduce((m, row) => {
-        const cell = row[headers.indexOf(h)];
-        const len = cell ? String(cell).length : 0;
+        const len = row[idx] ? String(row[idx]).length : 0;
         return Math.max(m, len);
       }, h.length);
       return { width: Math.min(Math.max(maxLen + 2, 10), 60) };
     });
-    await writeXlsxFile(sheetData, {
-      columns,
-      sheet: "Audit log",
-      stickyRowsCount: 1,
-      fileName: `announcement-audit-${stamp}.xlsx`,
-    });
+    await writeXlsxFile(
+      sheetData,
+      { columns, sheet: "Audit log", stickyRowsCount: 1 },
+      { fileName: `announcement-audit-${stamp}.xlsx` },
+    );
     return;
   }
 
