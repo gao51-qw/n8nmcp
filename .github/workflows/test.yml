@@ -23,6 +23,26 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lockb', 'bun.lock', 'package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Cache vitest
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vitest
+            node_modules/.vite
+          key: ${{ runner.os }}-vitest-${{ hashFiles('vitest.config.ts', 'vite.config.ts', 'bun.lockb', 'bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-vitest-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
