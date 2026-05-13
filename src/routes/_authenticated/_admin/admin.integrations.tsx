@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { DashboardShell } from "@/components/dashboard-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -61,7 +60,7 @@ function AdminIntegrations() {
   };
 
   return (
-    <DashboardShell>
+    <>
       <div className="mb-8">
         <h1 className="text-3xl font-bold tracking-tight">SEO integrations</h1>
         <p className="mt-2 text-muted-foreground">
@@ -147,6 +146,6 @@ function AdminIntegrations() {
           </div>
         </form>
       )}
-    </DashboardShell>
+    </>
   );
 }
