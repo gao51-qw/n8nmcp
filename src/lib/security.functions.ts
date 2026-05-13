@@ -122,3 +122,39 @@ export const revokeAllOtherSessions = createServerFn({ method: "POST" })
     }
     return { ok: true };
   });
+
+/**
+ * Trigger an email-change confirmation. Supabase sends a confirm link to the
+ * new address; the change only takes effect once confirmed.
+ */
+export const requestEmailChange = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ newEmail: z.string().email().max(255) }).parse(d),
+  )
+  .handler(async ({ context, data }) => {
+    const { supabase } = context;
+    const { error } = await supabase.auth.updateUser({ email: data.newEmail });
+    if (error) {
+      throw new Response(error.message, { status: 400 });
+    }
+    return { ok: true };
+  });
+
+/**
+ * Lists OAuth identities linked to the current account (Google, etc.).
+ */
+export const listMyIdentities = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const { userId } = context;
+    const { data } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const identities = (data?.user?.identities ?? []).map((i) => ({
+      id: i.identity_id ?? i.id,
+      provider: i.provider,
+      email: (i.identity_data as { email?: string } | null)?.email ?? null,
+      created_at: i.created_at ?? null,
+      last_sign_in_at: i.last_sign_in_at ?? null,
+    }));
+    return { identities };
+  });
