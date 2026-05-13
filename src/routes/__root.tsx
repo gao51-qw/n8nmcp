@@ -7,6 +7,7 @@ import {
   useRouterState,
   HeadContent,
   Scripts,
+  useParams,
 } from "@tanstack/react-router";
 import { useEffect } from "react";
 
@@ -19,6 +20,7 @@ import { applyTheme, getStoredTheme } from "@/lib/theme";
 import { NavPerfOverlay } from "@/components/nav-perf-overlay";
 import { getPublicSiteSettings } from "@/lib/site-settings.functions";
 import { LocaleProvider } from "@/i18n/context";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "@/i18n/config";
 
 function NotFoundComponent() {
   return (
@@ -154,8 +156,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: React.ReactNode }) {
+  // Best-effort: read the URL locale on the server too so <html lang>
+  // reflects the page being served. We re-parse from the router state in
+  // the body's RootComponent for the actual provider.
+  const params = useParams({ strict: false }) as { locale?: string };
+  const lang: Locale = isLocale(params.locale) ? params.locale : DEFAULT_LOCALE;
   return (
-    <html lang="en" className="dark">
+    <html lang={lang} className="dark">
       <head>
         <HeadContent />
         <script
@@ -184,6 +191,8 @@ function RootShell({ children }: { children: React.ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+  const params = useParams({ strict: false }) as { locale?: string };
+  const locale: Locale = isLocale(params.locale) ? params.locale : DEFAULT_LOCALE;
 
   // Re-apply the persisted theme on every route change. The FOUC script and
   // ThemeToggle already keep things in sync, but a navigation can occasionally
@@ -198,7 +207,7 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <LocaleProvider>
+        <LocaleProvider locale={locale}>
           <TooltipProvider>
           <main id="main" tabIndex={-1} className="outline-none">
             {/*

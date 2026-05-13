@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Concepts — n8n-mcp docs";
 const DESC = "How the n8n-mcp gateway, platform API keys, n8n instances and MCP tools fit together.";
 const URL = "https://n8nmcp.lovable.app/docs/concepts";
 
-export const Route = createFileRoute("/docs/concepts")({
-  head: () => ({
+export const Route = createFileRoute("/{-$locale}/docs/concepts")({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/docs/concepts")({
       { property: "og:url", content: URL },
       { property: "og:type", content: "article" },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/docs/concepts", resolveLocale(params.locale)),
     scripts: [
       {
         type: "application/ld+json",

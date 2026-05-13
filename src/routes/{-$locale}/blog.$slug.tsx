@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, notFound } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,8 @@ import { ShareButtons } from "@/components/share-buttons";
 import { ArrowLeft } from "lucide-react";
 import { formatPostDate, getPostBySlug } from "@/lib/blog";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
@@ -16,7 +18,7 @@ function absoluteUrl(maybeRelative: string): string {
   return `${SITE}${maybeRelative.startsWith("/") ? "" : "/"}${maybeRelative}`;
 }
 
-export const Route = createFileRoute("/blog/$slug")({
+export const Route = createFileRoute("/{-$locale}/blog/$slug")({
   // Blog posts are bundled at build time — the data never changes between
   // navigations, so cache the loader result forever.
   staleTime: Infinity,
@@ -39,7 +41,7 @@ export const Route = createFileRoute("/blog/$slug")({
       cover: post.cover,
     };
   },
-  head: ({ loaderData }) => {
+  head: ({ params, loaderData }) => {
     if (!loaderData) return {};
     const TITLE = `${loaderData.title} — n8n-mcp blog`;
     const DESC = loaderData.description;
@@ -79,7 +81,7 @@ export const Route = createFileRoute("/blog/$slug")({
         { name: "twitter:description", content: DESC },
         ...(IMAGE ? [{ name: "twitter:image", content: IMAGE }] : []),
       ],
-      links: [{ rel: "canonical", href: URL }],
+      links: buildAlternateLinks(`/blog/${loaderData.slug}`, resolveLocale(params.locale)),
       scripts: [
         {
           type: "application/ld+json",

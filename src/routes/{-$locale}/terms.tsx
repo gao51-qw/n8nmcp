@@ -1,14 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Terms of Service — n8n-mcp";
 const DESC =
   "Terms of Service for n8n-mcp, the hosted Model Context Protocol gateway for n8n workflows. Account, billing, acceptable use and liability.";
 const URL = "https://n8nmcp.lovable.app/terms";
 
-export const Route = createFileRoute("/terms")({
-  head: () => ({
+export const Route = createFileRoute("/{-$locale}/terms")({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/terms")({
       { name: "twitter:description", content: DESC },
       { name: "robots", content: "index,follow" },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/terms", resolveLocale(params.locale)),
   }),
   component: Terms,
 });

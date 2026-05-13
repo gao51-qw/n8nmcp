@@ -1,17 +1,19 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
 import { Button } from "@/components/ui/button";
 import { Check } from "lucide-react";
 import { useT } from "@/i18n/context";
+import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Pricing — n8n-mcp";
 const DESC =
   "Simple per-month pricing for the n8n-mcp gateway. Free tier with 100 MCP calls/day, paid plans from $19/mo. No seats, cancel anytime.";
 const URL = "https://n8nmcp.lovable.app/pricing";
 
-export const Route = createFileRoute("/pricing")({
-  head: () => ({
+export const Route = createFileRoute("/{-$locale}/pricing")({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -22,7 +24,7 @@ export const Route = createFileRoute("/pricing")({
       { name: "twitter:title", content: TITLE },
       { name: "twitter:description", content: DESC },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/pricing", resolveLocale(params.locale)),
   }),
   component: Pricing,
 });

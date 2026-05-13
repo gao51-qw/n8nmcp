@@ -9,32 +9,21 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as RobotsDottxtRouteImport } from './routes/robots[.]txt'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as PricingRouteImport } from './routes/pricing'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LlmsDottxtRouteImport } from './routes/llms[.]txt'
 import { Route as LlmsFullDottxtRouteImport } from './routes/llms-full[.]txt'
-import { Route as ImprintRouteImport } from './routes/imprint'
-import { Route as FaqRouteImport } from './routes/faq'
-import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AdminSetupRouteImport } from './routes/admin-setup'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as DocsIndexRouteImport } from './routes/docs.index'
-import { Route as BlogIndexRouteImport } from './routes/blog.index'
-import { Route as DocsToolsRouteImport } from './routes/docs.tools'
-import { Route as DocsSecurityRouteImport } from './routes/docs.security'
-import { Route as DocsQuotasRouteImport } from './routes/docs.quotas'
-import { Route as DocsN8nInstancesRouteImport } from './routes/docs.n8n-instances'
-import { Route as DocsGettingStartedRouteImport } from './routes/docs.getting-started'
-import { Route as DocsConceptsRouteImport } from './routes/docs.concepts'
-import { Route as DocsClientsRouteImport } from './routes/docs.clients'
-import { Route as DocsApiKeysRouteImport } from './routes/docs.api-keys'
-import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
+import { Route as Char123LocaleChar125IndexRouteImport } from './routes/{-$locale}/index'
+import { Route as Char123LocaleChar125TermsRouteImport } from './routes/{-$locale}/terms'
+import { Route as Char123LocaleChar125PrivacyRouteImport } from './routes/{-$locale}/privacy'
+import { Route as Char123LocaleChar125PricingRouteImport } from './routes/{-$locale}/pricing'
+import { Route as Char123LocaleChar125ImprintRouteImport } from './routes/{-$locale}/imprint'
+import { Route as Char123LocaleChar125FaqRouteImport } from './routes/{-$locale}/faq'
+import { Route as Char123LocaleChar125DocsRouteImport } from './routes/{-$locale}/docs'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
 import { Route as AuthenticatedUsageRouteImport } from './routes/_authenticated/usage'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -45,6 +34,17 @@ import { Route as AuthenticatedChatRouteImport } from './routes/_authenticated/c
 import { Route as AuthenticatedBillingRouteImport } from './routes/_authenticated/billing'
 import { Route as AuthenticatedApiKeysRouteImport } from './routes/_authenticated/api-keys'
 import { Route as AuthenticatedAdminRouteImport } from './routes/_authenticated/_admin'
+import { Route as Char123LocaleChar125DocsIndexRouteImport } from './routes/{-$locale}/docs.index'
+import { Route as Char123LocaleChar125BlogIndexRouteImport } from './routes/{-$locale}/blog.index'
+import { Route as Char123LocaleChar125DocsToolsRouteImport } from './routes/{-$locale}/docs.tools'
+import { Route as Char123LocaleChar125DocsSecurityRouteImport } from './routes/{-$locale}/docs.security'
+import { Route as Char123LocaleChar125DocsQuotasRouteImport } from './routes/{-$locale}/docs.quotas'
+import { Route as Char123LocaleChar125DocsN8nInstancesRouteImport } from './routes/{-$locale}/docs.n8n-instances'
+import { Route as Char123LocaleChar125DocsGettingStartedRouteImport } from './routes/{-$locale}/docs.getting-started'
+import { Route as Char123LocaleChar125DocsConceptsRouteImport } from './routes/{-$locale}/docs.concepts'
+import { Route as Char123LocaleChar125DocsClientsRouteImport } from './routes/{-$locale}/docs.clients'
+import { Route as Char123LocaleChar125DocsApiKeysRouteImport } from './routes/{-$locale}/docs.api-keys'
+import { Route as Char123LocaleChar125BlogSlugRouteImport } from './routes/{-$locale}/blog.$slug'
 import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/paddle-webhook'
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
@@ -54,11 +54,6 @@ import { Route as AuthenticatedAdminAdminDeletionRequestsRouteImport } from './r
 import { Route as AuthenticatedAdminAdminAnnouncementsRouteImport } from './routes/_authenticated/_admin/admin.announcements'
 import { Route as AuthenticatedAdminAdminAnnouncementsPreviewIdRouteImport } from './routes/_authenticated/_admin/admin.announcements.preview.$id'
 
-const TermsRoute = TermsRouteImport.update({
-  id: '/terms',
-  path: '/terms',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
   id: '/sitemap.xml',
   path: '/sitemap.xml',
@@ -72,16 +67,6 @@ const SignupRoute = SignupRouteImport.update({
 const RobotsDottxtRoute = RobotsDottxtRouteImport.update({
   id: '/robots.txt',
   path: '/robots.txt',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const PricingRoute = PricingRouteImport.update({
-  id: '/pricing',
-  path: '/pricing',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -99,21 +84,6 @@ const LlmsFullDottxtRoute = LlmsFullDottxtRouteImport.update({
   path: '/llms-full.txt',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ImprintRoute = ImprintRouteImport.update({
-  id: '/imprint',
-  path: '/imprint',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const FaqRoute = FaqRouteImport.update({
-  id: '/faq',
-  path: '/faq',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocsRoute = DocsRouteImport.update({
-  id: '/docs',
-  path: '/docs',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminSetupRoute = AdminSetupRouteImport.update({
   id: '/admin-setup',
   path: '/admin-setup',
@@ -123,66 +93,47 @@ const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
   getParentRoute: () => rootRouteImport,
 } as any)
-const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+const Char123LocaleChar125IndexRoute =
+  Char123LocaleChar125IndexRouteImport.update({
+    id: '/{-$locale}/',
+    path: '/{-$locale}/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LocaleChar125TermsRoute =
+  Char123LocaleChar125TermsRouteImport.update({
+    id: '/{-$locale}/terms',
+    path: '/{-$locale}/terms',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LocaleChar125PrivacyRoute =
+  Char123LocaleChar125PrivacyRouteImport.update({
+    id: '/{-$locale}/privacy',
+    path: '/{-$locale}/privacy',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LocaleChar125PricingRoute =
+  Char123LocaleChar125PricingRouteImport.update({
+    id: '/{-$locale}/pricing',
+    path: '/{-$locale}/pricing',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LocaleChar125ImprintRoute =
+  Char123LocaleChar125ImprintRouteImport.update({
+    id: '/{-$locale}/imprint',
+    path: '/{-$locale}/imprint',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LocaleChar125FaqRoute = Char123LocaleChar125FaqRouteImport.update({
+  id: '/{-$locale}/faq',
+  path: '/{-$locale}/faq',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DocsIndexRoute = DocsIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => DocsRoute,
-} as any)
-const BlogIndexRoute = BlogIndexRouteImport.update({
-  id: '/blog/',
-  path: '/blog/',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DocsToolsRoute = DocsToolsRouteImport.update({
-  id: '/tools',
-  path: '/tools',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsSecurityRoute = DocsSecurityRouteImport.update({
-  id: '/security',
-  path: '/security',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsQuotasRoute = DocsQuotasRouteImport.update({
-  id: '/quotas',
-  path: '/quotas',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsN8nInstancesRoute = DocsN8nInstancesRouteImport.update({
-  id: '/n8n-instances',
-  path: '/n8n-instances',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsGettingStartedRoute = DocsGettingStartedRouteImport.update({
-  id: '/getting-started',
-  path: '/getting-started',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsConceptsRoute = DocsConceptsRouteImport.update({
-  id: '/concepts',
-  path: '/concepts',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsClientsRoute = DocsClientsRouteImport.update({
-  id: '/clients',
-  path: '/clients',
-  getParentRoute: () => DocsRoute,
-} as any)
-const DocsApiKeysRoute = DocsApiKeysRouteImport.update({
-  id: '/api-keys',
-  path: '/api-keys',
-  getParentRoute: () => DocsRoute,
-} as any)
-const BlogSlugRoute = BlogSlugRouteImport.update({
-  id: '/blog/$slug',
-  path: '/blog/$slug',
-  getParentRoute: () => rootRouteImport,
-} as any)
+const Char123LocaleChar125DocsRoute =
+  Char123LocaleChar125DocsRouteImport.update({
+    id: '/{-$locale}/docs',
+    path: '/{-$locale}/docs',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const AuthenticatedWhatsNewRoute = AuthenticatedWhatsNewRouteImport.update({
   id: '/whats-new',
   path: '/whats-new',
@@ -232,6 +183,72 @@ const AuthenticatedAdminRoute = AuthenticatedAdminRouteImport.update({
   id: '/_admin',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const Char123LocaleChar125DocsIndexRoute =
+  Char123LocaleChar125DocsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125BlogIndexRoute =
+  Char123LocaleChar125BlogIndexRouteImport.update({
+    id: '/{-$locale}/blog/',
+    path: '/{-$locale}/blog/',
+    getParentRoute: () => rootRouteImport,
+  } as any)
+const Char123LocaleChar125DocsToolsRoute =
+  Char123LocaleChar125DocsToolsRouteImport.update({
+    id: '/tools',
+    path: '/tools',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsSecurityRoute =
+  Char123LocaleChar125DocsSecurityRouteImport.update({
+    id: '/security',
+    path: '/security',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsQuotasRoute =
+  Char123LocaleChar125DocsQuotasRouteImport.update({
+    id: '/quotas',
+    path: '/quotas',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsN8nInstancesRoute =
+  Char123LocaleChar125DocsN8nInstancesRouteImport.update({
+    id: '/n8n-instances',
+    path: '/n8n-instances',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsGettingStartedRoute =
+  Char123LocaleChar125DocsGettingStartedRouteImport.update({
+    id: '/getting-started',
+    path: '/getting-started',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsConceptsRoute =
+  Char123LocaleChar125DocsConceptsRouteImport.update({
+    id: '/concepts',
+    path: '/concepts',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsClientsRoute =
+  Char123LocaleChar125DocsClientsRouteImport.update({
+    id: '/clients',
+    path: '/clients',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125DocsApiKeysRoute =
+  Char123LocaleChar125DocsApiKeysRouteImport.update({
+    id: '/api-keys',
+    path: '/api-keys',
+    getParentRoute: () => Char123LocaleChar125DocsRoute,
+  } as any)
+const Char123LocaleChar125BlogSlugRoute =
+  Char123LocaleChar125BlogSlugRouteImport.update({
+    id: '/{-$locale}/blog/$slug',
+    path: '/{-$locale}/blog/$slug',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicPaddleWebhookRoute = ApiPublicPaddleWebhookRouteImport.update({
   id: '/api/public/paddle-webhook',
   path: '/api/public/paddle-webhook',
@@ -280,20 +297,14 @@ const AuthenticatedAdminAdminAnnouncementsPreviewIdRoute =
   } as any)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '/': typeof AuthenticatedAdminRouteWithChildren
   '/admin-setup': typeof AdminSetupRoute
-  '/docs': typeof DocsRouteWithChildren
-  '/faq': typeof FaqRoute
-  '/imprint': typeof ImprintRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/terms': typeof TermsRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/chat': typeof AuthenticatedChatRoute
@@ -303,19 +314,26 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthenticatedSettingsRoute
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/docs/api-keys': typeof DocsApiKeysRoute
-  '/docs/clients': typeof DocsClientsRoute
-  '/docs/concepts': typeof DocsConceptsRoute
-  '/docs/getting-started': typeof DocsGettingStartedRoute
-  '/docs/n8n-instances': typeof DocsN8nInstancesRoute
-  '/docs/quotas': typeof DocsQuotasRoute
-  '/docs/security': typeof DocsSecurityRoute
-  '/docs/tools': typeof DocsToolsRoute
-  '/blog/': typeof BlogIndexRoute
-  '/docs/': typeof DocsIndexRoute
+  '/{-$locale}/docs': typeof Char123LocaleChar125DocsRouteWithChildren
+  '/{-$locale}/faq': typeof Char123LocaleChar125FaqRoute
+  '/{-$locale}/imprint': typeof Char123LocaleChar125ImprintRoute
+  '/{-$locale}/pricing': typeof Char123LocaleChar125PricingRoute
+  '/{-$locale}/privacy': typeof Char123LocaleChar125PrivacyRoute
+  '/{-$locale}/terms': typeof Char123LocaleChar125TermsRoute
+  '/{-$locale}/': typeof Char123LocaleChar125IndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
+  '/{-$locale}/blog/$slug': typeof Char123LocaleChar125BlogSlugRoute
+  '/{-$locale}/docs/api-keys': typeof Char123LocaleChar125DocsApiKeysRoute
+  '/{-$locale}/docs/clients': typeof Char123LocaleChar125DocsClientsRoute
+  '/{-$locale}/docs/concepts': typeof Char123LocaleChar125DocsConceptsRoute
+  '/{-$locale}/docs/getting-started': typeof Char123LocaleChar125DocsGettingStartedRoute
+  '/{-$locale}/docs/n8n-instances': typeof Char123LocaleChar125DocsN8nInstancesRoute
+  '/{-$locale}/docs/quotas': typeof Char123LocaleChar125DocsQuotasRoute
+  '/{-$locale}/docs/security': typeof Char123LocaleChar125DocsSecurityRoute
+  '/{-$locale}/docs/tools': typeof Char123LocaleChar125DocsToolsRoute
+  '/{-$locale}/blog/': typeof Char123LocaleChar125BlogIndexRoute
+  '/{-$locale}/docs/': typeof Char123LocaleChar125DocsIndexRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
@@ -324,19 +342,14 @@ export interface FileRoutesByFullPath {
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
+  '/': typeof AuthenticatedAdminRouteWithChildren
   '/admin-setup': typeof AdminSetupRoute
-  '/faq': typeof FaqRoute
-  '/imprint': typeof ImprintRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/terms': typeof TermsRoute
   '/api-keys': typeof AuthenticatedApiKeysRoute
   '/billing': typeof AuthenticatedBillingRoute
   '/chat': typeof AuthenticatedChatRoute
@@ -346,19 +359,25 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthenticatedSettingsRoute
   '/usage': typeof AuthenticatedUsageRoute
   '/whats-new': typeof AuthenticatedWhatsNewRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/docs/api-keys': typeof DocsApiKeysRoute
-  '/docs/clients': typeof DocsClientsRoute
-  '/docs/concepts': typeof DocsConceptsRoute
-  '/docs/getting-started': typeof DocsGettingStartedRoute
-  '/docs/n8n-instances': typeof DocsN8nInstancesRoute
-  '/docs/quotas': typeof DocsQuotasRoute
-  '/docs/security': typeof DocsSecurityRoute
-  '/docs/tools': typeof DocsToolsRoute
-  '/blog': typeof BlogIndexRoute
-  '/docs': typeof DocsIndexRoute
+  '/{-$locale}/faq': typeof Char123LocaleChar125FaqRoute
+  '/{-$locale}/imprint': typeof Char123LocaleChar125ImprintRoute
+  '/{-$locale}/pricing': typeof Char123LocaleChar125PricingRoute
+  '/{-$locale}/privacy': typeof Char123LocaleChar125PrivacyRoute
+  '/{-$locale}/terms': typeof Char123LocaleChar125TermsRoute
+  '/{-$locale}': typeof Char123LocaleChar125IndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
+  '/{-$locale}/blog/$slug': typeof Char123LocaleChar125BlogSlugRoute
+  '/{-$locale}/docs/api-keys': typeof Char123LocaleChar125DocsApiKeysRoute
+  '/{-$locale}/docs/clients': typeof Char123LocaleChar125DocsClientsRoute
+  '/{-$locale}/docs/concepts': typeof Char123LocaleChar125DocsConceptsRoute
+  '/{-$locale}/docs/getting-started': typeof Char123LocaleChar125DocsGettingStartedRoute
+  '/{-$locale}/docs/n8n-instances': typeof Char123LocaleChar125DocsN8nInstancesRoute
+  '/{-$locale}/docs/quotas': typeof Char123LocaleChar125DocsQuotasRoute
+  '/{-$locale}/docs/security': typeof Char123LocaleChar125DocsSecurityRoute
+  '/{-$locale}/docs/tools': typeof Char123LocaleChar125DocsToolsRoute
+  '/{-$locale}/blog': typeof Char123LocaleChar125BlogIndexRoute
+  '/{-$locale}/docs': typeof Char123LocaleChar125DocsIndexRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
@@ -368,21 +387,14 @@ export interface FileRoutesByTo {
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/admin-setup': typeof AdminSetupRoute
-  '/docs': typeof DocsRouteWithChildren
-  '/faq': typeof FaqRoute
-  '/imprint': typeof ImprintRoute
   '/llms-full.txt': typeof LlmsFullDottxtRoute
   '/llms.txt': typeof LlmsDottxtRoute
   '/login': typeof LoginRoute
-  '/pricing': typeof PricingRoute
-  '/privacy': typeof PrivacyRoute
   '/robots.txt': typeof RobotsDottxtRoute
   '/signup': typeof SignupRoute
   '/sitemap.xml': typeof SitemapDotxmlRoute
-  '/terms': typeof TermsRoute
   '/_authenticated/_admin': typeof AuthenticatedAdminRouteWithChildren
   '/_authenticated/api-keys': typeof AuthenticatedApiKeysRoute
   '/_authenticated/billing': typeof AuthenticatedBillingRoute
@@ -393,19 +405,26 @@ export interface FileRoutesById {
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/usage': typeof AuthenticatedUsageRoute
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/docs/api-keys': typeof DocsApiKeysRoute
-  '/docs/clients': typeof DocsClientsRoute
-  '/docs/concepts': typeof DocsConceptsRoute
-  '/docs/getting-started': typeof DocsGettingStartedRoute
-  '/docs/n8n-instances': typeof DocsN8nInstancesRoute
-  '/docs/quotas': typeof DocsQuotasRoute
-  '/docs/security': typeof DocsSecurityRoute
-  '/docs/tools': typeof DocsToolsRoute
-  '/blog/': typeof BlogIndexRoute
-  '/docs/': typeof DocsIndexRoute
+  '/{-$locale}/docs': typeof Char123LocaleChar125DocsRouteWithChildren
+  '/{-$locale}/faq': typeof Char123LocaleChar125FaqRoute
+  '/{-$locale}/imprint': typeof Char123LocaleChar125ImprintRoute
+  '/{-$locale}/pricing': typeof Char123LocaleChar125PricingRoute
+  '/{-$locale}/privacy': typeof Char123LocaleChar125PrivacyRoute
+  '/{-$locale}/terms': typeof Char123LocaleChar125TermsRoute
+  '/{-$locale}/': typeof Char123LocaleChar125IndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
+  '/{-$locale}/blog/$slug': typeof Char123LocaleChar125BlogSlugRoute
+  '/{-$locale}/docs/api-keys': typeof Char123LocaleChar125DocsApiKeysRoute
+  '/{-$locale}/docs/clients': typeof Char123LocaleChar125DocsClientsRoute
+  '/{-$locale}/docs/concepts': typeof Char123LocaleChar125DocsConceptsRoute
+  '/{-$locale}/docs/getting-started': typeof Char123LocaleChar125DocsGettingStartedRoute
+  '/{-$locale}/docs/n8n-instances': typeof Char123LocaleChar125DocsN8nInstancesRoute
+  '/{-$locale}/docs/quotas': typeof Char123LocaleChar125DocsQuotasRoute
+  '/{-$locale}/docs/security': typeof Char123LocaleChar125DocsSecurityRoute
+  '/{-$locale}/docs/tools': typeof Char123LocaleChar125DocsToolsRoute
+  '/{-$locale}/blog/': typeof Char123LocaleChar125BlogIndexRoute
+  '/{-$locale}/docs/': typeof Char123LocaleChar125DocsIndexRoute
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
   '/_authenticated/_admin/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/_authenticated/_admin/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
@@ -418,18 +437,12 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/admin-setup'
-    | '/docs'
-    | '/faq'
-    | '/imprint'
     | '/llms-full.txt'
     | '/llms.txt'
     | '/login'
-    | '/pricing'
-    | '/privacy'
     | '/robots.txt'
     | '/signup'
     | '/sitemap.xml'
-    | '/terms'
     | '/api-keys'
     | '/billing'
     | '/chat'
@@ -439,19 +452,26 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/whats-new'
-    | '/blog/$slug'
-    | '/docs/api-keys'
-    | '/docs/clients'
-    | '/docs/concepts'
-    | '/docs/getting-started'
-    | '/docs/n8n-instances'
-    | '/docs/quotas'
-    | '/docs/security'
-    | '/docs/tools'
-    | '/blog/'
-    | '/docs/'
+    | '/{-$locale}/docs'
+    | '/{-$locale}/faq'
+    | '/{-$locale}/imprint'
+    | '/{-$locale}/pricing'
+    | '/{-$locale}/privacy'
+    | '/{-$locale}/terms'
+    | '/{-$locale}/'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
+    | '/{-$locale}/blog/$slug'
+    | '/{-$locale}/docs/api-keys'
+    | '/{-$locale}/docs/clients'
+    | '/{-$locale}/docs/concepts'
+    | '/{-$locale}/docs/getting-started'
+    | '/{-$locale}/docs/n8n-instances'
+    | '/{-$locale}/docs/quotas'
+    | '/{-$locale}/docs/security'
+    | '/{-$locale}/docs/tools'
+    | '/{-$locale}/blog/'
+    | '/{-$locale}/docs/'
     | '/admin/announcements'
     | '/admin/deletion-requests'
     | '/admin/deployment'
@@ -462,17 +482,12 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin-setup'
-    | '/faq'
-    | '/imprint'
     | '/llms-full.txt'
     | '/llms.txt'
     | '/login'
-    | '/pricing'
-    | '/privacy'
     | '/robots.txt'
     | '/signup'
     | '/sitemap.xml'
-    | '/terms'
     | '/api-keys'
     | '/billing'
     | '/chat'
@@ -482,19 +497,25 @@ export interface FileRouteTypes {
     | '/settings'
     | '/usage'
     | '/whats-new'
-    | '/blog/$slug'
-    | '/docs/api-keys'
-    | '/docs/clients'
-    | '/docs/concepts'
-    | '/docs/getting-started'
-    | '/docs/n8n-instances'
-    | '/docs/quotas'
-    | '/docs/security'
-    | '/docs/tools'
-    | '/blog'
-    | '/docs'
+    | '/{-$locale}/faq'
+    | '/{-$locale}/imprint'
+    | '/{-$locale}/pricing'
+    | '/{-$locale}/privacy'
+    | '/{-$locale}/terms'
+    | '/{-$locale}'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
+    | '/{-$locale}/blog/$slug'
+    | '/{-$locale}/docs/api-keys'
+    | '/{-$locale}/docs/clients'
+    | '/{-$locale}/docs/concepts'
+    | '/{-$locale}/docs/getting-started'
+    | '/{-$locale}/docs/n8n-instances'
+    | '/{-$locale}/docs/quotas'
+    | '/{-$locale}/docs/security'
+    | '/{-$locale}/docs/tools'
+    | '/{-$locale}/blog'
+    | '/{-$locale}/docs'
     | '/admin/announcements'
     | '/admin/deletion-requests'
     | '/admin/deployment'
@@ -503,21 +524,14 @@ export interface FileRouteTypes {
     | '/admin/announcements/preview/$id'
   id:
     | '__root__'
-    | '/'
     | '/_authenticated'
     | '/admin-setup'
-    | '/docs'
-    | '/faq'
-    | '/imprint'
     | '/llms-full.txt'
     | '/llms.txt'
     | '/login'
-    | '/pricing'
-    | '/privacy'
     | '/robots.txt'
     | '/signup'
     | '/sitemap.xml'
-    | '/terms'
     | '/_authenticated/_admin'
     | '/_authenticated/api-keys'
     | '/_authenticated/billing'
@@ -528,19 +542,26 @@ export interface FileRouteTypes {
     | '/_authenticated/settings'
     | '/_authenticated/usage'
     | '/_authenticated/whats-new'
-    | '/blog/$slug'
-    | '/docs/api-keys'
-    | '/docs/clients'
-    | '/docs/concepts'
-    | '/docs/getting-started'
-    | '/docs/n8n-instances'
-    | '/docs/quotas'
-    | '/docs/security'
-    | '/docs/tools'
-    | '/blog/'
-    | '/docs/'
+    | '/{-$locale}/docs'
+    | '/{-$locale}/faq'
+    | '/{-$locale}/imprint'
+    | '/{-$locale}/pricing'
+    | '/{-$locale}/privacy'
+    | '/{-$locale}/terms'
+    | '/{-$locale}/'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
+    | '/{-$locale}/blog/$slug'
+    | '/{-$locale}/docs/api-keys'
+    | '/{-$locale}/docs/clients'
+    | '/{-$locale}/docs/concepts'
+    | '/{-$locale}/docs/getting-started'
+    | '/{-$locale}/docs/n8n-instances'
+    | '/{-$locale}/docs/quotas'
+    | '/{-$locale}/docs/security'
+    | '/{-$locale}/docs/tools'
+    | '/{-$locale}/blog/'
+    | '/{-$locale}/docs/'
     | '/_authenticated/_admin/admin/announcements'
     | '/_authenticated/_admin/admin/deletion-requests'
     | '/_authenticated/_admin/admin/deployment'
@@ -550,36 +571,29 @@ export interface FileRouteTypes {
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AdminSetupRoute: typeof AdminSetupRoute
-  DocsRoute: typeof DocsRouteWithChildren
-  FaqRoute: typeof FaqRoute
-  ImprintRoute: typeof ImprintRoute
   LlmsFullDottxtRoute: typeof LlmsFullDottxtRoute
   LlmsDottxtRoute: typeof LlmsDottxtRoute
   LoginRoute: typeof LoginRoute
-  PricingRoute: typeof PricingRoute
-  PrivacyRoute: typeof PrivacyRoute
   RobotsDottxtRoute: typeof RobotsDottxtRoute
   SignupRoute: typeof SignupRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
-  TermsRoute: typeof TermsRoute
-  BlogSlugRoute: typeof BlogSlugRoute
-  BlogIndexRoute: typeof BlogIndexRoute
+  Char123LocaleChar125DocsRoute: typeof Char123LocaleChar125DocsRouteWithChildren
+  Char123LocaleChar125FaqRoute: typeof Char123LocaleChar125FaqRoute
+  Char123LocaleChar125ImprintRoute: typeof Char123LocaleChar125ImprintRoute
+  Char123LocaleChar125PricingRoute: typeof Char123LocaleChar125PricingRoute
+  Char123LocaleChar125PrivacyRoute: typeof Char123LocaleChar125PrivacyRoute
+  Char123LocaleChar125TermsRoute: typeof Char123LocaleChar125TermsRoute
+  Char123LocaleChar125IndexRoute: typeof Char123LocaleChar125IndexRoute
   ApiPublicMcpRoute: typeof ApiPublicMcpRoute
   ApiPublicPaddleWebhookRoute: typeof ApiPublicPaddleWebhookRoute
+  Char123LocaleChar125BlogSlugRoute: typeof Char123LocaleChar125BlogSlugRoute
+  Char123LocaleChar125BlogIndexRoute: typeof Char123LocaleChar125BlogIndexRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/terms': {
-      id: '/terms'
-      path: '/terms'
-      fullPath: '/terms'
-      preLoaderRoute: typeof TermsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/sitemap.xml': {
       id: '/sitemap.xml'
       path: '/sitemap.xml'
@@ -599,20 +613,6 @@ declare module '@tanstack/react-router' {
       path: '/robots.txt'
       fullPath: '/robots.txt'
       preLoaderRoute: typeof RobotsDottxtRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/pricing': {
-      id: '/pricing'
-      path: '/pricing'
-      fullPath: '/pricing'
-      preLoaderRoute: typeof PricingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -636,27 +636,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LlmsFullDottxtRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/imprint': {
-      id: '/imprint'
-      path: '/imprint'
-      fullPath: '/imprint'
-      preLoaderRoute: typeof ImprintRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/faq': {
-      id: '/faq'
-      path: '/faq'
-      fullPath: '/faq'
-      preLoaderRoute: typeof FaqRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/docs': {
-      id: '/docs'
-      path: '/docs'
-      fullPath: '/docs'
-      preLoaderRoute: typeof DocsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin-setup': {
       id: '/admin-setup'
       path: '/admin-setup'
@@ -671,88 +650,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
+    '/{-$locale}/': {
+      id: '/{-$locale}/'
+      path: '/{-$locale}'
+      fullPath: '/{-$locale}/'
+      preLoaderRoute: typeof Char123LocaleChar125IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/docs/': {
-      id: '/docs/'
-      path: '/'
-      fullPath: '/docs/'
-      preLoaderRoute: typeof DocsIndexRouteImport
-      parentRoute: typeof DocsRoute
-    }
-    '/blog/': {
-      id: '/blog/'
-      path: '/blog'
-      fullPath: '/blog/'
-      preLoaderRoute: typeof BlogIndexRouteImport
+    '/{-$locale}/terms': {
+      id: '/{-$locale}/terms'
+      path: '/{-$locale}/terms'
+      fullPath: '/{-$locale}/terms'
+      preLoaderRoute: typeof Char123LocaleChar125TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/docs/tools': {
-      id: '/docs/tools'
-      path: '/tools'
-      fullPath: '/docs/tools'
-      preLoaderRoute: typeof DocsToolsRouteImport
-      parentRoute: typeof DocsRoute
+    '/{-$locale}/privacy': {
+      id: '/{-$locale}/privacy'
+      path: '/{-$locale}/privacy'
+      fullPath: '/{-$locale}/privacy'
+      preLoaderRoute: typeof Char123LocaleChar125PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/docs/security': {
-      id: '/docs/security'
-      path: '/security'
-      fullPath: '/docs/security'
-      preLoaderRoute: typeof DocsSecurityRouteImport
-      parentRoute: typeof DocsRoute
+    '/{-$locale}/pricing': {
+      id: '/{-$locale}/pricing'
+      path: '/{-$locale}/pricing'
+      fullPath: '/{-$locale}/pricing'
+      preLoaderRoute: typeof Char123LocaleChar125PricingRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/docs/quotas': {
-      id: '/docs/quotas'
-      path: '/quotas'
-      fullPath: '/docs/quotas'
-      preLoaderRoute: typeof DocsQuotasRouteImport
-      parentRoute: typeof DocsRoute
+    '/{-$locale}/imprint': {
+      id: '/{-$locale}/imprint'
+      path: '/{-$locale}/imprint'
+      fullPath: '/{-$locale}/imprint'
+      preLoaderRoute: typeof Char123LocaleChar125ImprintRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/docs/n8n-instances': {
-      id: '/docs/n8n-instances'
-      path: '/n8n-instances'
-      fullPath: '/docs/n8n-instances'
-      preLoaderRoute: typeof DocsN8nInstancesRouteImport
-      parentRoute: typeof DocsRoute
+    '/{-$locale}/faq': {
+      id: '/{-$locale}/faq'
+      path: '/{-$locale}/faq'
+      fullPath: '/{-$locale}/faq'
+      preLoaderRoute: typeof Char123LocaleChar125FaqRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/docs/getting-started': {
-      id: '/docs/getting-started'
-      path: '/getting-started'
-      fullPath: '/docs/getting-started'
-      preLoaderRoute: typeof DocsGettingStartedRouteImport
-      parentRoute: typeof DocsRoute
-    }
-    '/docs/concepts': {
-      id: '/docs/concepts'
-      path: '/concepts'
-      fullPath: '/docs/concepts'
-      preLoaderRoute: typeof DocsConceptsRouteImport
-      parentRoute: typeof DocsRoute
-    }
-    '/docs/clients': {
-      id: '/docs/clients'
-      path: '/clients'
-      fullPath: '/docs/clients'
-      preLoaderRoute: typeof DocsClientsRouteImport
-      parentRoute: typeof DocsRoute
-    }
-    '/docs/api-keys': {
-      id: '/docs/api-keys'
-      path: '/api-keys'
-      fullPath: '/docs/api-keys'
-      preLoaderRoute: typeof DocsApiKeysRouteImport
-      parentRoute: typeof DocsRoute
-    }
-    '/blog/$slug': {
-      id: '/blog/$slug'
-      path: '/blog/$slug'
-      fullPath: '/blog/$slug'
-      preLoaderRoute: typeof BlogSlugRouteImport
+    '/{-$locale}/docs': {
+      id: '/{-$locale}/docs'
+      path: '/{-$locale}/docs'
+      fullPath: '/{-$locale}/docs'
+      preLoaderRoute: typeof Char123LocaleChar125DocsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authenticated/whats-new': {
@@ -824,6 +768,83 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedAdminRouteImport
       parentRoute: typeof AuthenticatedRoute
+    }
+    '/{-$locale}/docs/': {
+      id: '/{-$locale}/docs/'
+      path: '/'
+      fullPath: '/{-$locale}/docs/'
+      preLoaderRoute: typeof Char123LocaleChar125DocsIndexRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/blog/': {
+      id: '/{-$locale}/blog/'
+      path: '/{-$locale}/blog'
+      fullPath: '/{-$locale}/blog/'
+      preLoaderRoute: typeof Char123LocaleChar125BlogIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/{-$locale}/docs/tools': {
+      id: '/{-$locale}/docs/tools'
+      path: '/tools'
+      fullPath: '/{-$locale}/docs/tools'
+      preLoaderRoute: typeof Char123LocaleChar125DocsToolsRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/security': {
+      id: '/{-$locale}/docs/security'
+      path: '/security'
+      fullPath: '/{-$locale}/docs/security'
+      preLoaderRoute: typeof Char123LocaleChar125DocsSecurityRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/quotas': {
+      id: '/{-$locale}/docs/quotas'
+      path: '/quotas'
+      fullPath: '/{-$locale}/docs/quotas'
+      preLoaderRoute: typeof Char123LocaleChar125DocsQuotasRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/n8n-instances': {
+      id: '/{-$locale}/docs/n8n-instances'
+      path: '/n8n-instances'
+      fullPath: '/{-$locale}/docs/n8n-instances'
+      preLoaderRoute: typeof Char123LocaleChar125DocsN8nInstancesRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/getting-started': {
+      id: '/{-$locale}/docs/getting-started'
+      path: '/getting-started'
+      fullPath: '/{-$locale}/docs/getting-started'
+      preLoaderRoute: typeof Char123LocaleChar125DocsGettingStartedRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/concepts': {
+      id: '/{-$locale}/docs/concepts'
+      path: '/concepts'
+      fullPath: '/{-$locale}/docs/concepts'
+      preLoaderRoute: typeof Char123LocaleChar125DocsConceptsRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/clients': {
+      id: '/{-$locale}/docs/clients'
+      path: '/clients'
+      fullPath: '/{-$locale}/docs/clients'
+      preLoaderRoute: typeof Char123LocaleChar125DocsClientsRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/docs/api-keys': {
+      id: '/{-$locale}/docs/api-keys'
+      path: '/api-keys'
+      fullPath: '/{-$locale}/docs/api-keys'
+      preLoaderRoute: typeof Char123LocaleChar125DocsApiKeysRouteImport
+      parentRoute: typeof Char123LocaleChar125DocsRoute
+    }
+    '/{-$locale}/blog/$slug': {
+      id: '/{-$locale}/blog/$slug'
+      path: '/{-$locale}/blog/$slug'
+      fullPath: '/{-$locale}/blog/$slug'
+      preLoaderRoute: typeof Char123LocaleChar125BlogSlugRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/paddle-webhook': {
       id: '/api/public/paddle-webhook'
@@ -952,52 +973,60 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
-interface DocsRouteChildren {
-  DocsApiKeysRoute: typeof DocsApiKeysRoute
-  DocsClientsRoute: typeof DocsClientsRoute
-  DocsConceptsRoute: typeof DocsConceptsRoute
-  DocsGettingStartedRoute: typeof DocsGettingStartedRoute
-  DocsN8nInstancesRoute: typeof DocsN8nInstancesRoute
-  DocsQuotasRoute: typeof DocsQuotasRoute
-  DocsSecurityRoute: typeof DocsSecurityRoute
-  DocsToolsRoute: typeof DocsToolsRoute
-  DocsIndexRoute: typeof DocsIndexRoute
+interface Char123LocaleChar125DocsRouteChildren {
+  Char123LocaleChar125DocsApiKeysRoute: typeof Char123LocaleChar125DocsApiKeysRoute
+  Char123LocaleChar125DocsClientsRoute: typeof Char123LocaleChar125DocsClientsRoute
+  Char123LocaleChar125DocsConceptsRoute: typeof Char123LocaleChar125DocsConceptsRoute
+  Char123LocaleChar125DocsGettingStartedRoute: typeof Char123LocaleChar125DocsGettingStartedRoute
+  Char123LocaleChar125DocsN8nInstancesRoute: typeof Char123LocaleChar125DocsN8nInstancesRoute
+  Char123LocaleChar125DocsQuotasRoute: typeof Char123LocaleChar125DocsQuotasRoute
+  Char123LocaleChar125DocsSecurityRoute: typeof Char123LocaleChar125DocsSecurityRoute
+  Char123LocaleChar125DocsToolsRoute: typeof Char123LocaleChar125DocsToolsRoute
+  Char123LocaleChar125DocsIndexRoute: typeof Char123LocaleChar125DocsIndexRoute
 }
 
-const DocsRouteChildren: DocsRouteChildren = {
-  DocsApiKeysRoute: DocsApiKeysRoute,
-  DocsClientsRoute: DocsClientsRoute,
-  DocsConceptsRoute: DocsConceptsRoute,
-  DocsGettingStartedRoute: DocsGettingStartedRoute,
-  DocsN8nInstancesRoute: DocsN8nInstancesRoute,
-  DocsQuotasRoute: DocsQuotasRoute,
-  DocsSecurityRoute: DocsSecurityRoute,
-  DocsToolsRoute: DocsToolsRoute,
-  DocsIndexRoute: DocsIndexRoute,
-}
+const Char123LocaleChar125DocsRouteChildren: Char123LocaleChar125DocsRouteChildren =
+  {
+    Char123LocaleChar125DocsApiKeysRoute: Char123LocaleChar125DocsApiKeysRoute,
+    Char123LocaleChar125DocsClientsRoute: Char123LocaleChar125DocsClientsRoute,
+    Char123LocaleChar125DocsConceptsRoute:
+      Char123LocaleChar125DocsConceptsRoute,
+    Char123LocaleChar125DocsGettingStartedRoute:
+      Char123LocaleChar125DocsGettingStartedRoute,
+    Char123LocaleChar125DocsN8nInstancesRoute:
+      Char123LocaleChar125DocsN8nInstancesRoute,
+    Char123LocaleChar125DocsQuotasRoute: Char123LocaleChar125DocsQuotasRoute,
+    Char123LocaleChar125DocsSecurityRoute:
+      Char123LocaleChar125DocsSecurityRoute,
+    Char123LocaleChar125DocsToolsRoute: Char123LocaleChar125DocsToolsRoute,
+    Char123LocaleChar125DocsIndexRoute: Char123LocaleChar125DocsIndexRoute,
+  }
 
-const DocsRouteWithChildren = DocsRoute._addFileChildren(DocsRouteChildren)
+const Char123LocaleChar125DocsRouteWithChildren =
+  Char123LocaleChar125DocsRoute._addFileChildren(
+    Char123LocaleChar125DocsRouteChildren,
+  )
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AdminSetupRoute: AdminSetupRoute,
-  DocsRoute: DocsRouteWithChildren,
-  FaqRoute: FaqRoute,
-  ImprintRoute: ImprintRoute,
   LlmsFullDottxtRoute: LlmsFullDottxtRoute,
   LlmsDottxtRoute: LlmsDottxtRoute,
   LoginRoute: LoginRoute,
-  PricingRoute: PricingRoute,
-  PrivacyRoute: PrivacyRoute,
   RobotsDottxtRoute: RobotsDottxtRoute,
   SignupRoute: SignupRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
-  TermsRoute: TermsRoute,
-  BlogSlugRoute: BlogSlugRoute,
-  BlogIndexRoute: BlogIndexRoute,
+  Char123LocaleChar125DocsRoute: Char123LocaleChar125DocsRouteWithChildren,
+  Char123LocaleChar125FaqRoute: Char123LocaleChar125FaqRoute,
+  Char123LocaleChar125ImprintRoute: Char123LocaleChar125ImprintRoute,
+  Char123LocaleChar125PricingRoute: Char123LocaleChar125PricingRoute,
+  Char123LocaleChar125PrivacyRoute: Char123LocaleChar125PrivacyRoute,
+  Char123LocaleChar125TermsRoute: Char123LocaleChar125TermsRoute,
+  Char123LocaleChar125IndexRoute: Char123LocaleChar125IndexRoute,
   ApiPublicMcpRoute: ApiPublicMcpRoute,
   ApiPublicPaddleWebhookRoute: ApiPublicPaddleWebhookRoute,
+  Char123LocaleChar125BlogSlugRoute: Char123LocaleChar125BlogSlugRoute,
+  Char123LocaleChar125BlogIndexRoute: Char123LocaleChar125BlogIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

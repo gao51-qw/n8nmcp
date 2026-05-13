@@ -1,4 +1,4 @@
-import { createFileRoute, Link, notFound, stripSearchParams, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, notFound, stripSearchParams, useNavigate } from "@tanstack/react-router";
 import { zodValidator, fallback } from "@tanstack/zod-adapter";
 import { z } from "zod";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { getAllPosts, getAllTags, formatPostDate } from "@/lib/blog";
 import { buildBreadcrumbJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const SITE = "https://n8nmcp.lovable.app";
 const SITE_NAME = "n8n-mcp";
@@ -38,7 +40,7 @@ const searchSchema = z.object({
 });
 type BlogSearch = z.infer<typeof searchSchema>;
 
-export const Route = createFileRoute("/blog/")({
+export const Route = createFileRoute("/{-$locale}/blog/")({
   validateSearch: zodValidator(searchSchema),
   search: {
     // Strip default values so /blog stays clean.
@@ -97,7 +99,7 @@ export const Route = createFileRoute("/blog/")({
       })),
     };
   },
-  head: ({ loaderData }) => {
+  head: ({ params, loaderData }) => {
     const TITLE = "Blog — n8n-mcp";
     const DESC =
       "Release notes, deep-dives and tutorials from the n8n-mcp team — building an MCP gateway for n8n.";
@@ -128,7 +130,7 @@ export const Route = createFileRoute("/blog/")({
         { name: "twitter:description", content: DESC },
       ],
       links: [
-        { rel: "canonical", href: canonicalUrl },
+        ...buildAlternateLinks("/blog", resolveLocale(params.locale)),
         ...(prevHref ? [{ rel: "prev", href: prevHref }] : []),
         ...(nextHref ? [{ rel: "next", href: nextHref }] : []),
       ],

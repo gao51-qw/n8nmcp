@@ -1,6 +1,7 @@
-import { Link } from "@tanstack/react-router";
+
 import { Sparkles } from "lucide-react";
 import { useT } from "@/i18n/context";
+import { Link } from "@/i18n/link";
 
 export function MarketingFooter() {
   const t = useT();

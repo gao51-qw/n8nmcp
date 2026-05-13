@@ -1,9 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { MarketingFooter } from "@/components/marketing-footer";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
-export const Route = createFileRoute("/imprint")({
-  head: () => {
+export const Route = createFileRoute("/{-$locale}/imprint")({
+  head: ({ params }) => {
     const TITLE = "Imprint — n8n-mcp";
     const DESC =
       "Legal disclosure and operator information for the n8n-mcp hosted gateway.";
@@ -17,7 +18,7 @@ export const Route = createFileRoute("/imprint")({
         { property: "og:url", content: URL },
         { name: "robots", content: "index,follow" },
       ],
-      links: [{ rel: "canonical", href: URL }],
+      links: buildAlternateLinks("/imprint", resolveLocale(params.locale)),
     };
   },
   component: ImprintPage,

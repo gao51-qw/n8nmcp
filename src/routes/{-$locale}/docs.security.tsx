@@ -1,12 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Security — n8n-mcp docs";
 const DESC = "Encryption at rest, SSRF protection, RLS policies, and the gateway's threat model.";
 const URL = "https://n8nmcp.lovable.app/docs/security";
 
-export const Route = createFileRoute("/docs/security")({
-  head: () => ({
+export const Route = createFileRoute("/{-$locale}/docs/security")({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -15,7 +16,7 @@ export const Route = createFileRoute("/docs/security")({
       { property: "og:url", content: URL },
       { property: "og:type", content: "article" },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/docs/security", resolveLocale(params.locale)),
     scripts: [
       {
         type: "application/ld+json",

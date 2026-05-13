@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { MarketingHeader } from "@/components/marketing-header";
 import { CountUp } from "@/components/marketing/count-up";
 import { Input } from "@/components/ui/input";
@@ -40,9 +40,11 @@ import { buildFaqJsonLd, getLocalizedFaq } from "@/lib/faq-data";
 import { buildWebSiteJsonLd } from "@/lib/seo-jsonld";
 import n8nStats from "@/data/n8n-stats.json";
 import { useT } from "@/i18n/context";
+import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
-export const Route = createFileRoute("/")({
-  head: () => {
+export const Route = createFileRoute("/{-$locale}/")({
+  head: ({ params }) => {
     const TITLE = "n8n-mcp — Plug your n8n workflows into any AI client";
     const DESC =
       "Hosted MCP gateway for n8n. Connect Claude, ChatGPT, Cursor, Windsurf and any MCP-compatible client to your self-hosted n8n in seconds. Free tier with 100 calls/day.";
@@ -75,7 +77,7 @@ export const Route = createFileRoute("/")({
         { name: "twitter:title", content: TITLE },
         { name: "twitter:description", content: DESC },
       ],
-      links: [{ rel: "canonical", href: URL }],
+      links: buildAlternateLinks("/", resolveLocale(params.locale)),
       scripts: [
         {
           type: "application/ld+json",

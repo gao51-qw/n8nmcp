@@ -1,12 +1,14 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
+import { Link } from "@/i18n/link";
+import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
 
 const TITLE = "Platform API keys — n8n-mcp docs";
 const DESC = "Create, label, rotate and revoke nmcp_ platform API keys used by your MCP clients.";
 const URL = "https://n8nmcp.lovable.app/docs/api-keys";
 
-export const Route = createFileRoute("/docs/api-keys")({
-  head: () => ({
+export const Route = createFileRoute("/{-$locale}/docs/api-keys")({
+  head: ({ params }) => ({
     meta: [
       { title: TITLE },
       { name: "description", content: DESC },
@@ -15,7 +17,7 @@ export const Route = createFileRoute("/docs/api-keys")({
       { property: "og:url", content: URL },
       { property: "og:type", content: "article" },
     ],
-    links: [{ rel: "canonical", href: URL }],
+    links: buildAlternateLinks("/docs/api-keys", resolveLocale(params.locale)),
     scripts: [
       {
         type: "application/ld+json",
