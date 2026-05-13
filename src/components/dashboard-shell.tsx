@@ -16,6 +16,8 @@ import {
   Activity,
   UserMinus,
   LineChart,
+  LifeBuoy,
+  Inbox,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -32,6 +34,7 @@ const NAV = [
   { to: "/usage", label: "Usage", icon: BarChart3 },
   { to: "/billing", label: "Billing", icon: CreditCard },
   { to: "/whats-new", label: "What's New", icon: Megaphone },
+  { to: "/tickets", label: "工单", icon: LifeBuoy },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -146,6 +149,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 }`}
               >
                 <LineChart className="h-4 w-4" /> SEO Integrations
+              </Link>
+              <Link
+                to="/admin/tickets"
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                  location.pathname === "/admin/tickets"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                }`}
+              >
+                <Inbox className="h-4 w-4" /> 工单管理
               </Link>
             </>
           )}

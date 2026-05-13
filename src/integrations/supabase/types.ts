@@ -453,6 +453,89 @@ export type Database = {
         }
         Relationships: []
       }
+      support_ticket_replies: {
+        Row: {
+          attachments: Json
+          author_id: string
+          body: string
+          created_at: string
+          id: string
+          is_admin: boolean
+          ticket_id: string
+        }
+        Insert: {
+          attachments?: Json
+          author_id: string
+          body: string
+          created_at?: string
+          id?: string
+          is_admin?: boolean
+          ticket_id: string
+        }
+        Update: {
+          attachments?: Json
+          author_id?: string
+          body?: string
+          created_at?: string
+          id?: string
+          is_admin?: boolean
+          ticket_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_ticket_replies_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "support_tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_tickets: {
+        Row: {
+          assigned_to: string | null
+          attachments: Json
+          category: Database["public"]["Enums"]["ticket_category"]
+          created_at: string
+          description: string
+          id: string
+          last_reply_at: string
+          priority: Database["public"]["Enums"]["ticket_priority"]
+          status: Database["public"]["Enums"]["ticket_status"]
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_to?: string | null
+          attachments?: Json
+          category?: Database["public"]["Enums"]["ticket_category"]
+          created_at?: string
+          description: string
+          id?: string
+          last_reply_at?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_to?: string | null
+          attachments?: Json
+          category?: Database["public"]["Enums"]["ticket_category"]
+          created_at?: string
+          description?: string
+          id?: string
+          last_reply_at?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"]
+          status?: Database["public"]["Enums"]["ticket_status"]
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       usage_daily: {
         Row: {
           day: string
@@ -536,6 +619,19 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      ticket_category:
+        | "bug"
+        | "feature_request"
+        | "billing"
+        | "account"
+        | "other"
+      ticket_priority: "low" | "normal" | "high" | "urgent"
+      ticket_status:
+        | "open"
+        | "in_progress"
+        | "waiting_user"
+        | "resolved"
+        | "closed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -664,6 +760,21 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      ticket_category: [
+        "bug",
+        "feature_request",
+        "billing",
+        "account",
+        "other",
+      ],
+      ticket_priority: ["low", "normal", "high", "urgent"],
+      ticket_status: [
+        "open",
+        "in_progress",
+        "waiting_user",
+        "resolved",
+        "closed",
+      ],
     },
   },
 } as const
