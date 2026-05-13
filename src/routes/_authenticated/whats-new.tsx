@@ -177,6 +177,11 @@ function WhatsNew() {
       };
     },
     retry: 1,
+    // Public announcements list — content changes only when an admin
+    // publishes (admin mutations already invalidate ["whats-new"]).
+    // 5 minutes keeps re-entry instant without showing stale content.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const errorObj = error as (Error & { stage?: ErrorStage; cause?: unknown }) | undefined;

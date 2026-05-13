@@ -83,6 +83,11 @@ function Usage() {
         a.period < b.period ? 1 : -1,
       );
     },
+    // Aggregated daily/monthly usage — only changes when MCP calls roll
+    // up server-side. 2 minutes is fresh enough for analytics view and
+    // prevents flicker when toggling date range / re-entering the page.
+    staleTime: 2 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const totals = useMemo(

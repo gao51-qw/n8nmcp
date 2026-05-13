@@ -56,6 +56,9 @@ function AdminUsers() {
         instances: instMap.get(p.id) ?? 0,
       }));
     },
+    // Admin-only directory; OK to serve cached for 2 minutes.
+    staleTime: 2 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   return (

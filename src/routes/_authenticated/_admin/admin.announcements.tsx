@@ -461,6 +461,10 @@ function AdminAnnouncements() {
       if (error) throw error;
       return (data ?? []) as Announcement[];
     },
+    // All admin mutations on this page already invalidate this query,
+    // so a long staleTime is safe and removes flicker on re-entry.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const grouped = useMemo(() => {
