@@ -594,9 +594,7 @@ function NotificationsSection() {
 
 function DataExportSection() {
   const exportFn = useServerFn(exportMyData);
-  const requestFn = useServerFn(requestAccountDeletion);
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState<"export" | "request" | null>(null);
+  const [busy, setBusy] = useState<"export" | null>(null);
 
   const handleExport = async () => {
     setBusy("export");
@@ -617,19 +615,6 @@ function DataExportSection() {
     }
   };
 
-  const handleRequest = async () => {
-    setBusy("request");
-    try {
-      await requestFn({ data: { reason: reason || undefined } });
-      toast.success("Deletion request submitted. We will process it within 30 days.");
-      setReason("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Request failed");
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <Card>
       <h2 className="text-base font-semibold">Data export &amp; deletion request</h2>
@@ -640,23 +625,6 @@ function DataExportSection() {
         </p>
         <Button variant="outline" size="sm" className="mt-3" onClick={handleExport} disabled={busy !== null}>
           {busy === "export" ? "Preparing…" : "Download data export"}
-        </Button>
-      </div>
-      <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
-        <div className="text-sm font-medium">Request account deletion (GDPR)</div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          We will process your request within 30 days. For immediate removal use the button below.
-        </p>
-        <Textarea
-          className="mt-3"
-          rows={2}
-          placeholder="Optional: tell us why you're leaving"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          maxLength={1000}
-        />
-        <Button variant="outline" size="sm" className="mt-3" onClick={handleRequest} disabled={busy !== null}>
-          {busy === "request" ? "Submitting…" : "Submit deletion request"}
         </Button>
       </div>
     </Card>
