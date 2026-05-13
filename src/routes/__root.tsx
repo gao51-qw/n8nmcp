@@ -93,9 +93,11 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "n8n-mcp — Connect n8n workflows to AI via MCP" },
-      { name: "twitter:description", content: "Hosted MCP gateway for n8n. Plug your workflows into AI clients." },
+      { name: "twitter:description", content: "N8N-MCP is an application that helps users manage and compare n8n nodes and build a blog." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2fe62c52-3f83-4199-b5d9-615ed7ed10df/id-preview-fcaba1f0--647c0212-1ada-432a-820b-9bc428006c49.lovable.app-1778483476360.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/2fe62c52-3f83-4199-b5d9-615ed7ed10df/id-preview-fcaba1f0--647c0212-1ada-432a-820b-9bc428006c49.lovable.app-1778483476360.png" },
+      { name: "description", content: "N8N-MCP is an application that helps users manage and compare n8n nodes and build a blog." },
+      { property: "og:description", content: "N8N-MCP is an application that helps users manage and compare n8n nodes and build a blog." },
     ],
     links: [{ rel: "stylesheet", href: appCss }],
     scripts: [
