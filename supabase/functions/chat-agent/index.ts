@@ -33,6 +33,17 @@ type KnowledgeStatus =
   | { mode: "live"; stats: Record<string, unknown> }
   | { mode: "fallback"; stats: typeof FALLBACK_STATS; reason: string };
 
+function buildSourceFooter(status: KnowledgeStatus): string {
+  const ts = new Date().toISOString();
+  const s = status.stats as Record<string, unknown>;
+  const total = s.totalNodes ?? s.total ?? "?";
+  const ai = s.aiTools ?? s.ai_tools ?? "?";
+  if (status.mode === "live") {
+    return `---\n*📡 Source: live MCP \`/health\` (statsCount) · ${total} nodes · ${ai} AI tools · fetched ${ts}*`;
+  }
+  return `---\n*⚠️ Source: cached snapshot (${FALLBACK_STATS.generatedAt}) · ${total} nodes · ${ai} AI tools · live MCP unavailable: ${status.reason} · fetched ${ts}*`;
+}
+
 async function fetchKnowledgeStatus(): Promise<KnowledgeStatus> {
   const mcpUrl = Deno.env.get("UPSTREAM_N8N_MCP_URL");
   if (!mcpUrl) {
@@ -198,7 +209,8 @@ Deno.serve(async (req) => {
     }
 
     const aiJson = await aiRes.json();
-    const reply: string = aiJson?.choices?.[0]?.message?.content ?? "(empty response)";
+    const rawReply: string = aiJson?.choices?.[0]?.message?.content ?? "(empty response)";
+    const reply = rawReply + "\n\n" + buildSourceFooter(knowledge);
 
     // Persist assistant message
     await userClient
