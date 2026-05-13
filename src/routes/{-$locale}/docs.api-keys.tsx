@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
-import { Link } from "@/i18n/link";
 import { buildAlternateLinks, resolveLocale } from "@/lib/seo-i18n";
+import { useDocsT } from "@/i18n/docs-dict";
 
 const TITLE = "Platform API keys — n8n-mcp docs";
 const DESC = "Create, label, rotate and revoke nmcp_ platform API keys used by your MCP clients.";
@@ -33,46 +33,11 @@ export const Route = createFileRoute("/{-$locale}/docs/api-keys")({
 });
 
 function Page() {
+  const t = useDocsT().apiKeys;
   return (
     <>
-      <h1>Platform API keys</h1>
-      <p className="text-muted-foreground">
-        Platform API keys (prefix <code>nmcp_</code>) authenticate your MCP client to the
-        gateway. They are <em>not</em> your n8n API key &mdash; that one stays server-side.
-      </p>
-
-      <h2>Create a key</h2>
-      <ol className="text-muted-foreground">
-        <li>Open <Link to="/api-keys">API Keys</Link>.</li>
-        <li>Click <strong>New key</strong> and give it a label (e.g. <code>cursor-work</code>).</li>
-        <li>Copy the displayed token immediately. After you close the dialog, only the prefix
-          and a hash remain in our database.</li>
-      </ol>
-
-      <h2>Best practices</h2>
-      <ul className="text-muted-foreground">
-        <li>One key per device or workspace, so you can revoke them individually.</li>
-        <li>Never commit keys to git or share them in chat. Treat them like passwords.</li>
-        <li>Rotate keys quarterly or when a teammate leaves.</li>
-      </ul>
-
-      <h2>Rotate a key</h2>
-      <p className="text-muted-foreground">
-        We do not currently support in-place rotation. Mint a new key, update the client
-        config, then revoke the old key from the same page.
-      </p>
-
-      <h2>Revoke a key</h2>
-      <p className="text-muted-foreground">
-        Click the trash icon next to the key. Revocation is immediate &mdash; the next call from
-        a client using that token will return <code>401</code>.
-      </p>
-
-      <h2>Quotas</h2>
-      <p className="text-muted-foreground">
-        Quota is per-account, not per-key. Splitting keys does not multiply your daily limit.
-        See <Link to="/docs/quotas">Quotas &amp; billing</Link>.
-      </p>
+      <h1>{t.h1}</h1>
+      <div dangerouslySetInnerHTML={{ __html: t.body }} />
     </>
   );
 }
