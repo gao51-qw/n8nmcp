@@ -159,18 +159,17 @@ export function attachNavPerf(router: Router<any, any, any, any>) {
     }, 800);
   });
 
-  // Detect when the router's pending UI is shown — TanStack flips status to
-  // "pending" after defaultPendingMs. We poll the store cheaply instead of
-  // wiring a second subscription system.
-  const unsubStore = router.__store.subscribe(() => {
-    if (current && router.state.status === "pending") {
-      if (!current.pendingShown) {
-        current.pendingShown = true;
-        emit();
-      }
-    }
-  });
-  void unsubStore;
+}
+
+/**
+ * Called by the overlay (which already subscribes to router state) to mark
+ * that the router entered its "pending" UI window for the current nav.
+ */
+export function markPendingShown() {
+  if (current && !current.pendingShown) {
+    current.pendingShown = true;
+    emit();
+  }
 }
 
 export function subscribeNavPerf(fn: Listener): () => void {
