@@ -56,6 +56,10 @@ function ApiKeysPage() {
   const { data, isLoading } = useQuery({
     queryKey: ["api-keys"],
     queryFn: () => listApiKeys(),
+    // Half-static: only mutated by this page (create/revoke), which
+    // invalidates the cache. Long staleTime kills flicker on re-entry.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const [open, setOpen] = useState(false);

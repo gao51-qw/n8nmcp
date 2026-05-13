@@ -461,6 +461,10 @@ function AdminAnnouncements() {
       if (error) throw error;
       return (data ?? []) as Announcement[];
     },
+    // All admin mutations on this page already invalidate this query,
+    // so a long staleTime is safe and removes flicker on re-entry.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const grouped = useMemo(() => {
@@ -510,6 +514,10 @@ function AdminAnnouncements() {
       }
       return { entries: list, actors };
     },
+    // Audit log is append-only; admin mutations invalidate it. 2 minutes
+    // is plenty fresh for an admin-only history view.
+    staleTime: 2 * 60_000,
+    gcTime: 30 * 60_000,
   });
 
   const handleExportAll = async (format: "csv" | "json" | "xlsx") => {

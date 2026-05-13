@@ -19,8 +19,11 @@ function AdminGate() {
   const { data, isLoading, isError } = useQuery({
     queryKey: ["admin-status", user?.id],
     enabled: !!user,
-    // Re-verify periodically in case the role is revoked while the page is open.
-    staleTime: 60_000,
+    // Re-verify periodically in case the role is revoked while the page
+    // is open. 5 minutes is a good balance between security and avoiding
+    // a re-check (and brief loading flicker) on every admin route entry.
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
     refetchOnWindowFocus: true,
     queryFn: () => checkAdmin(),
   });
