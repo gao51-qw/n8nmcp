@@ -27,11 +27,7 @@ import {
 import { setTheme, getStoredTheme, type ThemeChoice, THEME_EVENT } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 import { AvatarUploader } from "@/components/avatar-uploader";
-import {
-  exportMyData,
-  requestAccountDeletion,
-  deleteAccountNow,
-} from "@/lib/account.functions";
+import { exportMyData } from "@/lib/account.functions";
 import {
   changePassword,
   requestEmailChange,
@@ -73,7 +69,7 @@ function Settings() {
             <TabsTrigger value="security">Security</TabsTrigger>
             <TabsTrigger value="connections">Connections</TabsTrigger>
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="danger">Danger zone</TabsTrigger>
+            <TabsTrigger value="danger">Data</TabsTrigger>
           </TabsList>
           <TabsContent value="profile" className="space-y-6 pt-4">
             <ProfileSection />
@@ -92,7 +88,6 @@ function Settings() {
           </TabsContent>
           <TabsContent value="danger" className="space-y-6 pt-4">
             <DataExportSection />
-            <DeleteAccountSection />
           </TabsContent>
         </Tabs>
       )}
@@ -599,9 +594,7 @@ function NotificationsSection() {
 
 function DataExportSection() {
   const exportFn = useServerFn(exportMyData);
-  const requestFn = useServerFn(requestAccountDeletion);
-  const [reason, setReason] = useState("");
-  const [busy, setBusy] = useState<"export" | "request" | null>(null);
+  const [busy, setBusy] = useState<"export" | null>(null);
 
   const handleExport = async () => {
     setBusy("export");
@@ -622,22 +615,9 @@ function DataExportSection() {
     }
   };
 
-  const handleRequest = async () => {
-    setBusy("request");
-    try {
-      await requestFn({ data: { reason: reason || undefined } });
-      toast.success("Deletion request submitted. We will process it within 30 days.");
-      setReason("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Request failed");
-    } finally {
-      setBusy(null);
-    }
-  };
-
   return (
     <Card>
-      <h2 className="text-base font-semibold">Data export &amp; deletion request</h2>
+      <h2 className="text-base font-semibold">Data export</h2>
       <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
         <div className="text-sm font-medium">Export your data</div>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -647,79 +627,6 @@ function DataExportSection() {
           {busy === "export" ? "Preparing…" : "Download data export"}
         </Button>
       </div>
-      <div className="rounded-lg border border-border/60 bg-muted/30 p-4">
-        <div className="text-sm font-medium">Request account deletion (GDPR)</div>
-        <p className="mt-1 text-xs text-muted-foreground">
-          We will process your request within 30 days. For immediate removal use the button below.
-        </p>
-        <Textarea
-          className="mt-3"
-          rows={2}
-          placeholder="Optional: tell us why you're leaving"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-          maxLength={1000}
-        />
-        <Button variant="outline" size="sm" className="mt-3" onClick={handleRequest} disabled={busy !== null}>
-          {busy === "request" ? "Submitting…" : "Submit deletion request"}
-        </Button>
-      </div>
     </Card>
-  );
-}
-
-function DeleteAccountSection() {
-  const navigate = useNavigate();
-  const deleteFn = useServerFn(deleteAccountNow);
-  const [busy, setBusy] = useState(false);
-
-  const handleDelete = async () => {
-    setBusy(true);
-    try {
-      await deleteFn();
-      await supabase.auth.signOut();
-      toast.success("Account deleted");
-      navigate({ to: "/" });
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Delete failed");
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="space-y-4 rounded-xl border border-destructive/40 bg-destructive/5 p-6">
-      <div className="flex items-center gap-2">
-        <Badge variant="destructive">Irreversible</Badge>
-        <h2 className="text-base font-semibold text-destructive">Delete account immediately</h2>
-      </div>
-      <p className="text-sm text-muted-foreground">
-        Permanently delete your account, instances, API keys and chat history. This cannot be undone.
-      </p>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button variant="destructive" size="sm" disabled={busy}>
-            Delete account immediately
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete your account?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently remove all your data, revoke every API key, and disconnect all
-              n8n instances. You will be signed out immediately. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {busy ? "Deleting…" : "Yes, delete everything"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
   );
 }
