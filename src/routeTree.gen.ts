@@ -22,6 +22,7 @@ import { Route as DocsRouteImport } from './routes/docs'
 import { Route as AdminSetupRouteImport } from './routes/admin-setup'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DocsIndexRouteImport } from './routes/docs.index'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as AuthenticatedWhatsNewRouteImport } from './routes/_authenticated/whats-new'
@@ -105,6 +106,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DocsIndexRoute = DocsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DocsRoute,
 } as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
   id: '/blog/',
@@ -209,7 +215,7 @@ const AuthenticatedAdminAdminAnnouncementsPreviewIdRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin-setup': typeof AdminSetupRoute
-  '/docs': typeof DocsRoute
+  '/docs': typeof DocsRouteWithChildren
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
   '/login': typeof LoginRoute
@@ -230,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/blog/': typeof BlogIndexRoute
+  '/docs/': typeof DocsIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
@@ -241,7 +248,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin-setup': typeof AdminSetupRoute
-  '/docs': typeof DocsRoute
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
   '/login': typeof LoginRoute
@@ -262,6 +268,7 @@ export interface FileRoutesByTo {
   '/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/blog': typeof BlogIndexRoute
+  '/docs': typeof DocsIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
@@ -275,7 +282,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/admin-setup': typeof AdminSetupRoute
-  '/docs': typeof DocsRoute
+  '/docs': typeof DocsRouteWithChildren
   '/faq': typeof FaqRoute
   '/imprint': typeof ImprintRoute
   '/login': typeof LoginRoute
@@ -297,6 +304,7 @@ export interface FileRoutesById {
   '/_authenticated/whats-new': typeof AuthenticatedWhatsNewRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/blog/': typeof BlogIndexRoute
+  '/docs/': typeof DocsIndexRoute
   '/api/public/mcp': typeof ApiPublicMcpRoute
   '/api/public/paddle-webhook': typeof ApiPublicPaddleWebhookRoute
   '/_authenticated/_admin/admin/announcements': typeof AuthenticatedAdminAdminAnnouncementsRouteWithChildren
@@ -331,6 +339,7 @@ export interface FileRouteTypes {
     | '/whats-new'
     | '/blog/$slug'
     | '/blog/'
+    | '/docs/'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
@@ -342,7 +351,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin-setup'
-    | '/docs'
     | '/faq'
     | '/imprint'
     | '/login'
@@ -363,6 +371,7 @@ export interface FileRouteTypes {
     | '/whats-new'
     | '/blog/$slug'
     | '/blog'
+    | '/docs'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/admin/announcements'
@@ -397,6 +406,7 @@ export interface FileRouteTypes {
     | '/_authenticated/whats-new'
     | '/blog/$slug'
     | '/blog/'
+    | '/docs/'
     | '/api/public/mcp'
     | '/api/public/paddle-webhook'
     | '/_authenticated/_admin/admin/announcements'
@@ -410,7 +420,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRoute: typeof AuthenticatedRouteWithChildren
   AdminSetupRoute: typeof AdminSetupRoute
-  DocsRoute: typeof DocsRoute
+  DocsRoute: typeof DocsRouteWithChildren
   FaqRoute: typeof FaqRoute
   ImprintRoute: typeof ImprintRoute
   LoginRoute: typeof LoginRoute
@@ -518,6 +528,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/docs/': {
+      id: '/docs/'
+      path: '/'
+      fullPath: '/docs/'
+      preLoaderRoute: typeof DocsIndexRouteImport
+      parentRoute: typeof DocsRoute
     }
     '/blog/': {
       id: '/blog/'
@@ -720,11 +737,21 @@ const AuthenticatedRouteWithChildren = AuthenticatedRoute._addFileChildren(
   AuthenticatedRouteChildren,
 )
 
+interface DocsRouteChildren {
+  DocsIndexRoute: typeof DocsIndexRoute
+}
+
+const DocsRouteChildren: DocsRouteChildren = {
+  DocsIndexRoute: DocsIndexRoute,
+}
+
+const DocsRouteWithChildren = DocsRoute._addFileChildren(DocsRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRoute: AuthenticatedRouteWithChildren,
   AdminSetupRoute: AdminSetupRoute,
-  DocsRoute: DocsRoute,
+  DocsRoute: DocsRouteWithChildren,
   FaqRoute: FaqRoute,
   ImprintRoute: ImprintRoute,
   LoginRoute: LoginRoute,
