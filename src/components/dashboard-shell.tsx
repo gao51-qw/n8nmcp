@@ -34,7 +34,7 @@ const NAV = [
   { to: "/usage", label: "Usage", icon: BarChart3 },
   { to: "/billing", label: "Billing", icon: CreditCard },
   { to: "/whats-new", label: "What's New", icon: Megaphone },
-  { to: "/tickets", label: "工单", icon: LifeBuoy },
+  { to: "/tickets", label: "Tickets", icon: LifeBuoy },
   { to: "/settings", label: "Settings", icon: Settings },
 ] as const;
 
@@ -158,7 +158,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
                 }`}
               >
-                <Inbox className="h-4 w-4" /> 工单管理
+                <Inbox className="h-4 w-4" /> Tickets
               </Link>
             </>
           )}
