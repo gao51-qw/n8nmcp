@@ -55,17 +55,17 @@ import { AttachmentList } from "@/components/tickets/attachment-list";
 import { useAuth } from "@/hooks/use-auth";
 
 export const Route = createFileRoute("/_authenticated/tickets")({
-  head: () => ({ meta: [{ title: "工单 — n8n-mcp" }] }),
+  head: () => ({ meta: [{ title: "Tickets — n8n-mcp" }] }),
   validateSearch: (s) => z.object({ id: z.string().uuid().optional() }).parse(s),
   component: TicketsPage,
 });
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
-  open: "待处理",
-  in_progress: "处理中",
-  waiting_user: "等待回复",
-  resolved: "已解决",
-  closed: "已关闭",
+  open: "Open",
+  in_progress: "In progress",
+  waiting_user: "Waiting on you",
+  resolved: "Resolved",
+  closed: "Closed",
 };
 
 const STATUS_VARIANT: Record<TicketStatus, "default" | "secondary" | "outline"> = {
@@ -78,17 +78,17 @@ const STATUS_VARIANT: Record<TicketStatus, "default" | "secondary" | "outline"> 
 
 const CATEGORY_LABEL: Record<TicketCategory, string> = {
   bug: "Bug",
-  feature_request: "功能建议",
-  billing: "账单",
-  account: "账户",
-  other: "其他",
+  feature_request: "Feature request",
+  billing: "Billing",
+  account: "Account",
+  other: "Other",
 };
 
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  low: "低",
-  normal: "普通",
-  high: "高",
-  urgent: "紧急",
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
 };
 
 function TicketsPage() {
@@ -109,13 +109,13 @@ function TicketsPage() {
     <>
       <div className="mb-8 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">工单</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Tickets</h1>
           <p className="mt-2 text-muted-foreground">
-            提交问题或反馈，我们会在工作日内回复。
+            Submit a question or feedback. We typically reply within one business day.
           </p>
         </div>
         <Button onClick={() => setCreateOpen(true)}>
-          <MessageSquarePlus className="mr-1.5 h-4 w-4" /> 新建工单
+          <MessageSquarePlus className="mr-1.5 h-4 w-4" /> New ticket
         </Button>
       </div>
 
@@ -137,9 +137,9 @@ function TicketsPage() {
         <Card>
           <CardContent className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <LifeBuoy className="h-10 w-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">暂无工单</p>
+            <p className="text-sm text-muted-foreground">No tickets yet</p>
             <Button onClick={() => setCreateOpen(true)} variant="outline" size="sm">
-              新建第一个工单
+              Create your first ticket
             </Button>
           </CardContent>
         </Card>
@@ -206,7 +206,7 @@ function CreateTicketDialog({
     mutationFn: () =>
       submit({ data: { title, description, category, priority, attachments } }),
     onSuccess: ({ id }) => {
-      toast.success("工单已提交");
+      toast.success("Ticket submitted");
       setTitle("");
       setDescription("");
       setAttachments([]);
@@ -214,15 +214,15 @@ function CreateTicketDialog({
       setPriority("normal");
       onCreated(id);
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "提交失败"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to submit"),
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>新建工单</DialogTitle>
-          <DialogDescription>请尽量提供清晰的复现步骤或上下文</DialogDescription>
+          <DialogTitle>New ticket</DialogTitle>
+          <DialogDescription>Please include clear reproduction steps or context.</DialogDescription>
         </DialogHeader>
         <form
           onSubmit={(e) => {
@@ -232,7 +232,7 @@ function CreateTicketDialog({
           className="space-y-4"
         >
           <div className="space-y-2">
-            <Label htmlFor="t-title">标题</Label>
+            <Label htmlFor="t-title">Title</Label>
             <Input
               id="t-title"
               value={title}
@@ -243,7 +243,7 @@ function CreateTicketDialog({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>分类</Label>
+              <Label>Category</Label>
               <Select value={category} onValueChange={(v) => setCategory(v as TicketCategory)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -254,7 +254,7 @@ function CreateTicketDialog({
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>优先级</Label>
+              <Label>Priority</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as TicketPriority)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -266,7 +266,7 @@ function CreateTicketDialog({
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="t-desc">描述</Label>
+            <Label htmlFor="t-desc">Description</Label>
             <Textarea
               id="t-desc"
               value={description}
@@ -277,16 +277,16 @@ function CreateTicketDialog({
             />
           </div>
           <div className="space-y-2">
-            <Label>附件（可选）</Label>
+            <Label>Attachments (optional)</Label>
             <AttachmentUpload folder="drafts" value={attachments} onChange={setAttachments} />
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
-              取消
+              Cancel
             </Button>
             <Button type="submit" disabled={m.isPending}>
               {m.isPending && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
-              提交
+              Submit
             </Button>
           </DialogFooter>
         </form>
@@ -324,7 +324,7 @@ function TicketDetailSheet({
       qc.invalidateQueries({ queryKey: ["tickets", "detail", ticketId] });
       qc.invalidateQueries({ queryKey: ["tickets", "mine"] });
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "发送失败"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to send"),
   });
 
   return (
@@ -345,19 +345,19 @@ function TicketDetailSheet({
                   {CATEGORY_LABEL[data.ticket.category]}
                 </Badge>
                 <Badge variant="outline" className="text-[10px]">
-                  优先级：{PRIORITY_LABEL[data.ticket.priority]}
+                  Priority: {PRIORITY_LABEL[data.ticket.priority]}
                 </Badge>
               </div>
               <SheetTitle className="text-left">{data.ticket.title}</SheetTitle>
               <SheetDescription className="text-left text-xs">
-                创建于 {new Date(data.ticket.created_at).toLocaleString()}
+                Created {new Date(data.ticket.created_at).toLocaleString()}
               </SheetDescription>
             </SheetHeader>
 
             <div className="mt-6 space-y-4">
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {data.owner?.name ?? "你"}
+                  {data.owner?.name ?? "You"}
                 </div>
                 <div className="mt-1 whitespace-pre-wrap text-sm">
                   {data.ticket.description}
@@ -383,7 +383,7 @@ function TicketDetailSheet({
                   >
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span className="font-medium">
-                        {r.is_admin ? "支持团队" : r.author_name ?? "用户"}
+                        {r.is_admin ? "Support Team" : r.author_name ?? "User"}
                       </span>
                       <span>{new Date(r.created_at).toLocaleString()}</span>
                     </div>
@@ -395,7 +395,7 @@ function TicketDetailSheet({
 
               {data.ticket.status === "closed" ? (
                 <p className="text-center text-xs text-muted-foreground">
-                  此工单已关闭，如需继续请新建工单。
+                  This ticket is closed. Please open a new one to continue.
                 </p>
               ) : (
                 <form
@@ -407,7 +407,7 @@ function TicketDetailSheet({
                   className="space-y-2 pt-2"
                 >
                   <Textarea
-                    placeholder="补充信息或回复..."
+                    placeholder="Add details or reply..."
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     rows={4}
@@ -423,9 +423,9 @@ function TicketDetailSheet({
                       {reply.isPending ? (
                         <Loader2 className="mr-1 h-4 w-4 animate-spin" />
                       ) : (
-                        <Send className="mr-1 h-4 w-4" />
+                      <Send className="mr-1 h-4 w-4" />
                       )}
-                      发送
+                      Send
                     </Button>
                   </div>
                 </form>
