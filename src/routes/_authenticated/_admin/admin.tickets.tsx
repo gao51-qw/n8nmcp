@@ -58,24 +58,24 @@ import { AttachmentUpload } from "@/components/tickets/attachment-upload";
 import { AttachmentList } from "@/components/tickets/attachment-list";
 
 export const Route = createFileRoute("/_authenticated/_admin/admin/tickets")({
-  head: () => ({ meta: [{ title: "Admin · 工单 — n8n-mcp" }] }),
+  head: () => ({ meta: [{ title: "Admin · Tickets — n8n-mcp" }] }),
   validateSearch: (s) => z.object({ id: z.string().uuid().optional() }).parse(s),
   component: AdminTicketsPage,
 });
 
 const STATUS_LABEL: Record<TicketStatus, string> = {
-  open: "待处理",
-  in_progress: "处理中",
-  waiting_user: "等待回复",
-  resolved: "已解决",
-  closed: "已关闭",
+  open: "Open",
+  in_progress: "In progress",
+  waiting_user: "Waiting on user",
+  resolved: "Resolved",
+  closed: "Closed",
 };
 
 const PRIORITY_LABEL: Record<TicketPriority, string> = {
-  low: "低",
-  normal: "普通",
-  high: "高",
-  urgent: "紧急",
+  low: "Low",
+  normal: "Normal",
+  high: "High",
+  urgent: "Urgent",
 };
 
 function AdminTicketsPage() {
@@ -93,8 +93,8 @@ function AdminTicketsPage() {
   return (
     <>
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">工单管理</h1>
-        <p className="mt-2 text-muted-foreground">查看和回复用户提交的工单。</p>
+        <h1 className="text-3xl font-bold tracking-tight">Ticket management</h1>
+        <p className="mt-2 text-muted-foreground">View and reply to tickets submitted by users.</p>
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
@@ -103,14 +103,14 @@ function AdminTicketsPage() {
           <Input
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="搜索标题..."
+            placeholder="Search by title..."
             className="w-64 pl-8"
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
           <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部状态</SelectItem>
+            <SelectItem value="all">All statuses</SelectItem>
             {(Object.keys(STATUS_LABEL) as TicketStatus[]).map((k) => (
               <SelectItem key={k} value={k}>{STATUS_LABEL[k]}</SelectItem>
             ))}
@@ -127,19 +127,19 @@ function AdminTicketsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>标题</TableHead>
-                <TableHead>用户</TableHead>
-                <TableHead>状态</TableHead>
-                <TableHead>优先级</TableHead>
-                <TableHead className="text-center">回复</TableHead>
-                <TableHead>更新时间</TableHead>
+                <TableHead>Title</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead className="text-center">Replies</TableHead>
+                <TableHead>Updated</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {(tickets ?? []).length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
-                    暂无工单
+                    No tickets
                   </TableCell>
                 </TableRow>
               ) : (
@@ -211,9 +211,9 @@ function AdminTicketSheet({
       setAttachments([]);
       qc.invalidateQueries({ queryKey: ["admin", "ticket-detail", ticketId] });
       qc.invalidateQueries({ queryKey: ["admin", "tickets"] });
-      toast.success("已发送");
+      toast.success("Sent");
     },
-    onError: (e) => toast.error(e instanceof Error ? e.message : "发送失败"),
+    onError: (e) => toast.error(e instanceof Error ? e.message : "Failed to send"),
   });
 
   const update = useMutation({
@@ -228,7 +228,7 @@ function AdminTicketSheet({
   const del = useMutation({
     mutationFn: () => deleteTicket({ data: { id: ticketId! } }),
     onSuccess: () => {
-      toast.success("已删除");
+      toast.success("Deleted");
       qc.invalidateQueries({ queryKey: ["admin", "tickets"] });
       onClose();
     },
@@ -246,14 +246,14 @@ function AdminTicketSheet({
             <SheetHeader>
               <SheetTitle className="text-left">{data.ticket.title}</SheetTitle>
               <SheetDescription className="text-left text-xs">
-                来自 {data.owner?.name ?? data.ticket.user_id} · 创建于{" "}
+                From {data.owner?.name ?? data.ticket.user_id} · Created{" "}
                 {new Date(data.ticket.created_at).toLocaleString()}
               </SheetDescription>
             </SheetHeader>
 
             <div className="mt-4 grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">状态</label>
+                <label className="text-xs font-medium text-muted-foreground">Status</label>
                 <Select
                   value={data.ticket.status}
                   onValueChange={(v) => update.mutate({ status: v as TicketStatus })}
@@ -267,7 +267,7 @@ function AdminTicketSheet({
                 </Select>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">优先级</label>
+                <label className="text-xs font-medium text-muted-foreground">Priority</label>
                 <Select
                   value={data.ticket.priority}
                   onValueChange={(v) => update.mutate({ priority: v as TicketPriority })}
@@ -285,7 +285,7 @@ function AdminTicketSheet({
             <div className="mt-6 space-y-4">
               <div className="rounded-lg border border-border bg-muted/30 p-3">
                 <div className="text-xs font-medium text-muted-foreground">
-                  {data.owner?.name ?? "用户"}
+                  {data.owner?.name ?? "User"}
                 </div>
                 <div className="mt-1 whitespace-pre-wrap text-sm">
                   {data.ticket.description}
@@ -302,7 +302,7 @@ function AdminTicketSheet({
                 >
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <span className="font-medium">
-                      {r.is_admin ? "支持团队" : r.author_name ?? "用户"}
+                      {r.is_admin ? "Support Team" : r.author_name ?? "User"}
                     </span>
                     <span>{new Date(r.created_at).toLocaleString()}</span>
                   </div>
@@ -320,7 +320,7 @@ function AdminTicketSheet({
                 className="space-y-2 pt-2"
               >
                 <Textarea
-                  placeholder="作为支持团队回复..."
+                  placeholder="Reply as support team..."
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={4}
@@ -335,19 +335,19 @@ function AdminTicketSheet({
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button type="button" variant="ghost" size="sm" className="text-destructive">
-                        <Trash2 className="mr-1 h-3.5 w-3.5" /> 删除工单
+                        <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete ticket
                       </Button>
                     </AlertDialogTrigger>
                     <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>确认删除？</AlertDialogTitle>
+                    <AlertDialogHeader>
+                        <AlertDialogTitle>Delete ticket?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          此操作将永久删除工单及所有回复，无法恢复。
+                          This permanently deletes the ticket and all replies. This cannot be undone.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>取消</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => del.mutate()}>删除</AlertDialogAction>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => del.mutate()}>Delete</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -357,7 +357,7 @@ function AdminTicketSheet({
                     ) : (
                       <Send className="mr-1 h-4 w-4" />
                     )}
-                    发送回复
+                    Send reply
                   </Button>
                 </div>
               </form>
