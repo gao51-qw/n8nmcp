@@ -214,6 +214,42 @@ export type Database = {
           },
         ]
       }
+      manual_revenue_entries: {
+        Row: {
+          amount_cents: number
+          created_at: string
+          created_by: string | null
+          currency: string
+          description: string
+          id: string
+          occurred_at: string
+          source: string
+          updated_at: string
+        }
+        Insert: {
+          amount_cents: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string
+          id?: string
+          occurred_at?: string
+          source?: string
+          updated_at?: string
+        }
+        Update: {
+          amount_cents?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          description?: string
+          id?: string
+          occurred_at?: string
+          source?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mcp_call_logs: {
         Row: {
           category: string | null
