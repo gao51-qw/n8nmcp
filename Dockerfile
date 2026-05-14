@@ -1,5 +1,6 @@
 # Main app (TanStack Start) — Node runtime, for VPS deployment.
 # Build with:  docker build -t ghcr.io/OWNER/n8nworkflow-app:latest .
+# Output dir: dist/ (vite.config.vps.ts default, NOT .output)
 FROM node:22-alpine AS build
 WORKDIR /app
 
