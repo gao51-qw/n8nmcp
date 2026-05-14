@@ -10,6 +10,7 @@ import mdx from "@mdx-js/rollup";
 import remarkFrontmatter from "remark-frontmatter";
 import remarkMdxFrontmatter from "remark-mdx-frontmatter";
 import remarkGfm from "remark-gfm";
+import path from "node:path";
 
 export default defineConfig({
   plugins: [
@@ -33,6 +34,9 @@ export default defineConfig({
     viteReact(),
   ],
   resolve: {
+    alias: {
+      "@": path.resolve(import.meta.dirname, "./src"),
+    },
     dedupe: ["react", "react-dom", "@tanstack/react-router", "@tanstack/react-start"],
   },
 });
