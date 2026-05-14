@@ -1,0 +1,52 @@
+# 本地构建版 — 不需要 GHCR,VPS 直接 git pull + docker compose build
+# 用法(在仓库根目录,不是 deploy/):
+#   cd /opt/n8nworkflow
+#   git pull
+#   docker compose -f deploy/docker-compose.local.yml --env-file deploy/.env up -d --build
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        APP_GIT_SHA: ${APP_GIT_SHA:-local}
+        APP_GIT_BRANCH: ${APP_GIT_BRANCH:-main}
+        APP_BUILT_AT: ${APP_BUILT_AT:-unknown}
+        APP_GITHUB_REPO: ${APP_GITHUB_REPO:-gao51-qw/n8nmcp}
+        APP_IMAGE_TAG: ${APP_IMAGE_TAG:-local}
+    image: n8nworkflow-app:local
+    container_name: n8nworkflow-app
+    restart: unless-stopped
+    env_file:
+      - .env.app
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      HOST: "0.0.0.0"
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  mcp:
+    build:
+      context: ../tools/n8n-knowledge-mcp
+      dockerfile: Dockerfile
+    image: n8n-knowledge-mcp:local
+    container_name: n8n-knowledge-mcp
+    restart: unless-stopped
+    environment:
+      AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+      PORT: "3000"
+      TRUST_PROXY: "1"
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
