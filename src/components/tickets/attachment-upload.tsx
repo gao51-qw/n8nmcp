@@ -23,7 +23,7 @@ export function AttachmentUpload({ folder, value, onChange }: Props) {
   const handleFiles = async (files: FileList | null) => {
     if (!files || !user) return;
     if (value.length + files.length > MAX_FILES) {
-      toast.error(`最多上传 ${MAX_FILES} 个附件`);
+      toast.error(`You can attach at most ${MAX_FILES} files`);
       return;
     }
     setBusy(true);
@@ -31,7 +31,7 @@ export function AttachmentUpload({ folder, value, onChange }: Props) {
     try {
       for (const file of Array.from(files)) {
         if (file.size > MAX_SIZE) {
-          toast.error(`${file.name} 超过 10MB`);
+          toast.error(`${file.name} exceeds 10 MB`);
           continue;
         }
         const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
@@ -40,7 +40,7 @@ export function AttachmentUpload({ folder, value, onChange }: Props) {
           .from("ticket-attachments")
           .upload(path, file, { contentType: file.type || undefined, upsert: false });
         if (error) {
-          toast.error(`上传失败: ${file.name}`);
+          toast.error(`Upload failed: ${file.name}`);
           continue;
         }
         next.push({ path, name: file.name, size: file.size, type: file.type });
@@ -79,7 +79,7 @@ export function AttachmentUpload({ folder, value, onChange }: Props) {
             ) : (
               <Paperclip className="mr-1 h-3.5 w-3.5" />
             )}
-            添加附件
+            Add attachment
           </span>
         </Button>
       </label>
@@ -106,7 +106,7 @@ export function AttachmentUpload({ folder, value, onChange }: Props) {
         </ul>
       )}
       <p className="text-[11px] text-muted-foreground">
-        最多 {MAX_FILES} 个，单个文件 ≤ 10MB
+        Up to {MAX_FILES} files, each ≤ 10 MB
       </p>
     </div>
   );
