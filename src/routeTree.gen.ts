@@ -50,6 +50,7 @@ import { Route as ApiPublicPaddleWebhookRouteImport } from './routes/api/public/
 import { Route as ApiPublicMcpRouteImport } from './routes/api/public/mcp'
 import { Route as AuthenticatedAdminAdminUsersRouteImport } from './routes/_authenticated/_admin/admin.users'
 import { Route as AuthenticatedAdminAdminTicketsRouteImport } from './routes/_authenticated/_admin/admin.tickets'
+import { Route as AuthenticatedAdminAdminRevenueRouteImport } from './routes/_authenticated/_admin/admin.revenue'
 import { Route as AuthenticatedAdminAdminIntegrationsRouteImport } from './routes/_authenticated/_admin/admin.integrations'
 import { Route as AuthenticatedAdminAdminDeploymentRouteImport } from './routes/_authenticated/_admin/admin.deployment'
 import { Route as AuthenticatedAdminAdminDeletionRequestsRouteImport } from './routes/_authenticated/_admin/admin.deletion-requests'
@@ -278,6 +279,12 @@ const AuthenticatedAdminAdminTicketsRoute =
     path: '/admin/tickets',
     getParentRoute: () => AuthenticatedAdminRoute,
   } as any)
+const AuthenticatedAdminAdminRevenueRoute =
+  AuthenticatedAdminAdminRevenueRouteImport.update({
+    id: '/admin/revenue',
+    path: '/admin/revenue',
+    getParentRoute: () => AuthenticatedAdminRoute,
+  } as any)
 const AuthenticatedAdminAdminIntegrationsRoute =
   AuthenticatedAdminAdminIntegrationsRouteImport.update({
     id: '/admin/integrations',
@@ -352,6 +359,7 @@ export interface FileRoutesByFullPath {
   '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
   '/admin/integrations': typeof AuthenticatedAdminAdminIntegrationsRoute
+  '/admin/revenue': typeof AuthenticatedAdminAdminRevenueRoute
   '/admin/tickets': typeof AuthenticatedAdminAdminTicketsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
@@ -398,6 +406,7 @@ export interface FileRoutesByTo {
   '/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
   '/admin/integrations': typeof AuthenticatedAdminAdminIntegrationsRoute
+  '/admin/revenue': typeof AuthenticatedAdminAdminRevenueRoute
   '/admin/tickets': typeof AuthenticatedAdminAdminTicketsRoute
   '/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
@@ -447,6 +456,7 @@ export interface FileRoutesById {
   '/_authenticated/_admin/admin/deletion-requests': typeof AuthenticatedAdminAdminDeletionRequestsRoute
   '/_authenticated/_admin/admin/deployment': typeof AuthenticatedAdminAdminDeploymentRoute
   '/_authenticated/_admin/admin/integrations': typeof AuthenticatedAdminAdminIntegrationsRoute
+  '/_authenticated/_admin/admin/revenue': typeof AuthenticatedAdminAdminRevenueRoute
   '/_authenticated/_admin/admin/tickets': typeof AuthenticatedAdminAdminTicketsRoute
   '/_authenticated/_admin/admin/users': typeof AuthenticatedAdminAdminUsersRoute
   '/_authenticated/_admin/admin/announcements/preview/$id': typeof AuthenticatedAdminAdminAnnouncementsPreviewIdRoute
@@ -496,6 +506,7 @@ export interface FileRouteTypes {
     | '/admin/deletion-requests'
     | '/admin/deployment'
     | '/admin/integrations'
+    | '/admin/revenue'
     | '/admin/tickets'
     | '/admin/users'
     | '/admin/announcements/preview/$id'
@@ -542,6 +553,7 @@ export interface FileRouteTypes {
     | '/admin/deletion-requests'
     | '/admin/deployment'
     | '/admin/integrations'
+    | '/admin/revenue'
     | '/admin/tickets'
     | '/admin/users'
     | '/admin/announcements/preview/$id'
@@ -590,6 +602,7 @@ export interface FileRouteTypes {
     | '/_authenticated/_admin/admin/deletion-requests'
     | '/_authenticated/_admin/admin/deployment'
     | '/_authenticated/_admin/admin/integrations'
+    | '/_authenticated/_admin/admin/revenue'
     | '/_authenticated/_admin/admin/tickets'
     | '/_authenticated/_admin/admin/users'
     | '/_authenticated/_admin/admin/announcements/preview/$id'
@@ -906,6 +919,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminAdminTicketsRouteImport
       parentRoute: typeof AuthenticatedAdminRoute
     }
+    '/_authenticated/_admin/admin/revenue': {
+      id: '/_authenticated/_admin/admin/revenue'
+      path: '/admin/revenue'
+      fullPath: '/admin/revenue'
+      preLoaderRoute: typeof AuthenticatedAdminAdminRevenueRouteImport
+      parentRoute: typeof AuthenticatedAdminRoute
+    }
     '/_authenticated/_admin/admin/integrations': {
       id: '/_authenticated/_admin/admin/integrations'
       path: '/admin/integrations'
@@ -964,6 +984,7 @@ interface AuthenticatedAdminRouteChildren {
   AuthenticatedAdminAdminDeletionRequestsRoute: typeof AuthenticatedAdminAdminDeletionRequestsRoute
   AuthenticatedAdminAdminDeploymentRoute: typeof AuthenticatedAdminAdminDeploymentRoute
   AuthenticatedAdminAdminIntegrationsRoute: typeof AuthenticatedAdminAdminIntegrationsRoute
+  AuthenticatedAdminAdminRevenueRoute: typeof AuthenticatedAdminAdminRevenueRoute
   AuthenticatedAdminAdminTicketsRoute: typeof AuthenticatedAdminAdminTicketsRoute
   AuthenticatedAdminAdminUsersRoute: typeof AuthenticatedAdminAdminUsersRoute
 }
@@ -977,6 +998,7 @@ const AuthenticatedAdminRouteChildren: AuthenticatedAdminRouteChildren = {
     AuthenticatedAdminAdminDeploymentRoute,
   AuthenticatedAdminAdminIntegrationsRoute:
     AuthenticatedAdminAdminIntegrationsRoute,
+  AuthenticatedAdminAdminRevenueRoute: AuthenticatedAdminAdminRevenueRoute,
   AuthenticatedAdminAdminTicketsRoute: AuthenticatedAdminAdminTicketsRoute,
   AuthenticatedAdminAdminUsersRoute: AuthenticatedAdminAdminUsersRoute,
 }

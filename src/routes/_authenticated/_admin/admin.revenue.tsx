@@ -103,8 +103,13 @@ function AdminRevenuePage() {
   });
 
   const createMut = useMutation({
-    mutationFn: (input: Parameters<typeof createFn>[0]["data"]) =>
-      createFn({ data: input }),
+    mutationFn: (input: {
+      amount_cents: number;
+      currency: string;
+      source: string;
+      description: string;
+      occurred_at: string;
+    }) => createFn({ data: input }),
     onSuccess: () => {
       toast.success("Revenue entry added");
       setDialogOpen(false);
