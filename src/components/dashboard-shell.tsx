@@ -161,6 +161,16 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               >
                 <Inbox className="h-4 w-4" /> Tickets
               </Link>
+              <Link
+                to="/admin/revenue"
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                  location.pathname === "/admin/revenue"
+                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                }`}
+              >
+                <DollarSign className="h-4 w-4" /> Revenue
+              </Link>
             </>
           )}
         </nav>
