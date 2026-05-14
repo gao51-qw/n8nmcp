@@ -25,6 +25,10 @@ const PAGES: Array<{ path: string; changefreq: string; priority: string }> = [
 const NON_I18N_PAGES: Array<{ path: string; changefreq: string; priority: string }> = [
   { path: "/login", changefreq: "yearly", priority: "0.3" },
   { path: "/signup", changefreq: "yearly", priority: "0.5" },
+  // LLM-friendly text indexes (per llmstxt.org). Surfacing them here helps
+  // crawlers and AI agents discover the plain-text catalog.
+  { path: "/llms.txt", changefreq: "weekly", priority: "0.4" },
+  { path: "/llms-full.txt", changefreq: "weekly", priority: "0.4" },
 ];
 
 export const Route = createFileRoute("/sitemap.xml")({
