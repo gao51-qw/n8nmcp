@@ -32,9 +32,9 @@ ENV NODE_ENV=production \
     PORT=3001 \
     HOST=0.0.0.0
 
-COPY --from=build /app/.output ./.output
+COPY --from=build /app/dist ./dist
 COPY --from=build /app/package.json ./package.json
 
 EXPOSE 3001
-# TanStack Start node-server entry
-CMD ["node", ".output/server/index.mjs"]
+# TanStack Start node-server entry (vite.config.vps.ts outputs to dist/)
+CMD ["node", "dist/server/server.js"]
