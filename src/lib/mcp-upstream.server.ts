@@ -18,7 +18,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { log } from "./logger.server";
-import { assertPublicUrl } from "./ssrf-guard.server";
+import { safeFetchPublicUrl } from "./ssrf-guard.server";
 
 export type UpstreamTool = {
   name: string;
@@ -35,6 +35,11 @@ export type CallerCtx = {
   user_id?: string;
   key_id?: string;
   source?: string; // free-form, e.g. "tools/call" or "tools/list"
+  // Request correlation, threaded through for workflow audit logging.
+  ip?: string;
+  ua?: string;
+  request_id?: string;
+  session_id?: string;
 };
 
 const TOOL_LIST_TTL_MS = 5 * 60 * 1000;
@@ -86,10 +91,9 @@ async function rpc(
   }
 
   // SSRF guard — refuse private/loopback unless explicitly allow-listed.
-  await assertPublicUrl(url);
+  // safeFetchPublicUrl validates the URL and disables automatic redirects below.
 
-  const requestId =
-    typeof randomUUID === "function" ? randomUUID() : `r_${rpcId()}${rpcId()}`;
+  const requestId = typeof randomUUID === "function" ? randomUUID() : `r_${rpcId()}${rpcId()}`;
   const caller_hash = callerHash(caller);
   const upstream_host = hostOf(url);
   const tool = method === "tools/call" ? String(params?.name ?? "") : undefined;
@@ -99,7 +103,7 @@ async function rpc(
 
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await safeFetchPublicUrl(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -177,7 +181,10 @@ async function rpc(
     }
   }
 
-  const obj = payload as { result?: unknown; error?: { code: number; message: string; data?: unknown } };
+  const obj = payload as {
+    result?: unknown;
+    error?: { code: number; message: string; data?: unknown };
+  };
   if (obj.error) {
     log.warn("mcp.upstream.rpc_error", {
       method,
@@ -203,7 +210,10 @@ async function rpc(
   return obj.result;
 }
 
-export async function listUpstreamTools(force = false, caller?: CallerCtx): Promise<UpstreamTool[]> {
+export async function listUpstreamTools(
+  force = false,
+  caller?: CallerCtx,
+): Promise<UpstreamTool[]> {
   if (!isUpstreamConfigured()) return [];
   const now = Date.now();
   if (!force && toolListCache && now - toolListCache.at < TOOL_LIST_TTL_MS) {
@@ -231,8 +241,8 @@ export async function listUpstreamTools(force = false, caller?: CallerCtx): Prom
  * Tools whose name starts with `n8n_` are management tools that need real n8n
  * credentials. czlonkowski/n8n-mcp normally reads them from env (N8N_API_URL /
  * N8N_API_KEY). Since we proxy across users, we forward the per-user creds in
- * request headers — the upstream's HTTP transport reads `X-N8n-Api-Url` /
- * `X-N8n-Api-Key` overrides when set, and falls back to its own env otherwise.
+ * request headers. In upstream multi-tenant mode, czlonkowski/n8n-mcp reads
+ * `x-n8n-url` / `x-n8n-key` overrides for the current request.
  */
 export function isManagementTool(name: string): boolean {
   return name.startsWith("n8n_");
@@ -246,8 +256,8 @@ export async function callUpstreamTool(
 ): Promise<unknown> {
   const headers: Record<string, string> = {};
   if (creds && isManagementTool(name)) {
-    headers["X-N8n-Api-Url"] = creds.base_url;
-    headers["X-N8n-Api-Key"] = creds.api_key;
+    headers["x-n8n-url"] = creds.base_url;
+    headers["x-n8n-key"] = creds.api_key;
   }
   const result = await rpc("tools/call", { name, arguments: args }, headers, {
     ...caller,
