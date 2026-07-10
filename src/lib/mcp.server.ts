@@ -37,6 +37,10 @@ import {
   type WorkflowLike,
   type WorkflowPolicyContext,
 } from "./workflow-agent";
+import {
+  ConfirmationRequiredError,
+  createConfirmationService,
+} from "./workflow-agent/confirmation.server";
 
 export type AuthedKey = {
   user_id: string;
@@ -79,8 +83,9 @@ export class ElicitationRequiredError extends Error {
 const buckets = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 10_000;
 const WINDOW_MAX = 60;
-const CONFIRMATION_TOKEN_TTL_MS = 5 * 60_000;
-const confirmationChallenges = new Map<string, { token: string; expiresAt: number }>();
+const TEST_CONFIRMATION_TOKEN_TTL_MS = 5 * 60_000;
+const testOnlyConfirmationChallenges = new Map<string, { token: string; expiresAt: number }>();
+const confirmationService = createConfirmationService();
 const nodeKnowledgeService = new NodeKnowledgeService();
 const templateService = new TemplateService();
 const workflowValidationService = new WorkflowValidationService();
@@ -974,11 +979,44 @@ async function requireConfirmation(
   }
 
   if (opts.requireToken) {
+    const authenticatedUserId = (context as ToolContext & { user_id?: string } | undefined)?.user_id;
+    const scope = opts.scope ?? { id: args.id ?? args.workflowId ?? "" };
+
+    if (authenticatedUserId) {
+      try {
+        await confirmationService.requireOrConsume({
+          userId: authenticatedUserId,
+          action: operation,
+          scope,
+          confirmationToken:
+            args.confirm === true && typeof args.confirmationToken === "string"
+              ? args.confirmationToken
+              : undefined,
+        });
+        return;
+      } catch (error) {
+        if (!(error instanceof ConfirmationRequiredError)) throw error;
+        if (args.confirm === true) {
+          throw new Error(
+            `${operation} requires a valid confirmation token. Re-send with ` +
+              `{"confirm": true, "confirmationToken": "${error.token}"} to proceed.`,
+          );
+        }
+        throw new Error(
+          `${operation} requires confirmation. Re-send with ` +
+            `{"confirm": true, "confirmationToken": "${error.token}"} to proceed.`,
+        );
+      }
+    }
+
+    // Direct runTool unit tests do not have an authenticated caller. Keep their
+    // compatibility challenge process-local; all production dispatches use the
+    // durable, owner-scoped service above.
     const challengeKey = `${operation}:${stableStringify(
-      opts.scope ?? { id: args.id ?? args.workflowId ?? "" },
+      scope,
     )}`;
     const now = Date.now();
-    const existing = confirmationChallenges.get(challengeKey);
+    const existing = testOnlyConfirmationChallenges.get(challengeKey);
 
     if (
       args.confirm === true &&
@@ -986,14 +1024,14 @@ async function requireConfirmation(
       existing?.token === args.confirmationToken &&
       existing.expiresAt > now
     ) {
-      confirmationChallenges.delete(challengeKey);
+      testOnlyConfirmationChallenges.delete(challengeKey);
       return;
     }
 
     const token = `mcp_confirm_${randomBytes(16).toString("base64url")}`;
-    confirmationChallenges.set(challengeKey, {
+    testOnlyConfirmationChallenges.set(challengeKey, {
       token,
-      expiresAt: now + CONFIRMATION_TOKEN_TTL_MS,
+      expiresAt: now + TEST_CONFIRMATION_TOKEN_TTL_MS,
     });
 
     if (args.confirm === true) {
