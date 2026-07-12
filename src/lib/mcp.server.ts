@@ -1,7 +1,7 @@
 // MCP Streamable HTTP gateway helpers (server-only).
 // Auth: Bearer nmcp_<...> from `Authorization` header → SHA-256 → platform_api_keys lookup.
 // Rate limit: database-backed short-window limiter + daily quota check via usage_daily.
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import type { Json } from "@/integrations/supabase/types";
 import { hashPlatformApiKey, decryptSecret } from "./crypto.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -19,9 +19,10 @@ import { LOCAL_TOOLS, TOOLS } from "./mcp-tool-definitions";
 import {
   calculateChanges,
   detectSuspiciousActivity,
+  getRollbackSnapshotForUser,
   getAuditStatistics,
   getWorkflowHistory,
-  markRolledBack,
+  markAuditRolledBack,
   recordWorkflowAudit,
   type WorkflowAuditOperation,
 } from "./audit.server";
@@ -68,6 +69,7 @@ export type ToolContext = {
   clientCapabilities?: ClientCapabilities;
   requestElicitation?: (request: ElicitationRequest) => Promise<Record<string, unknown>>;
   policy?: WorkflowPolicyContext;
+  confirmationVerified?: boolean;
 };
 
 export class ElicitationRequiredError extends Error {
@@ -970,6 +972,7 @@ async function requireConfirmation(
   opts: { requireToken?: boolean; scope?: unknown } = {},
   context?: ToolContext,
 ): Promise<void> {
+  if (context?.confirmationVerified) return;
   if (opts.requireToken && (await capableOfElicitation(context))) {
     const confirmed = await requestUserConfirmation(context, operation, args);
     if (!confirmed) {
@@ -1339,10 +1342,26 @@ async function handleRollback(
   const auditLogId = String(args.auditLogId ?? "");
   if (!auditLogId) throw new Error("auditLogId is required");
 
-  const snapshot = await markRolledBack(userId, auditLogId);
-  const snap = asObj(snapshot);
-  const workflowId = strId(snap.id);
-  if (!workflowId) throw new Error("Snapshot has no workflow id to restore");
+  const auditRow = await getRollbackSnapshotForUser(userId, auditLogId);
+  const snap = asObj(auditRow.snapshot_before);
+  const workflowId = auditRow.workflow_id;
+  const snapshotWorkflowId = strId(snap.id);
+  if (snapshotWorkflowId && snapshotWorkflowId !== workflowId) {
+    throw new Error("Rollback snapshot workflow id does not match the audit record");
+  }
+
+  const validation = await workflowValidationService.validateWorkflow(
+    requireWorkflow({ ...snap, id: workflowId }),
+  );
+  if (!validation.ok) {
+    return {
+      success: false,
+      workflow_id: workflowId,
+      rolled_back_from: auditLogId,
+      validation,
+      message: "Rollback snapshot failed validation; workflow was not restored.",
+    };
+  }
 
   const before = await fetchSnapshotSafe(inst, workflowId);
   const restored = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`, {
@@ -1354,6 +1373,8 @@ async function handleRollback(
       settings: snap.settings ?? {},
     }),
   });
+
+  await markAuditRolledBack(userId, auditLogId);
 
   await recordWorkflowAudit({
     userId,
@@ -1375,6 +1396,7 @@ async function handleRollback(
     success: true,
     workflow_id: workflowId,
     rolled_back_from: auditLogId,
+    validation,
     workflow: restored,
   };
 }
@@ -1394,6 +1416,8 @@ async function previewWorkflowDiff(inst: Inst, args: Record<string, unknown>): P
   return {
     success: true,
     workflowId,
+    baseVersionId: strId(current.versionId) ?? undefined,
+    baseFingerprint: workflowFingerprint(current),
     diff,
     validation,
   };
@@ -1413,6 +1437,16 @@ async function updatePartialWorkflow(
   const current = requireWorkflow(
     await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`),
   );
+  const currentVersionId = strId(current.versionId);
+  const currentFingerprint = workflowFingerprint(current);
+  const expectedVersionId = strId(args.expectedVersionId);
+  const expectedFingerprint = strId(args.expectedFingerprint);
+  if (
+    (expectedVersionId && expectedVersionId !== currentVersionId) ||
+    (expectedFingerprint && expectedFingerprint !== currentFingerprint)
+  ) {
+    throw new Error("Workflow preview is stale; preview the workflow again before applying updates.");
+  }
   workflowOperationPolicyService.assertOperationsAllowed(operations, policy, current);
 
   const { workflow, diff } = workflowDiffService.applyOperations(current, operations);
@@ -1440,9 +1474,24 @@ async function updatePartialWorkflow(
     workflow: updated,
     diff,
     validation,
+    resolvedPolicy: policy,
   };
   Object.defineProperty(result, PARTIAL_UPDATE_AUDIT_BEFORE, { value: current });
   return result;
+}
+
+function workflowFingerprint(workflow: WorkflowLike): string {
+  return createHash("sha256")
+    .update(
+      stableStringify({
+        name: workflow.name ?? null,
+        nodes: workflow.nodes ?? [],
+        connections: workflow.connections ?? {},
+        settings: workflow.settings ?? {},
+        versionId: workflow.versionId ?? null,
+      }),
+    )
+    .digest("hex");
 }
 
 /**
