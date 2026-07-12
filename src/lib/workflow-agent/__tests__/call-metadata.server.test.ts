@@ -73,7 +73,10 @@ describe("workflow agent call metadata", () => {
   it("returns a truncation marker instead of oversized operation metadata", () => {
     const metadata = buildWorkflowAgentCallMetadata(
       "preview_workflow_diff",
-      { workflowId: "wf-large", operations: [{ type: "addNode", node: { data: "x".repeat(70_000) } }] },
+      {
+        workflowId: "wf-large",
+        operations: [{ type: "addNode", node: { data: "x".repeat(70_000) } }],
+      },
       { validation: { ok: true } },
     );
 

@@ -224,7 +224,12 @@ describe("buildWorkflowAgentConsoleData", () => {
     ]);
     expect(data.toolCalls.at(2)).toMatchObject({ status: "blocked" });
     expect(data.templateHits).toEqual([
-      { id: "tpl-9", name: "Invoice enrichment", confidence: 0.91, source: "audit:update_partial_workflow" },
+      {
+        id: "tpl-9",
+        name: "Invoice enrichment",
+        confidence: 0.91,
+        source: "audit:update_partial_workflow",
+      },
     ]);
     expect(data.validation).toEqual(
       expect.arrayContaining([

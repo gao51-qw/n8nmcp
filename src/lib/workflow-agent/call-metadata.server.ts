@@ -53,10 +53,7 @@ export function buildWorkflowAgentCallMetadata(
     const id = stringValue(result.id ?? args.id);
     const templateName = stringValue(result.name);
     metadata = {
-      templateHits:
-        id && templateName
-          ? [{ id, name: templateName, source: "get_template" }]
-          : [],
+      templateHits: id && templateName ? [{ id, name: templateName, source: "get_template" }] : [],
     };
   } else if (name === "preview_workflow_diff" || name === "update_partial_workflow") {
     metadata = {
@@ -86,9 +83,7 @@ export function buildWorkflowAgentCallMetadata(
   }
 
   const sanitized = sanitize(metadata) as WorkflowAgentCallMetadata;
-  return JSON.stringify(sanitized).length > MAX_METADATA_BYTES
-    ? { _truncated: true }
-    : sanitized;
+  return JSON.stringify(sanitized).length > MAX_METADATA_BYTES ? { _truncated: true } : sanitized;
 }
 
 export function deriveAgentPlan(
@@ -146,10 +141,7 @@ function templateHits(value: unknown, source: string): Json[] {
 
 function sanitize(value: unknown, key = ""): Json {
   const normalizedKey = key.toLowerCase().replace(/[^a-z0-9_]/g, "");
-  if (
-    normalizedKey &&
-    SENSITIVE_KEY_PARTS.some((sensitive) => normalizedKey.includes(sensitive))
-  ) {
+  if (normalizedKey && SENSITIVE_KEY_PARTS.some((sensitive) => normalizedKey.includes(sensitive))) {
     return "[REDACTED]";
   }
   if (value === null || value === undefined) return null;

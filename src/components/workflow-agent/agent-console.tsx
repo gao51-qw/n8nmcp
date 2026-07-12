@@ -143,10 +143,7 @@ export type WorkflowAgentActionState = {
 export type WorkflowAgentConsoleProps = {
   data: WorkflowAgentConsoleData;
   actionState?: WorkflowAgentActionState;
-  onApply?: (input: {
-    previewCallId: string;
-    selectedOperationIndexes: number[];
-  }) => Promise<void>;
+  onApply?: (input: { previewCallId: string; selectedOperationIndexes: number[] }) => Promise<void>;
   onRollback?: (input: { auditLogId: string; reason: string }) => Promise<void>;
 };
 
@@ -444,10 +441,12 @@ export function WorkflowAgentConsole({
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {(data.pendingUpdate?.operations.map(({ index, summary }) => ({
-                    ...summary,
-                    operationIndex: index,
-                  })) ?? data.diff.map((entry) => ({ ...entry, operationIndex: undefined }))).map((entry) => (
+                  {(
+                    data.pendingUpdate?.operations.map(({ index, summary }) => ({
+                      ...summary,
+                      operationIndex: index,
+                    })) ?? data.diff.map((entry) => ({ ...entry, operationIndex: undefined }))
+                  ).map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="pl-4">
                         {typeof entry.operationIndex === "number" ? (

@@ -191,7 +191,11 @@ function trustedPreview(
   const metadata = asRecord(preview.metadata);
   const workflowId = stringValue(metadata.workflowId ?? preview.workflow_id);
   if (!workflowId || (preview.workflow_id && preview.workflow_id !== workflowId)) {
-    throw new DashboardAgentActionError(409, "preview_mismatch", "Workflow preview scope is invalid");
+    throw new DashboardAgentActionError(
+      409,
+      "preview_mismatch",
+      "Workflow preview scope is invalid",
+    );
   }
 
   const allOperations = Array.isArray(metadata.operations) ? metadata.operations : [];

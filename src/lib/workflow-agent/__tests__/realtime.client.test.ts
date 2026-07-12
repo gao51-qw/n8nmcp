@@ -41,8 +41,18 @@ describe("workflow agent realtime subscription", () => {
 
     expect(mocks.subscriptions.map(({ config }) => config)).toEqual([
       { event: "INSERT", schema: "public", table: "mcp_call_logs", filter: "user_id=eq.user-1" },
-      { event: "INSERT", schema: "public", table: "workflow_audit_log", filter: "user_id=eq.user-1" },
-      { event: "UPDATE", schema: "public", table: "workflow_audit_log", filter: "user_id=eq.user-1" },
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "workflow_audit_log",
+        filter: "user_id=eq.user-1",
+      },
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "workflow_audit_log",
+        filter: "user_id=eq.user-1",
+      },
     ]);
   });
 

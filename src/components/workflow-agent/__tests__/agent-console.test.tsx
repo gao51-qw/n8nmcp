@@ -122,7 +122,10 @@ describe("WorkflowAgentConsole", () => {
   it("submits the server-provided rollback candidate and waits for the callback", async () => {
     let resolveRollback!: () => void;
     const onRollback = vi.fn(
-      () => new Promise<void>((resolve) => { resolveRollback = resolve; }),
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRollback = resolve;
+        }),
     );
     const view = await render(
       <WorkflowAgentConsole

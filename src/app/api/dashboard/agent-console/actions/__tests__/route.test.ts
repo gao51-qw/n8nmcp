@@ -9,9 +9,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/workflow-agent/dashboard-actions.server", async (importOriginal) => {
-  const actual = await importOriginal<
-    typeof import("@/lib/workflow-agent/dashboard-actions.server")
-  >();
+  const actual =
+    await importOriginal<typeof import("@/lib/workflow-agent/dashboard-actions.server")>();
   return { ...actual, executeDashboardAgentAction: mocks.execute };
 });
 
@@ -122,7 +121,11 @@ describe("workflow agent Console action route", () => {
       new Request("https://example.test/api/dashboard/agent-console/actions", {
         method: "POST",
         headers: { authorization: "Bearer session-token", "content-type": "application/json" },
-        body: JSON.stringify({ action: "apply", previewCallId: "not-a-uuid", selectedOperationIndexes: [] }),
+        body: JSON.stringify({
+          action: "apply",
+          previewCallId: "not-a-uuid",
+          selectedOperationIndexes: [],
+        }),
       }),
     );
 

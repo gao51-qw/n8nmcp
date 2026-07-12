@@ -87,7 +87,9 @@ export function AgentConsoleClient() {
           signal: controller.signal,
         });
         if (!response.ok) {
-          throw new Error((await response.text()) || `Agent console request failed (${response.status})`);
+          throw new Error(
+            (await response.text()) || `Agent console request failed (${response.status})`,
+          );
         }
 
         const payload = (await response.json()) as { data: WorkflowAgentConsoleData };
@@ -136,7 +138,8 @@ export function AgentConsoleClient() {
         setActionState({ status: "confirming", message: "Confirmation required." });
         return;
       }
-      if (!response.ok) throw new Error(payload.error?.message ?? `Workflow action failed (${response.status})`);
+      if (!response.ok)
+        throw new Error(payload.error?.message ?? `Workflow action failed (${response.status})`);
       setActionState({ status: "success", message: "Workflow action completed." });
       setRefreshIndex((value) => value + 1);
     } catch (error) {
@@ -201,7 +204,11 @@ export function AgentConsoleClient() {
               <h1 className="text-xl font-semibold">Workflow Agent Console</h1>
               <p className="mt-2 text-sm text-muted-foreground">{state.error}</p>
             </div>
-            <Button type="button" variant="outline" onClick={() => setRefreshIndex((value) => value + 1)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setRefreshIndex((value) => value + 1)}
+            >
               <RefreshCw className="h-4 w-4" aria-hidden="true" />
               Retry
             </Button>

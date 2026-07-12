@@ -71,16 +71,18 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
 }
 
-function parseClientCapabilities(params: Record<string, unknown>): ToolContext["clientCapabilities"] {
+function parseClientCapabilities(
+  params: Record<string, unknown>,
+): ToolContext["clientCapabilities"] {
   const initCaps = asRecord(params.clientCapabilities);
   const legacyCaps = asRecord(params.capabilities);
   const expCaps = asRecord(asRecord(params).experimental).clientCapabilities;
   const candidate =
-    (Object.keys(initCaps).length > 0
+    Object.keys(initCaps).length > 0
       ? initCaps
       : Object.keys(legacyCaps).length > 0
         ? legacyCaps
-        : asRecord(expCaps));
+        : asRecord(expCaps);
   return {
     elicitation: typeof candidate.elicitation === "boolean" ? candidate.elicitation : undefined,
     sampling: typeof candidate.sampling === "boolean" ? candidate.sampling : undefined,
@@ -147,7 +149,9 @@ function resolveToolContext(
       return {
         clientCapabilities,
         requestElicitation: async () => {
-          throw new Error(`Missing elicitation response for ${pendingId}. Re-run notifications/elicitation/complete.`);
+          throw new Error(
+            `Missing elicitation response for ${pendingId}. Re-run notifications/elicitation/complete.`,
+          );
         },
       };
     }
@@ -163,8 +167,7 @@ function resolveToolContext(
           const elicitationId = buildElicitationId();
           throw new ElicitationRequiredError(elicitationId, {
             ...elicitationRequest,
-            details:
-              `Provide confirmation via notifications/elicitation/complete. Then retry with elicitationResponse: {elicitationId: "${elicitationId}"}.`,
+            details: `Provide confirmation via notifications/elicitation/complete. Then retry with elicitationResponse: {elicitationId: "${elicitationId}"}.`,
           });
         }
       : undefined;

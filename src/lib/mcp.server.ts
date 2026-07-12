@@ -334,10 +334,15 @@ export async function runTool(
     case "preview_workflow_diff":
       return previewWorkflowDiff(inst, args);
     case "update_partial_workflow":
-      await requireConfirmation(args, "Update partial workflow", {
-        requireToken: true,
-        scope: { workflowId: args.workflowId, operations: args.operations },
-      }, context);
+      await requireConfirmation(
+        args,
+        "Update partial workflow",
+        {
+          requireToken: true,
+          scope: { workflowId: args.workflowId, operations: args.operations },
+        },
+        context,
+      );
       return updatePartialWorkflow(inst, args, context);
     case "list_workflows": {
       const qs = new URLSearchParams();
@@ -442,9 +447,14 @@ export async function runTool(
       if (!args.id) throw new Error("id (workflow id) is required");
       const id = String(args.id);
       await requireConfirmation(args, "Update workflow", {}, context);
-      const structuralFields = ["nodes", "connections", "settings", "staticData", "tags", "active"].filter(
-        (field) => args[field] !== undefined,
-      );
+      const structuralFields = [
+        "nodes",
+        "connections",
+        "settings",
+        "staticData",
+        "tags",
+        "active",
+      ].filter((field) => args[field] !== undefined);
       if (structuralFields.length > 0) {
         throw new Error(
           `update_workflow no longer accepts structural workflow fields (${structuralFields.join(
@@ -507,10 +517,15 @@ export async function runTool(
       if (!args.patch || typeof args.patch !== "object") {
         throw new Error("patch (object) is required");
       }
-      await requireConfirmation(args, "Apply workflow patch", {
-        requireToken: true,
-        scope: { id: args.id, patch: args.patch },
-      }, context);
+      await requireConfirmation(
+        args,
+        "Apply workflow patch",
+        {
+          requireToken: true,
+          scope: { id: args.id, patch: args.patch },
+        },
+        context,
+      );
       const { analyzeWorkflowGraph, applyWorkflowPatch, validateWorkflowPatch } =
         await import("./workflow-graph");
       const workflow = (await n8n(
@@ -573,14 +588,19 @@ export async function runTool(
       if (!args.patch || typeof args.patch !== "object") {
         throw new Error("patch (object) is required");
       }
-      await requireConfirmation(args, "Safe apply workflow patch", {
-        requireToken: true,
-        scope: {
-          id: args.id,
-          patch: args.patch,
-          postApplyChecks: args.postApplyChecks,
+      await requireConfirmation(
+        args,
+        "Safe apply workflow patch",
+        {
+          requireToken: true,
+          scope: {
+            id: args.id,
+            patch: args.patch,
+            postApplyChecks: args.postApplyChecks,
+          },
         },
-      }, context);
+        context,
+      );
       const {
         analyzeWorkflowGraph,
         applyWorkflowPatch,
@@ -927,8 +947,7 @@ export async function runTool(
 
 async function capableOfElicitation(context?: ToolContext): Promise<boolean> {
   return !!(
-    context?.clientCapabilities?.elicitation &&
-    typeof context.requestElicitation === "function"
+    context?.clientCapabilities?.elicitation && typeof context.requestElicitation === "function"
   );
 }
 
@@ -982,7 +1001,8 @@ async function requireConfirmation(
   }
 
   if (opts.requireToken) {
-    const authenticatedUserId = (context as ToolContext & { user_id?: string } | undefined)?.user_id;
+    const authenticatedUserId = (context as (ToolContext & { user_id?: string }) | undefined)
+      ?.user_id;
     const scope = opts.scope ?? { id: args.id ?? args.workflowId ?? "" };
 
     if (authenticatedUserId) {
@@ -1015,9 +1035,7 @@ async function requireConfirmation(
     // Direct runTool unit tests do not have an authenticated caller. Keep their
     // compatibility challenge process-local; all production dispatches use the
     // durable, owner-scoped service above.
-    const challengeKey = `${operation}:${stableStringify(
-      scope,
-    )}`;
+    const challengeKey = `${operation}:${stableStringify(scope)}`;
     const now = Date.now();
     const existing = testOnlyConfirmationChallenges.get(challengeKey);
 
@@ -1260,7 +1278,7 @@ async function recordMutationAudit(
   try {
     const outRecord = asObj(out);
     const auditBefore =
-      before ?? ((outRecord as Record<PropertyKey, unknown>)[PARTIAL_UPDATE_AUDIT_BEFORE] ?? null);
+      before ?? (outRecord as Record<PropertyKey, unknown>)[PARTIAL_UPDATE_AUDIT_BEFORE] ?? null;
     const after = desc.after(out);
     const workflowId = desc.idFrom(args, out) ?? strId(args.id) ?? strId(args.workflowId);
     if (!workflowId) return;
@@ -1445,7 +1463,9 @@ async function updatePartialWorkflow(
     (expectedVersionId && expectedVersionId !== currentVersionId) ||
     (expectedFingerprint && expectedFingerprint !== currentFingerprint)
   ) {
-    throw new Error("Workflow preview is stale; preview the workflow again before applying updates.");
+    throw new Error(
+      "Workflow preview is stale; preview the workflow again before applying updates.",
+    );
   }
   workflowOperationPolicyService.assertOperationsAllowed(operations, policy, current);
 
@@ -1516,10 +1536,15 @@ export async function dispatchTool(
       return { output: null, upstream: false, category: "local", needsInstance: true };
     }
     if (!caller?.user_id) throw new Error("Authentication required");
-    await requireConfirmation(args, "Rollback workflow", {
-      requireToken: true,
-      scope: { auditLogId: args.auditLogId },
-    }, caller);
+    await requireConfirmation(
+      args,
+      "Rollback workflow",
+      {
+        requireToken: true,
+        scope: { auditLogId: args.auditLogId },
+      },
+      caller,
+    );
     const output = await handleRollback(args, inst, caller);
     return { output, upstream: false, category: "local", needsInstance: false };
   }

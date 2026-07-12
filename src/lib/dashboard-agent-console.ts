@@ -19,10 +19,7 @@ type McpCallLogRow = Pick<
   "id" | "tool_name" | "status" | "latency_ms" | "created_at"
 > &
   Partial<
-    Pick<
-      Tables<"mcp_call_logs">,
-      "error_message" | "workflow_id" | "session_id" | "metadata"
-    >
+    Pick<Tables<"mcp_call_logs">, "error_message" | "workflow_id" | "session_id" | "metadata">
   >;
 
 type AuditChange = {
@@ -129,7 +126,9 @@ export async function loadWorkflowAgentConsoleData(
       .maybeSingle(),
     supabaseAdmin
       .from("mcp_call_logs")
-      .select("id,tool_name,status,latency_ms,created_at,error_message,workflow_id,session_id,metadata")
+      .select(
+        "id,tool_name,status,latency_ms,created_at,error_message,workflow_id,session_id,metadata",
+      )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .range(0, 49),
@@ -156,7 +155,8 @@ export function buildWorkflowAgentConsoleData(
   input: BuildWorkflowAgentConsoleInput,
 ): WorkflowAgentConsoleData {
   const now = input.now ?? new Date();
-  const workflowRow = input.auditRows.find((row) => row.workflow_id === input.workflowId) ?? input.auditRows[0];
+  const workflowRow =
+    input.auditRows.find((row) => row.workflow_id === input.workflowId) ?? input.auditRows[0];
   const workflowId = input.workflowId ?? workflowRow?.workflow_id ?? "No audit workflow yet";
   const workflowName =
     workflowNameFromRow(workflowRow) ??
@@ -215,26 +215,24 @@ function findPendingUpdate(
       .map((row) => stringOrNull(asRecord(row.metadata).sourcePreviewCallId))
       .filter((id): id is string => Boolean(id)),
   );
-  const preview = [...rows]
-    .sort(compareCreatedDescending)
-    .find((row) => {
-      if (
-        row.tool_name !== "preview_workflow_diff" ||
-        row.status !== "ok" ||
-        appliedPreviewIds.has(row.id)
-      ) {
-        return false;
-      }
-      const metadata = asRecord(row.metadata);
-      const scopedWorkflowId = stringOrNull(metadata.workflowId ?? row.workflow_id);
-      const createdAt = new Date(row.created_at).getTime();
-      return (
-        scopedWorkflowId === workflowId &&
-        Number.isFinite(createdAt) &&
-        now.getTime() - createdAt >= 0 &&
-        now.getTime() - createdAt <= 30 * 60_000
-      );
-    });
+  const preview = [...rows].sort(compareCreatedDescending).find((row) => {
+    if (
+      row.tool_name !== "preview_workflow_diff" ||
+      row.status !== "ok" ||
+      appliedPreviewIds.has(row.id)
+    ) {
+      return false;
+    }
+    const metadata = asRecord(row.metadata);
+    const scopedWorkflowId = stringOrNull(metadata.workflowId ?? row.workflow_id);
+    const createdAt = new Date(row.created_at).getTime();
+    return (
+      scopedWorkflowId === workflowId &&
+      Number.isFinite(createdAt) &&
+      now.getTime() - createdAt >= 0 &&
+      now.getTime() - createdAt <= 30 * 60_000
+    );
+  });
   if (!preview) return undefined;
 
   const metadata = asRecord(preview.metadata);
@@ -293,7 +291,11 @@ function summarizePreviewOperation(
     `Operation ${index + 1}`;
   return {
     id: `preview-operation-${index}`,
-    operation: type.toLowerCase().includes("remove") ? "remove" : type.toLowerCase().includes("add") ? "add" : "update",
+    operation: type.toLowerCase().includes("remove")
+      ? "remove"
+      : type.toLowerCase().includes("add")
+        ? "add"
+        : "update",
     target,
   };
 }
@@ -373,8 +375,7 @@ function extractDiff(rows: WorkflowAuditConsoleRow[]): DiffEntry[] {
 
   return auditChanges(row.changes).map((change, index) => ({
     id: `change-${row.id}-${index}`,
-    operation:
-      change.type === "added" ? "add" : change.type === "removed" ? "remove" : "update",
+    operation: change.type === "added" ? "add" : change.type === "removed" ? "remove" : "update",
     target: change.field,
     before: stringifySummary(change.before),
     after: stringifySummary(change.after),
@@ -428,7 +429,9 @@ function extractValidation(rows: WorkflowAuditConsoleRow[]): ValidationResult[] 
   return results;
 }
 
-function extractTemplateHits(rows: WorkflowAuditConsoleRow[]): WorkflowAgentConsoleData["templateHits"] {
+function extractTemplateHits(
+  rows: WorkflowAuditConsoleRow[],
+): WorkflowAgentConsoleData["templateHits"] {
   const hits: NonNullable<WorkflowAgentConsoleData["templateHits"]> = [];
   const seen = new Set<string>();
 
@@ -458,7 +461,8 @@ function summarizePolicy(rows: WorkflowAuditConsoleRow[]): WorkflowAgentConsoleD
     const params = asRecord(candidate.tool_params);
     return isRecord(params.policy) || params.confirm === true;
   });
-  const row = explicitRow ?? rows.find((candidate) => DESTRUCTIVE_TOOLS.has(candidate.tool_name ?? ""));
+  const row =
+    explicitRow ?? rows.find((candidate) => DESTRUCTIVE_TOOLS.has(candidate.tool_name ?? ""));
 
   if (!row) {
     return { status: "read-only", summary: "No mutating policy decision recorded yet." };

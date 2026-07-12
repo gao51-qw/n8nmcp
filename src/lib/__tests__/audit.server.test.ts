@@ -214,7 +214,9 @@ describe("rollback audit lifecycle", () => {
     await markAuditRolledBack("user-1", "a1");
 
     expect(update.__calls.some((call) => call.method === "update")).toBe(true);
-    const eqCols = update.__calls.filter((call) => call.method === "eq").map((call) => call.args[0]);
+    const eqCols = update.__calls
+      .filter((call) => call.method === "eq")
+      .map((call) => call.args[0]);
     expect(eqCols).toEqual(expect.arrayContaining(["id", "user_id", "is_rolled_back"]));
   });
 

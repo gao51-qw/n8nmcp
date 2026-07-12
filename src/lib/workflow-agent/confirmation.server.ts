@@ -33,7 +33,9 @@ export class ConfirmationRequiredError extends Error {
 
 const supabaseConfirmationStore: ConfirmationStore = {
   async insert(challenge) {
-    const { error } = await supabaseAdmin.from("workflow_confirmation_challenges").insert(challenge);
+    const { error } = await supabaseAdmin
+      .from("workflow_confirmation_challenges")
+      .insert(challenge);
     if (error) throw new Error(`Failed to create confirmation challenge: ${error.message}`);
   },
 
