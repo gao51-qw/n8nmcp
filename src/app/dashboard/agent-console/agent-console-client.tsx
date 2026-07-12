@@ -8,8 +8,20 @@ import {
   type WorkflowAgentConsoleData,
 } from "@/components/workflow-agent/agent-console";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { subscribeToWorkflowAgentConsole } from "@/lib/workflow-agent/realtime.client";
+import type { DashboardAgentAction } from "@/lib/workflow-agent/dashboard-actions.server";
+import type { WorkflowAgentActionState } from "@/components/workflow-agent/agent-console";
 
 type LoadState =
   | { status: "loading"; data: null; error: null }
@@ -20,6 +32,12 @@ export function AgentConsoleClient() {
   const [state, setState] = useState<LoadState>({ status: "loading", data: null, error: null });
   const [refreshIndex, setRefreshIndex] = useState(0);
   const [session, setSession] = useState<{ token: string; userId: string } | null>(null);
+  const [actionState, setActionState] = useState<WorkflowAgentActionState>({ status: "idle" });
+  const [confirmation, setConfirmation] = useState<{
+    token: string;
+    summary: string;
+    input: DashboardAgentAction;
+  } | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -93,8 +111,80 @@ export function AgentConsoleClient() {
     };
   }, [refreshIndex, session]);
 
+  async function runAction(input: DashboardAgentAction): Promise<void> {
+    if (!session) throw new Error("Authentication required");
+    setActionState({ status: "pending", message: "Applying the trusted workflow action..." });
+    try {
+      const response = await fetch("/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${session.token}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(input),
+      });
+      const payload = (await response.json()) as {
+        error?: { message?: string };
+        confirmation?: { token: string; summary?: string };
+      };
+      if (response.status === 409 && payload.confirmation?.token) {
+        setConfirmation({
+          token: payload.confirmation.token,
+          summary: payload.confirmation.summary ?? "Confirm this workflow action.",
+          input,
+        });
+        setActionState({ status: "confirming", message: "Confirmation required." });
+        return;
+      }
+      if (!response.ok) throw new Error(payload.error?.message ?? `Workflow action failed (${response.status})`);
+      setActionState({ status: "success", message: "Workflow action completed." });
+      setRefreshIndex((value) => value + 1);
+    } catch (error) {
+      setActionState({
+        status: "error",
+        message: error instanceof Error ? error.message : "Workflow action failed",
+      });
+      throw error;
+    }
+  }
+
+  async function confirmAction() {
+    if (!confirmation) return;
+    const { input, token } = confirmation;
+    setConfirmation(null);
+    await runAction({ ...input, confirmationToken: token });
+  }
+
   if (state.status === "ready") {
-    return <WorkflowAgentConsole data={state.data} />;
+    return (
+      <>
+        <WorkflowAgentConsole
+          data={state.data}
+          actionState={actionState}
+          onApply={(input) => runAction({ action: "apply", ...input })}
+          onRollback={(input) => runAction({ action: "rollback", ...input })}
+        />
+        <AlertDialog open={confirmation !== null}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirm workflow action</AlertDialogTitle>
+              <AlertDialogDescription>{confirmation?.summary}</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                onClick={() => {
+                  setConfirmation(null);
+                  setActionState({ status: "idle" });
+                }}
+              >
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction onClick={() => void confirmAction()}>Confirm</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </>
+    );
   }
 
   return (

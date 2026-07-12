@@ -135,6 +135,21 @@ export interface WorkflowAgentConsoleData {
   auditLog: AuditEntry[];
 }
 
+export type WorkflowAgentActionState = {
+  status: "idle" | "confirming" | "pending" | "success" | "error";
+  message?: string;
+};
+
+export type WorkflowAgentConsoleProps = {
+  data: WorkflowAgentConsoleData;
+  actionState?: WorkflowAgentActionState;
+  onApply?: (input: {
+    previewCallId: string;
+    selectedOperationIndexes: number[];
+  }) => Promise<void>;
+  onRollback?: (input: { auditLogId: string; reason: string }) => Promise<void>;
+};
+
 const environments: Array<{ value: AgentEnvironment; label: string }> = [
   { value: "development", label: "Development" },
   { value: "staging", label: "Staging" },
@@ -279,10 +294,18 @@ function formatPercent(value: number, limit: number) {
   return Math.min(100, Math.round((value / limit) * 100));
 }
 
-export function WorkflowAgentConsole({ data }: { data: WorkflowAgentConsoleData }) {
+export function WorkflowAgentConsole({
+  data,
+  actionState = { status: "idle" },
+  onApply,
+  onRollback,
+}: WorkflowAgentConsoleProps) {
   const [environment, setEnvironment] = useState(data.selectedEnvironment);
   const [mode, setMode] = useState<AgentMode>(data.mode);
-  const [rollbackStatus, setRollbackStatus] = useState<RollbackStatus>(data.rollbackStatus);
+  const [selectedOperations, setSelectedOperations] = useState<number[]>(
+    () => data.pendingUpdate?.operations.map(({ index }) => index) ?? [],
+  );
+  const [localPending, setLocalPending] = useState(false);
 
   const validationSummary = useMemo(
     () =>
@@ -296,8 +319,41 @@ export function WorkflowAgentConsole({ data }: { data: WorkflowAgentConsoleData 
   const ratePercent = formatPercent(data.quota.rateRemaining, data.quota.rateLimit);
   const isReadOnly = mode === "read-only";
   const hasValidationErrors = validationSummary.error > 0;
-  const rollbackDisabled = isReadOnly || rollbackStatus === "rolled-back";
-  const applyDisabled = isReadOnly || hasValidationErrors;
+  const actionPending = localPending || actionState.status === "pending";
+  const rollbackDisabled =
+    isReadOnly || data.rollbackStatus === "rolled-back" || !data.rollbackCandidate || actionPending;
+  const applyDisabled =
+    isReadOnly ||
+    hasValidationErrors ||
+    !data.pendingUpdate ||
+    selectedOperations.length === 0 ||
+    actionPending;
+
+  async function applyUpdate() {
+    if (!data.pendingUpdate || !onApply || applyDisabled) return;
+    setLocalPending(true);
+    try {
+      await onApply({
+        previewCallId: data.pendingUpdate.previewCallId,
+        selectedOperationIndexes: [...selectedOperations].sort((a, b) => a - b),
+      });
+    } finally {
+      setLocalPending(false);
+    }
+  }
+
+  async function rollback() {
+    if (!data.rollbackCandidate || !onRollback || rollbackDisabled) return;
+    setLocalPending(true);
+    try {
+      await onRollback({
+        auditLogId: data.rollbackCandidate.auditLogId,
+        reason: "Restore the last audited workflow snapshot from the Agent Console.",
+      });
+    } finally {
+      setLocalPending(false);
+    }
+  }
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
@@ -347,12 +403,12 @@ export function WorkflowAgentConsole({ data }: { data: WorkflowAgentConsoleData 
               type="button"
               variant="outline"
               disabled={rollbackDisabled}
-              onClick={() => setRollbackStatus("rolled-back")}
+              onClick={() => void rollback()}
             >
               <RotateCcw className="h-4 w-4" aria-hidden="true" />
               Rollback
             </Button>
-            <Button type="button" disabled={applyDisabled}>
+            <Button type="button" disabled={applyDisabled} onClick={() => void applyUpdate()}>
               <Play className="h-4 w-4" aria-hidden="true" />
               Apply update
             </Button>
@@ -388,9 +444,28 @@ export function WorkflowAgentConsole({ data }: { data: WorkflowAgentConsoleData 
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.diff.map((entry) => (
+                  {(data.pendingUpdate?.operations.map(({ index, summary }) => ({
+                    ...summary,
+                    operationIndex: index,
+                  })) ?? data.diff.map((entry) => ({ ...entry, operationIndex: undefined }))).map((entry) => (
                     <TableRow key={entry.id}>
                       <TableCell className="pl-4">
+                        {typeof entry.operationIndex === "number" ? (
+                          <input
+                            type="checkbox"
+                            data-operation-index={entry.operationIndex}
+                            aria-label={`Select ${entry.target}`}
+                            checked={selectedOperations.includes(entry.operationIndex)}
+                            onChange={() =>
+                              setSelectedOperations((current) =>
+                                current.includes(entry.operationIndex as number)
+                                  ? current.filter((index) => index !== entry.operationIndex)
+                                  : [...current, entry.operationIndex as number],
+                              )
+                            }
+                            className="mr-2 h-4 w-4 align-middle"
+                          />
+                        ) : null}
                         <span
                           className={cn(
                             "inline-flex rounded-md border px-2 py-1 text-xs font-medium capitalize",
@@ -610,6 +685,11 @@ export function WorkflowAgentConsole({ data }: { data: WorkflowAgentConsoleData 
           </Card>
         </aside>
       </div>
+      {actionState.message ? (
+        <p className="mt-3 text-sm text-muted-foreground" role="status">
+          {actionState.message}
+        </p>
+      ) : null}
     </main>
   );
 }
