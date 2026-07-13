@@ -42,3 +42,23 @@ export type OfficialTemplateClientOptions = {
   maxAttempts?: number;
   maxResponseBytes?: number;
 };
+
+export type NormalizedTemplateEnvelope = {
+  source: "official" | "curated";
+  curated: boolean;
+  views: number;
+  workflow: {
+    id: number;
+    name: string;
+    description: string;
+    totalViews: number;
+    createdAt: string | null;
+    user: { name?: string; username?: string; avatar?: string | null } | null;
+    workflow: {
+      nodes: Array<Record<string, unknown>>;
+      connections: Record<string, unknown>;
+      [key: string]: unknown;
+    };
+  };
+  sourceUrl: string;
+};

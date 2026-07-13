@@ -1,0 +1,186 @@
+import type {
+  NormalizedTemplateEnvelope,
+  OfficialTemplateDetail,
+  OfficialTemplateSummary,
+} from "./types.js";
+
+export const PROHIBITED_TEMPLATE_NODE_TYPES = new Set([
+  "n8n-nodes-base.executeCommand",
+  "n8n-nodes-base.executeWorkflow",
+  "n8n-nodes-base.function",
+  "n8n-nodes-base.functionItem",
+]);
+
+const SENSITIVE_KEYS = new Set([
+  "credentials",
+  "credential",
+  "authentication",
+  "authorization",
+  "apikey",
+  "accesstoken",
+  "refreshtoken",
+  "clientsecret",
+  "password",
+  "privatekey",
+]);
+
+const SECRET_PATTERNS = [
+  /-----BEGIN(?: [A-Z0-9]+)* PRIVATE KEY-----/i,
+  /\bBearer\s+[A-Z0-9._~+/=-]{20,}/i,
+  /\bsk-(?:proj-)?[A-Z0-9_-]{20,}\b/i,
+  /\bxox[baprs]-[A-Z0-9-]{10,}\b/i,
+  /\bAIza[A-Z0-9_-]{30,}\b/i,
+  /\beyJ[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\b/i,
+];
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function removeSensitiveKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(removeSensitiveKeys);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => !SENSITIVE_KEYS.has(key.toLowerCase()))
+      .map(([key, child]) => [key, removeSensitiveKeys(child)]),
+  );
+}
+
+export function assertTemplateContainsNoSecrets(workflow: unknown): void {
+  const pending: unknown[] = [workflow];
+  const visited = new WeakSet<object>();
+
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (typeof value === "string") {
+      if (SECRET_PATTERNS.some((pattern) => pattern.test(value))) {
+        throw new Error("Template contains an embedded secret");
+      }
+      continue;
+    }
+    if (typeof value !== "object" || value === null || visited.has(value)) {
+      continue;
+    }
+    visited.add(value);
+    pending.push(...Object.values(value));
+  }
+}
+
+function sanitizeNodes(nodes: unknown[]): Array<Record<string, unknown>> {
+  const retained: Array<Record<string, unknown>> = [];
+
+  for (const node of nodes) {
+    if (!isRecord(node)) {
+      throw new Error("Workflow nodes must be objects");
+    }
+    if (typeof node.type === "string" && PROHIBITED_TEMPLATE_NODE_TYPES.has(node.type)) {
+      continue;
+    }
+    if (typeof node.name !== "string" || node.name.length === 0 || typeof node.type !== "string") {
+      throw new Error("Workflow nodes must have names and types");
+    }
+    retained.push(node);
+  }
+
+  if (retained.length === 0) {
+    throw new Error("Workflow must contain retained nodes");
+  }
+  return retained;
+}
+
+function sanitizeConnections(
+  connections: Record<string, unknown>,
+  retainedNodeNames: ReadonlySet<string>,
+): Record<string, unknown> {
+  const retainedSources: Array<[string, unknown]> = [];
+
+  for (const [sourceName, sourceValue] of Object.entries(connections)) {
+    if (!retainedNodeNames.has(sourceName)) {
+      continue;
+    }
+    if (!isRecord(sourceValue)) {
+      throw new Error("Workflow connections must contain source objects");
+    }
+
+    const retainedConnectionTypes: Array<[string, unknown]> = [];
+    for (const [connectionType, outputBranches] of Object.entries(sourceValue)) {
+      if (!Array.isArray(outputBranches)) {
+        throw new Error("Workflow connection outputs must be arrays");
+      }
+
+      const retainedBranches = outputBranches
+        .map((branch) => {
+          if (!Array.isArray(branch)) {
+            throw new Error("Workflow connection branches must be arrays");
+          }
+          return branch.filter(
+            (target) => isRecord(target)
+              && typeof target.node === "string"
+              && retainedNodeNames.has(target.node),
+          );
+        })
+        .filter((branch) => branch.length > 0);
+
+      if (retainedBranches.length > 0) {
+        retainedConnectionTypes.push([connectionType, retainedBranches]);
+      }
+    }
+
+    if (retainedConnectionTypes.length > 0) {
+      retainedSources.push([sourceName, Object.fromEntries(retainedConnectionTypes)]);
+    }
+  }
+
+  return Object.fromEntries(retainedSources);
+}
+
+export function normalizeAndSanitizeTemplate(
+  detail: OfficialTemplateDetail,
+  summary?: OfficialTemplateSummary,
+): NormalizedTemplateEnvelope {
+  if (!isRecord(detail.workflow)
+    || !Array.isArray(detail.workflow.nodes)
+    || !isRecord(detail.workflow.connections)) {
+    throw new Error("Workflow nodes and connections are malformed");
+  }
+
+  const sanitizedWorkflow = removeSensitiveKeys(detail.workflow);
+  if (!isRecord(sanitizedWorkflow)
+    || !Array.isArray(sanitizedWorkflow.nodes)
+    || !isRecord(sanitizedWorkflow.connections)) {
+    throw new Error("Workflow nodes and connections are malformed");
+  }
+  assertTemplateContainsNoSecrets(sanitizedWorkflow);
+
+  const nodes = sanitizeNodes(sanitizedWorkflow.nodes);
+  const retainedNodeNames = new Set(nodes.map((node) => node.name as string));
+  const connections = sanitizeConnections(sanitizedWorkflow.connections, retainedNodeNames);
+  const totalViews = detail.totalViews ?? summary?.totalViews ?? 0;
+  const user = detail.user ?? summary?.user ?? null;
+
+  return {
+    source: "official",
+    curated: false,
+    views: totalViews,
+    workflow: {
+      id: detail.id,
+      name: detail.name,
+      description: detail.description ?? summary?.description ?? "",
+      totalViews,
+      createdAt: summary?.createdAt ?? null,
+      user: user === null ? null : { ...user },
+      workflow: {
+        ...sanitizedWorkflow,
+        nodes,
+        connections,
+      },
+    },
+    sourceUrl: `https://n8n.io/workflows/${detail.id}`,
+  };
+}
