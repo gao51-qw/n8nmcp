@@ -1,0 +1,7 @@
+node_modules
+dist
+.tmp
+data/curated-templates
+data/nodes.db-shm
+data/nodes.db-wal
+*.log
