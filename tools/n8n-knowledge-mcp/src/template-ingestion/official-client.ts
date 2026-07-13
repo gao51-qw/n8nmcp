@@ -13,6 +13,7 @@ const defaults = {
   maxAttempts: 3,
   maxResponseBytes: 10_485_760,
 };
+const MAX_TEMPLATE_IDS = 5_000;
 
 const userSchema = z
   .object({
@@ -63,7 +64,29 @@ type RequestContext = {
 };
 
 export function createOfficialTemplateClient(options: OfficialTemplateClientOptions = {}) {
-  const config = { ...defaults, ...options };
+  const config = {
+    ...defaults,
+    ...options,
+    detailConcurrency: Math.ceil(
+      boundedPositive(
+        "detailConcurrency",
+        options.detailConcurrency ?? defaults.detailConcurrency,
+        defaults.detailConcurrency,
+      ),
+    ),
+    requestTimeoutMs: boundedPositive(
+      "requestTimeoutMs",
+      options.requestTimeoutMs ?? defaults.requestTimeoutMs,
+      defaults.requestTimeoutMs,
+    ),
+    maxAttempts: Math.ceil(
+      boundedPositive(
+        "maxAttempts",
+        options.maxAttempts ?? defaults.maxAttempts,
+        defaults.maxAttempts,
+      ),
+    ),
+  };
   const request = options.fetch ?? globalThis.fetch;
   const sleep =
     options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
@@ -82,14 +105,15 @@ async function collectSummaries({
   sleep,
   limit,
 }: RequestContext & { limit: number }) {
-  const cappedLimit = Math.max(0, Math.floor(limit));
+  const cappedLimit = Math.min(MAX_TEMPLATE_IDS, Math.max(0, Math.floor(limit)));
   if (cappedLimit === 0) {
     return { totalWorkflows: 0, target: 0, summaries: [] as OfficialTemplateSummary[] };
   }
 
   const summaries: OfficialTemplateSummary[] = [];
   const seenIds = new Set<number>();
-  let totalWorkflows = 0;
+  let totalWorkflows: number | undefined;
+  let target = cappedLimit;
   let page = 1;
 
   while (summaries.length < cappedLimit) {
@@ -99,20 +123,22 @@ async function collectSummaries({
     url.searchParams.set("sort", "views:desc");
 
     const result = await requestJson({ config, request, sleep }, url, searchResponseSchema);
-    totalWorkflows = result.totalWorkflows;
-    const target = Math.min(totalWorkflows, cappedLimit);
+    if (totalWorkflows === undefined) {
+      totalWorkflows = result.totalWorkflows;
+      target = Math.min(totalWorkflows, cappedLimit);
+    }
 
     for (const item of result.workflows) {
+      if (summaries.length >= target) break;
       if (seenIds.has(item.id)) continue;
       seenIds.add(item.id);
       summaries.push(item);
-      if (summaries.length === target) break;
     }
 
     if (
       summaries.length >= target ||
       result.workflows.length === 0 ||
-      page > Math.ceil(totalWorkflows / config.pageSize)
+      page >= Math.ceil(totalWorkflows / config.pageSize)
     ) {
       break;
     }
@@ -120,8 +146,8 @@ async function collectSummaries({
   }
 
   return {
-    totalWorkflows,
-    target: Math.min(totalWorkflows, cappedLimit),
+    totalWorkflows: totalWorkflows ?? 0,
+    target,
     summaries,
   };
 }
@@ -132,7 +158,16 @@ async function fetchDetails({
   sleep,
   summaries,
 }: RequestContext & { summaries: OfficialTemplateSummary[] }) {
-  const details: Array<OfficialTemplateDetail | undefined> = new Array(summaries.length);
+  const limitedSummaries: OfficialTemplateSummary[] = [];
+  const seenIds = new Set<number>();
+  for (const summary of summaries) {
+    if (seenIds.has(summary.id)) continue;
+    seenIds.add(summary.id);
+    limitedSummaries.push(summary);
+    if (limitedSummaries.length >= MAX_TEMPLATE_IDS) break;
+  }
+
+  const details: Array<OfficialTemplateDetail | undefined> = new Array(limitedSummaries.length);
   const failedIds: number[] = [];
   let nextIndex = 0;
 
@@ -140,7 +175,7 @@ async function fetchDetails({
     while (true) {
       const index = nextIndex;
       nextIndex += 1;
-      const summary = summaries[index];
+      const summary = limitedSummaries[index];
       if (!summary) return;
 
       try {
@@ -152,7 +187,7 @@ async function fetchDetails({
     }
   };
 
-  const workerCount = Math.min(Math.max(1, config.detailConcurrency), summaries.length);
+  const workerCount = Math.min(config.detailConcurrency, limitedSummaries.length);
   await Promise.all(Array.from({ length: workerCount }, worker));
 
   return {
@@ -197,7 +232,7 @@ async function requestJson<T extends z.ZodTypeAny>(
       }
 
       const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
-      if (!contentType.includes("application/json")) {
+      if (!isJsonContentType(contentType)) {
         throw new Error(`Invalid content-type for ${url.pathname}: ${contentType || "missing"}`);
       }
 
@@ -235,6 +270,22 @@ function assertOfficialUrl(url: URL): void {
   if (url.origin !== ORIGIN) {
     throw new Error(`Rejected redirect outside official origin: ${url.origin}`);
   }
+}
+
+function boundedPositive(name: string, value: number, ceiling: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    throw new RangeError(`${name} must be a positive finite number`);
+  }
+  return Math.min(value, ceiling);
+}
+
+function isJsonContentType(contentType: string): boolean {
+  const mediaType = contentType.split(";", 1)[0]?.trim() ?? "";
+  const token = "[!#$%&'*+.^_`|~0-9A-Za-z-]+";
+  return (
+    mediaType === "application/json" ||
+    new RegExp(`^${token}/${token}\\+json$`, "i").test(mediaType)
+  );
 }
 
 function retryDelayMs(retryAfter: string | null, attempt: number): number {
