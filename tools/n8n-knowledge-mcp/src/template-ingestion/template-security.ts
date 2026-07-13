@@ -29,6 +29,7 @@ const SECRET_PATTERNS = [
   /\bBearer\s+[A-Z0-9._~+/=-]{20,}/i,
   /\bsk-(?:proj-)?[A-Z0-9_-]{20,}\b/i,
   /\bxox[baprs]-[A-Z0-9-]{10,}\b/i,
+  /\bxapp-[A-Z0-9-]{10,}\b/i,
   /\bAIza[A-Z0-9_-]{30,}\b/i,
   /\beyJ[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\b/i,
 ];
@@ -68,7 +69,9 @@ export function assertTemplateContainsNoSecrets(workflow: unknown): void {
       continue;
     }
     visited.add(value);
-    pending.push(...Object.values(value));
+    for (const [key, child] of Object.entries(value)) {
+      pending.push(key, child);
+    }
   }
 }
 
@@ -82,7 +85,10 @@ function sanitizeNodes(nodes: unknown[]): Array<Record<string, unknown>> {
     if (typeof node.type === "string" && PROHIBITED_TEMPLATE_NODE_TYPES.has(node.type)) {
       continue;
     }
-    if (typeof node.name !== "string" || node.name.length === 0 || typeof node.type !== "string") {
+    if (typeof node.name !== "string"
+      || node.name.trim().length === 0
+      || typeof node.type !== "string"
+      || node.type.trim().length === 0) {
       throw new Error("Workflow nodes must have names and types");
     }
     retained.push(node);
@@ -114,18 +120,28 @@ function sanitizeConnections(
         throw new Error("Workflow connection outputs must be arrays");
       }
 
-      const retainedBranches = outputBranches
-        .map((branch) => {
-          if (!Array.isArray(branch)) {
-            throw new Error("Workflow connection branches must be arrays");
+      const retainedBranches = outputBranches.map((branch) => {
+        if (!Array.isArray(branch)) {
+          throw new Error("Workflow connection branches must be arrays");
+        }
+        return branch.filter((target) => {
+          if (!isRecord(target)
+            || typeof target.node !== "string"
+            || target.node.trim().length === 0
+            || typeof target.type !== "string"
+            || target.type.trim().length === 0
+            || typeof target.index !== "number"
+            || !Number.isInteger(target.index)
+            || target.index < 0) {
+            throw new Error("Workflow connection descriptor is malformed");
           }
-          return branch.filter(
-            (target) => isRecord(target)
-              && typeof target.node === "string"
-              && retainedNodeNames.has(target.node),
-          );
-        })
-        .filter((branch) => branch.length > 0);
+          return retainedNodeNames.has(target.node);
+        });
+      });
+
+      while (retainedBranches.at(-1)?.length === 0) {
+        retainedBranches.pop();
+      }
 
       if (retainedBranches.length > 0) {
         retainedConnectionTypes.push([connectionType, retainedBranches]);

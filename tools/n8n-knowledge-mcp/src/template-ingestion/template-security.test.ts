@@ -36,6 +36,7 @@ describe("template security", () => {
     "Bearer abcdefghijklmnopqrstuvwxyz123456",
     "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
     "xox" + "b-123456789012-abcdefghijklmnopqrstuvwxyz",
+    "xapp-1-123456789012-abcdefghijklmnopqrstuvwxyz",
     "AIzaSyDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUM",
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnopqrstuvwxyz1234567890",
   ])("rejects embedded secret %s", (secret) => {
@@ -119,7 +120,7 @@ describe("template security", () => {
     expect(detail.workflow.nodes[0].parameters.headers[0]).toHaveProperty("Authorization");
   });
 
-  it("keeps only connections between retained nodes and compacts empty branches", () => {
+  it("keeps only connections between retained nodes without shifting output indices", () => {
     const result = normalizeAndSanitizeTemplate({
       id: 8,
       name: "Connected",
@@ -136,8 +137,101 @@ describe("template security", () => {
     });
 
     expect(result.workflow.workflow.connections).toEqual({
-      A: { main: [[{ node: "B", type: "main", index: 0 }]] },
+      A: { main: [[], [], [{ node: "B", type: "main", index: 0 }]] },
     });
+  });
+
+  it("preserves IF and Switch output positions while trimming only trailing empty outputs", () => {
+    const result = normalizeAndSanitizeTemplate({
+      id: 10,
+      name: "Branches",
+      workflow: {
+        nodes: [
+          { id: "if", name: "IF", type: "n8n-nodes-base.if", parameters: {}, position: [0, 0] },
+          { id: "switch", name: "Switch", type: "n8n-nodes-base.switch", parameters: {}, position: [0, 200] },
+          { id: "b", name: "B", type: "n8n-nodes-base.noOp", parameters: {}, position: [200, 0] },
+          { id: "c", name: "C", type: "n8n-nodes-base.noOp", parameters: {}, position: [200, 200] },
+        ],
+        connections: {
+          IF: {
+            main: [
+              [],
+              [{ node: "B", type: "main", index: 0, metadata: { safe: true } }],
+              [{ node: "Removed", type: "main", index: 0 }],
+            ],
+          },
+          Switch: {
+            main: [
+              [{ node: "B", type: "main", index: 0 }],
+              [],
+              [{ node: "C", type: "main", index: 0 }],
+            ],
+          },
+        },
+      },
+    });
+
+    expect(result.workflow.workflow.connections).toEqual({
+      IF: {
+        main: [
+          [],
+          [{ node: "B", type: "main", index: 0, metadata: { safe: true } }],
+        ],
+      },
+      Switch: {
+        main: [
+          [{ node: "B", type: "main", index: 0 }],
+          [],
+          [{ node: "C", type: "main", index: 0 }],
+        ],
+      },
+    });
+  });
+
+  it("scans object property names for secrets and allows safe near-misses", () => {
+    expect(() => assertTemplateContainsNoSecrets({
+      headers: { "Bearer abcdefghijklmnopqrstuvwxyz123456": "redacted" },
+    })).toThrow(/secret/i);
+    expect(() => assertTemplateContainsNoSecrets({
+      headers: {
+        "Bearer short": "safe",
+        "xapp-short": "safe",
+        "not-a-jwt.header.payload": "safe",
+      },
+    })).not.toThrow();
+  });
+
+  it("rejects empty retained node types", () => {
+    expect(() => normalizeAndSanitizeTemplate({
+      id: 11,
+      name: "Empty type",
+      workflow: {
+        nodes: [{ id: "n1", name: "Node", type: "   ", parameters: {}, position: [0, 0] }],
+        connections: {},
+      },
+    })).toThrow(/nodes/i);
+  });
+
+  it.each([
+    { node: "B", index: 0 },
+    { node: "B", type: 1, index: 0 },
+    { node: "B", type: "main" },
+    { node: "B", type: "main", index: "0" },
+    { node: "B", type: "main", index: -1 },
+    { node: "B", type: "main", index: 0.5 },
+    { node: "", type: "main", index: 0 },
+  ])("rejects malformed connection descriptor %j", (descriptor) => {
+    expect(() => normalizeAndSanitizeTemplate({
+      id: 12,
+      name: "Malformed connection",
+      workflow: {
+        nodes: [
+          { id: "a", name: "A", type: "n8n-nodes-base.manualTrigger", parameters: {}, position: [0, 0] },
+          { id: "b", name: "B", type: "n8n-nodes-base.noOp", parameters: {}, position: [200, 0] },
+        ],
+        connections: { A: { main: [[descriptor]] } },
+      },
+    })).toThrow(/connection/i);
   });
 
   it("exports exactly the prohibited node type set and rejects direct secret scans", () => {
