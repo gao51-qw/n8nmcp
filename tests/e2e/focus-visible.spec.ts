@@ -22,19 +22,40 @@ const FIXTURES: { id: string; html: string; label: string }[] = [
   { id: "f-input", label: "<input>", html: `<input type="text" id="f-input" />` },
   { id: "f-select", label: "<select>", html: `<select id="f-select"><option>a</option></select>` },
   { id: "f-textarea", label: "<textarea>", html: `<textarea id="f-textarea"></textarea>` },
-  { id: "f-checkbox", label: "input[type=checkbox]", html: `<input type="checkbox" id="f-checkbox" />` },
-  { id: "f-role-button", label: "[role=button]", html: `<div role="button" tabindex="0" id="f-role-button">Action</div>` },
-  { id: "f-role-tab", label: "[role=tab]", html: `<div role="tab" tabindex="0" id="f-role-tab">Tab</div>` },
-  { id: "f-role-menuitem", label: "[role=menuitem]", html: `<div role="menuitem" tabindex="0" id="f-role-menuitem">Item</div>` },
-  { id: "f-role-switch", label: "[role=switch]", html: `<div role="switch" tabindex="0" id="f-role-switch">On</div>` },
+  {
+    id: "f-checkbox",
+    label: "input[type=checkbox]",
+    html: `<input type="checkbox" id="f-checkbox" />`,
+  },
+  {
+    id: "f-role-button",
+    label: "[role=button]",
+    html: `<div role="button" tabindex="0" id="f-role-button">Action</div>`,
+  },
+  {
+    id: "f-role-tab",
+    label: "[role=tab]",
+    html: `<div role="tab" tabindex="0" id="f-role-tab">Tab</div>`,
+  },
+  {
+    id: "f-role-menuitem",
+    label: "[role=menuitem]",
+    html: `<div role="menuitem" tabindex="0" id="f-role-menuitem">Item</div>`,
+  },
+  {
+    id: "f-role-switch",
+    label: "[role=switch]",
+    html: `<div role="switch" tabindex="0" id="f-role-switch">On</div>`,
+  },
 ];
+
+const KEYBOARD_INPUT_IDS = new Set(["f-input", "f-select", "f-textarea"]);
 
 function buildPage(): string {
   // Strip Tailwind-only at-rules jsdom-style — Chromium parses CSS strictly,
   // but `@import "tailwindcss"` etc. would 404. We only need the @layer base
   // blocks (focus + cursor); the rest is irrelevant to this test.
-  const base = STYLES
-    .split("\n")
+  const base = STYLES.split("\n")
     .filter((line) => !/^@import\b|^@source\b|^@custom-variant\b|^@theme\b/.test(line.trim()))
     .join("\n");
 
@@ -82,8 +103,7 @@ async function hasFocusRing(page: Page, selector: string): Promise<boolean> {
       cs.outlineStyle !== "none" &&
       cs.outlineStyle !== "" &&
       parseFloat(cs.outlineWidth || "0") > 0;
-    const shadowPainted =
-      cs.boxShadow !== "none" && cs.boxShadow !== "";
+    const shadowPainted = cs.boxShadow !== "none" && cs.boxShadow !== "";
     return outlinePainted || shadowPainted;
   });
 }
@@ -107,13 +127,15 @@ test.describe("focus-visible: keyboard Tab paints the ring", () => {
 
       // :focus-visible should now apply because the activation modality is
       // keyboard. Assert via real CSSOM, not via the pseudo-class string.
-      expect(await hasFocusRing(page, target), `${f.label} must show focus ring after Tab`).toBe(true);
+      expect(await hasFocusRing(page, target), `${f.label} must show focus ring after Tab`).toBe(
+        true,
+      );
     });
   }
 });
 
 test.describe("focus-visible: mouse click suppresses the ring", () => {
-  for (const f of FIXTURES) {
+  for (const f of FIXTURES.filter(({ id }) => !KEYBOARD_INPUT_IDS.has(id))) {
     test(`click → ${f.label} hides focus ring`, async ({ page }) => {
       await setup(page);
       const target = `#${f.id}`;
@@ -132,6 +154,22 @@ test.describe("focus-visible: mouse click suppresses the ring", () => {
   }
 });
 
+test.describe("focus-visible: text-entry controls retain the ring", () => {
+  for (const f of FIXTURES.filter(({ id }) => KEYBOARD_INPUT_IDS.has(id))) {
+    test(`click → ${f.label} keeps focus visible`, async ({ page }) => {
+      await setup(page);
+      const target = `#${f.id}`;
+      await page.click(target, { force: true });
+
+      expect(await page.$eval(target, (el) => el === document.activeElement)).toBe(true);
+      expect(
+        await hasFocusRing(page, target),
+        `${f.label} accepts keyboard input, so the UA should keep focus visible`,
+      ).toBe(true);
+    });
+  }
+});
+
 test("Tab → click → Tab restores ring (modality switching)", async ({ page }) => {
   await setup(page);
   const target = "#f-button";
@@ -145,7 +183,10 @@ test("Tab → click → Tab restores ring (modality switching)", async ({ page }
   }
   expect(await hasFocusRing(page, target)).toBe(true);
 
-  // 2. Click it → ring hides (modality flips to pointer).
+  // 2. Remove the existing keyboard focus, then click it. Clicking an element
+  // that is already focused does not create a new focus transition, so it
+  // cannot demonstrate a modality change.
+  await page.$eval(target, (el) => (el as HTMLElement).blur());
   await page.click(target, { force: true });
   expect(await hasFocusRing(page, target)).toBe(false);
 
