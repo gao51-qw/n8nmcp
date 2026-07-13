@@ -29,7 +29,7 @@ const SECRET_PATTERNS = [
   /\bBearer\s+[A-Z0-9._~+/=-]{20,}/i,
   /\bsk-(?:proj-)?[A-Z0-9_-]{20,}\b/i,
   /\bxox[baprs]-[A-Z0-9-]{10,}\b/i,
-  /\bxapp-[A-Z0-9-]{10,}\b/i,
+  /\bxapp-\d+-A[A-Z0-9]+-\d+-[A-Za-z0-9]+(?![A-Za-z0-9-])/,
   /\bAIza[A-Z0-9_-]{30,}\b/i,
   /\beyJ[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\.[A-Z0-9_-]{5,}\b/i,
 ];

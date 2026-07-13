@@ -36,7 +36,8 @@ describe("template security", () => {
     "Bearer abcdefghijklmnopqrstuvwxyz123456",
     "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
     "xox" + "b-123456789012-abcdefghijklmnopqrstuvwxyz",
-    "xapp-1-123456789012-abcdefghijklmnopqrstuvwxyz",
+    "xapp-1-A0123456789-1234567890123-abcdefghijklmnopqrstuvwxyz1234567890",
+    "xapp-2-A9876543210-9876543210987-ZYXWVUTSRQPONMLKJIHGFEDCBA",
     "AIzaSyDUMMYDUMMYDUMMYDUMMYDUMMYDUMMYDUM",
     "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnopqrstuvwxyz1234567890",
   ])("rejects embedded secret %s", (secret) => {
@@ -48,6 +49,15 @@ describe("template security", () => {
         connections: {},
       },
     })).toThrow(/secret/i);
+  });
+
+  it.each([
+    "xapp-placeholder-value",
+    "xapp-development-config",
+    "xapp-1-A0123456789-example",
+    "XAPP-1-A0123456789-1234567890123-abcdefghijklmnopqrstuvwxyz1234567890",
+  ])("allows non-token xapp placeholder %s", (placeholder) => {
+    expect(() => assertTemplateContainsNoSecrets({ appToken: placeholder })).not.toThrow();
   });
 
   it("rejects empty and malformed workflows", () => {
