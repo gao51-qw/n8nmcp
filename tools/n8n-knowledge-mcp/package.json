@@ -13,7 +13,9 @@
     "fetch": "tsx scripts/1-fetch-packages.ts",
     "parse:nodes": "tsx scripts/2-parse-nodes.ts",
     "parse:docs": "tsx scripts/3-parse-docs.ts",
-    "build:sqlite": "tsx scripts/4-build-db.ts"
+    "build:sqlite": "tsx scripts/4-build-db.ts",
+    "fetch:templates": "tsx scripts/5-fetch-official-templates.ts",
+    "refresh:curated": "tsx scripts/refresh-curated-templates.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
