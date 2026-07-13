@@ -6,6 +6,7 @@ import {
   defaultTemplatePublicationFileSystem,
   refreshCuratedTemplates,
   stageOfficialTemplates,
+  type TemplatePublicationDiagnostic,
   type TemplatePublicationFileSystem,
 } from "./template-publication.js";
 import type {
@@ -23,6 +24,61 @@ afterEach(async () => {
 });
 
 describe("official template staging publication", () => {
+  it("creates a missing lock parent before publishing a fresh target", async () => {
+    const root = await temporaryRoot();
+    const targetDirectory = join(root, "missing-parent", "templates");
+    const curatedDirectory = join(root, "curated");
+    await writeCuratedSet(curatedDirectory, [5]);
+
+    await expect(
+      stageOfficialTemplates({
+        client: frozenClient([1]),
+        curatedDirectory,
+        targetDirectory,
+        runId: "fresh-parent",
+      }),
+    ).resolves.toMatchObject({ acceptedCount: 1 });
+
+    expect(await readdir(join(targetDirectory, "official"))).toEqual(["1.json"]);
+  });
+
+  it("fails fast when a second publisher targets a locked directory", async () => {
+    const root = await temporaryRoot();
+    const targetDirectory = join(root, "templates");
+    const curatedDirectory = join(root, "curated");
+    await writeCuratedSet(curatedDirectory, [5]);
+    const firstEntered = deferred<void>();
+    const releaseFirst = deferred<void>();
+    const firstClient = frozenClient([1]);
+    firstClient.collectSummaries = async () => {
+      firstEntered.resolve();
+      await releaseFirst.promise;
+      return { totalWorkflows: 1, target: 1, summaries: [summary(1)] };
+    };
+
+    const firstPublication = stageOfficialTemplates({
+      client: firstClient,
+      curatedDirectory,
+      targetDirectory,
+      runId: "first-publisher",
+    });
+    await firstEntered.promise;
+
+    await expect(
+      stageOfficialTemplates({
+        client: frozenClient([2]),
+        curatedDirectory,
+        targetDirectory,
+        runId: "second-publisher",
+      }),
+    ).rejects.toThrow(/lock/i);
+
+    releaseFirst.resolve();
+    await firstPublication;
+    expect(await readdir(join(targetDirectory, "official"))).toEqual(["1.json"]);
+    expect((await readdir(root)).filter((name) => name.endsWith(".lock"))).toEqual([]);
+  });
+
   it("keeps the previous manifest and files when staging fails after a partial write", async () => {
     const root = await temporaryRoot();
     const targetDirectory = join(root, "templates");
@@ -63,6 +119,39 @@ describe("official template staging publication", () => {
     expect(await readdir(join(targetDirectory, "official"))).toEqual(["99.json"]);
     expect(await readdir(join(targetDirectory, "merged"))).toEqual(["99.json"]);
     expect((await readdir(root)).filter((name) => name.startsWith("templates."))).toEqual([]);
+  });
+
+  it("cleans partial staging and releases the lock when setup mkdir fails", async () => {
+    const root = await temporaryRoot();
+    const targetDirectory = join(root, "templates");
+    const curatedDirectory = join(root, "curated");
+    await writeCuratedSet(curatedDirectory, [5]);
+    const officialDirectoryCreated = deferred<void>();
+    const fileSystem: TemplatePublicationFileSystem = {
+      ...defaultTemplatePublicationFileSystem,
+      mkdir: async (path) => {
+        if (path.endsWith(`${sep}merged`)) {
+          await officialDirectoryCreated.promise;
+          throw new Error("injected setup mkdir failure");
+        }
+        await defaultTemplatePublicationFileSystem.mkdir(path);
+        if (path.endsWith(`${sep}official`)) officialDirectoryCreated.resolve();
+      },
+    };
+
+    await expect(
+      stageOfficialTemplates({
+        client: frozenClient([1]),
+        curatedDirectory,
+        targetDirectory,
+        runId: "setup-failure",
+        fileSystem,
+      }),
+    ).rejects.toThrow(/injected setup mkdir failure/i);
+
+    const rootEntries = await readdir(root);
+    expect(rootEntries.filter((name) => name.startsWith("templates.staging-"))).toEqual([]);
+    expect(rootEntries).not.toContain("templates.lock");
   });
 });
 
@@ -118,6 +207,38 @@ describe("curated template publication", () => {
     expect(await readFile(join(targetDirectory, "2.json"), "utf8")).toBe(previousTwo);
     expect((await readdir(root)).filter((name) => name.startsWith("curated."))).toEqual([]);
   });
+
+  it("reports backup cleanup failure without turning a consistent publication into failure", async () => {
+    const root = await temporaryRoot();
+    const targetDirectory = join(root, "curated");
+    await writeCuratedSet(targetDirectory, [1]);
+    const backupDirectory = `${targetDirectory}.backup-cleanup-diagnostic`;
+    const diagnostics: TemplatePublicationDiagnostic[] = [];
+    const fileSystem: TemplatePublicationFileSystem = {
+      ...defaultTemplatePublicationFileSystem,
+      rm: async (path) => {
+        if (path === backupDirectory) throw new Error("injected backup cleanup failure");
+        await defaultTemplatePublicationFileSystem.rm(path);
+      },
+    };
+
+    await expect(
+      refreshCuratedTemplates({
+        client: frozenClient([1]),
+        targetDirectory,
+        runId: "cleanup-diagnostic",
+        fileSystem,
+        onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      }),
+    ).resolves.toHaveLength(1);
+
+    expect((await readdir(targetDirectory)).sort()).toEqual(["1.json", "manifest.json"]);
+    expect(diagnostics).toMatchObject([
+      { code: "BACKUP_CLEANUP_FAILED", path: backupDirectory },
+    ]);
+    expect(await readdir(backupDirectory)).toContain("manifest.json");
+    expect((await readdir(root)).filter((name) => name.endsWith(".lock"))).toEqual([]);
+  });
 });
 
 async function temporaryRoot(): Promise<string> {
@@ -143,6 +264,14 @@ async function writeJson(path: string, value: unknown): Promise<void> {
 
 async function readJson(path: string): Promise<unknown> {
   return JSON.parse(await readFile(path, "utf8"));
+}
+
+function deferred<T>() {
+  let resolvePromise!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolve) => {
+    resolvePromise = resolve;
+  });
+  return { promise, resolve: resolvePromise };
 }
 
 function frozenClient(ids: number[]) {
