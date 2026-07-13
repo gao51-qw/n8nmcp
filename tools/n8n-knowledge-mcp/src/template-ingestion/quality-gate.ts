@@ -244,7 +244,7 @@ const officialManifestSchema = z.object({
   const derivedTarget = Math.min(manifest.totalWorkflows, 5_000);
   const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
   if (manifest.target !== derivedTarget) issue(`target must equal derived target ${derivedTarget}`);
-  if (manifest.summaryCount !== derivedTarget) issue(`summaryCount must equal derived target ${derivedTarget}`);
+  if (manifest.summaryCount > derivedTarget) issue(`summaryCount must not exceed derived target ${derivedTarget}`);
   if (manifest.detailSuccessCount + manifest.detailFailureCount !== manifest.summaryCount) {
     issue("detail success and failure counts must equal summaryCount");
   }

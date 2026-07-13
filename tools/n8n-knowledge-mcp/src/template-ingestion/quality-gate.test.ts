@@ -41,6 +41,26 @@ describe("verifyKnowledgeDb", () => {
     });
   });
 
+  it("accepts 4,999 consistent official summaries when the target is 5,000", () => {
+    insertSafeTemplates(4_999);
+
+    expect(verifyKnowledgeDb({
+      dbPath,
+      manifest: largeOfficialManifest({
+        summaryCount: 4_999,
+        detailSuccessCount: 4_999,
+        acceptedCount: 4_999,
+      }),
+      curatedIds: [1750],
+      mode: "official",
+    })).toMatchObject({
+      ok: true,
+      sourceTarget: 5_000,
+      acceptedOfficial: 4_999,
+      templateCount: 4_999,
+    });
+  });
+
   it("fails when fewer than 95 percent of the official target were accepted", () => {
     insertTemplate(1750);
     expect(() =>
@@ -72,6 +92,7 @@ describe("verifyKnowledgeDb", () => {
     ["a non-finite count", officialManifest({ totalWorkflows: Number.NaN }), /manifest|finite|integer/i],
     ["a negative count", officialManifest({ acceptedCount: -1 }), /manifest|negative|count/i],
     ["inconsistent detail failure IDs", officialManifest({ detailSuccessCount: 0, detailFailureCount: 1, failedIds: [] }), /manifest|failure|failed/i],
+    ["a summary count above the derived target", largeOfficialManifest({ summaryCount: 5_001, detailSuccessCount: 5_001, acceptedCount: 5_001 }), /summaryCount[\s\S]*5000/i],
   ])("rejects invalid official manifest: %s", (_label, manifest, expected) => {
     insertTemplate(1750);
 
@@ -226,6 +247,12 @@ function insertTemplate(id: number, storedWorkflow: unknown = workflow()): void 
     `INSERT INTO templates_fts(rowid, name, description, categories, node_types)
      VALUES (?, ?, ?, '', ?)`,
   ).run(id, `Template ${id}`, "A safe workflow template", "n8n-nodes-base.webhook");
+}
+
+function insertSafeTemplates(count: number): void {
+  db.transaction(() => {
+    for (let id = 1; id <= count; id += 1) insertTemplate(id);
+  })();
 }
 
 function workflow(options: {
