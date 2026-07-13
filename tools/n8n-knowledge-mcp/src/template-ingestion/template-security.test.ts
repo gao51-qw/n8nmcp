@@ -60,6 +60,22 @@ describe("template security", () => {
     expect(() => assertTemplateContainsNoSecrets({ appToken: placeholder })).not.toThrow();
   });
 
+  it.each([
+    "credentials",
+    "Credential",
+    "authentication",
+    "Authorization",
+    "apiKey",
+    "accessToken",
+    "refreshToken",
+    "clientSecret",
+    "Password",
+    "privateKey",
+  ])("rejects sensitive key %s even when its value is innocuous", (key) => {
+    expect(() => assertTemplateContainsNoSecrets({ nested: { [key]: "development-placeholder" } }))
+      .toThrow(/sensitive|secret/i);
+  });
+
   it("rejects empty and malformed workflows", () => {
     expect(() => normalizeAndSanitizeTemplate({ id: 1, name: "Empty", workflow: { nodes: [], connections: {} } })).toThrow(/nodes/i);
   });

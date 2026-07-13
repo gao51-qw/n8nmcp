@@ -26,6 +26,8 @@ function ftsEscape(q: string): string {
 }
 
 export function searchWorkflowTemplates(input: { query: string; limit?: number }) {
+  const query = input.query.trim();
+  if (!query) throw new Error("Template search query must not be empty");
   const limit = input.limit ?? 10;
   const rows = db
     .prepare(
@@ -34,7 +36,7 @@ export function searchWorkflowTemplates(input: { query: string; limit?: number }
         WHERE templates_fts MATCH ?
         ORDER BY rank, t.views DESC LIMIT ?`,
     )
-    .all(ftsEscape(input.query), limit);
+    .all(ftsEscape(query), limit);
   return { count: rows.length, templates: rows };
 }
 
@@ -337,7 +339,7 @@ export function registerAllTools(server: McpServer) {
     "Full-text search across template name/description/categories/node_types. " +
       "Optional category filter (case-insensitive substring) and node_type filter.",
     {
-      query: z.string().min(1),
+      query: z.string().trim().min(1),
       category: z.string().optional(),
       node_type: z.string().optional(),
       limit: z.number().int().min(1).max(50).default(20),
@@ -372,7 +374,7 @@ export function registerAllTools(server: McpServer) {
   server.tool(
     "search_templates",
     "Alias for search_workflow_templates.",
-    { query: z.string().min(1), limit: z.number().int().min(1).max(50).default(10) },
+    { query: z.string().trim().min(1), limit: z.number().int().min(1).max(50).default(10) },
     async ({ query, limit }) => {
       return text(searchWorkflowTemplates({ query, limit }));
     },

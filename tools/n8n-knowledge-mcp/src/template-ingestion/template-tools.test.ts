@@ -3,6 +3,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 import { importTemplates } from "./template-importer.js";
 import type { NormalizedTemplateEnvelope } from "./types.js";
 
@@ -27,24 +28,37 @@ describe("direct template tool handlers", () => {
 
     process.env.DB_PATH = dbPath;
     const { db } = await import("../db.js");
-    const { getWorkflowTemplateById, searchWorkflowTemplates } = await import("../tools/index.js");
+    const { getWorkflowTemplateById, registerAllTools, searchWorkflowTemplates } = await import("../tools/index.js");
 
-    expect(searchWorkflowTemplates({ query: "Slack" })).toMatchObject({
-      count: 1,
-      templates: [{ id: 1750, name: "Slack notification" }],
-    });
-    const template = getWorkflowTemplateById(1750);
-    expect(template).toMatchObject({
-      id: 1750,
-      categories: [],
-      node_types: ["n8n-nodes-base.webhook"],
-      workflow: {
-        nodes: [{ name: "Webhook", type: "n8n-nodes-base.webhook" }],
-        connections: {},
-      },
-    });
-    expect(JSON.stringify(template?.workflow)).not.toMatch(/credentials|sk-proj-/i);
-    db.close();
+    try {
+      expect(searchWorkflowTemplates({ query: "Slack" })).toMatchObject({
+        count: 1,
+        templates: [{ id: 1750, name: "Slack notification" }],
+      });
+      const template = getWorkflowTemplateById(1750);
+      expect(template).toMatchObject({
+        id: 1750,
+        categories: [],
+        node_types: ["n8n-nodes-base.webhook"],
+        workflow: {
+          nodes: [{ name: "Webhook", type: "n8n-nodes-base.webhook" }],
+          connections: {},
+        },
+      });
+      expect(JSON.stringify(template?.workflow)).not.toMatch(/credentials|sk-proj-/i);
+      expect(() => searchWorkflowTemplates({ query: "   " })).toThrow(/query/i);
+
+      const registrations = new Map<string, Record<string, z.ZodTypeAny>>();
+      registerAllTools({
+        tool(name: string, _description: string, schema: Record<string, z.ZodTypeAny>) {
+          registrations.set(name, schema);
+        },
+      } as never);
+      const searchSchema = z.object(registrations.get("search_templates")!);
+      expect(() => searchSchema.parse({ query: "   ", limit: 10 })).toThrow();
+    } finally {
+      db.close();
+    }
   });
 });
 

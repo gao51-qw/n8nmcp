@@ -46,7 +46,11 @@ describe("verifyKnowledgeDb", () => {
     expect(() =>
       verifyKnowledgeDb({
         ...validOfficialInput(),
-        manifest: officialManifest({ target: 5_000, acceptedCount: 4_749, rejectedCount: 251 }),
+        manifest: largeOfficialManifest({
+          acceptedCount: 4_749,
+          rejectedCount: 251,
+          rejectedIds: Array.from({ length: 251 }, (_, index) => index + 1),
+        }),
       }),
     ).toThrow(/4750/);
   });
@@ -57,9 +61,26 @@ describe("verifyKnowledgeDb", () => {
     expect(() =>
       verifyKnowledgeDb({
         ...validOfficialInput(),
-        manifest: officialManifest({ target: 5_000, acceptedCount: 5_000 }),
+        manifest: largeOfficialManifest(),
       }),
     ).toThrow(/database[\s\S]*4750/i);
+  });
+
+  it.each([
+    ["a target below the derived source target", officialManifest({ totalWorkflows: 5_100, target: 1 }), /target[\s\S]*5000/i],
+    ["an empty object", {}, /manifest/i],
+    ["a non-finite count", officialManifest({ totalWorkflows: Number.NaN }), /manifest|finite|integer/i],
+    ["a negative count", officialManifest({ acceptedCount: -1 }), /manifest|negative|count/i],
+    ["inconsistent detail failure IDs", officialManifest({ detailSuccessCount: 0, detailFailureCount: 1, failedIds: [] }), /manifest|failure|failed/i],
+  ])("rejects invalid official manifest: %s", (_label, manifest, expected) => {
+    insertTemplate(1750);
+
+    expect(() => verifyKnowledgeDb({
+      dbPath,
+      manifest: manifest as OfficialFetchManifest,
+      curatedIds: [1750],
+      mode: "official",
+    })).toThrow(expected);
   });
 
   it("collects FTS parity and stale connection target failures", () => {
@@ -67,6 +88,16 @@ describe("verifyKnowledgeDb", () => {
     db.prepare("DELETE FROM templates_fts WHERE rowid = 1750").run();
 
     expect(captureOfficialFailure()).toMatch(/FTS[\s\S]*Missing node/i);
+  });
+
+  it("fails when template and FTS counts match but their IDs differ", () => {
+    insertTemplate(1750);
+    db.prepare("DELETE FROM templates_fts WHERE rowid = 1750").run();
+    db.prepare(
+      "INSERT INTO templates_fts(rowid, name, description, categories, node_types) VALUES (3880, 'Wrong', '', '', '')",
+    ).run();
+
+    expect(captureOfficialFailure()).toMatch(/FTS[\s\S]*1750[\s\S]*3880/i);
   });
 
   it("fails when any curated ID is missing or duplicated", () => {
@@ -97,6 +128,9 @@ describe("verifyKnowledgeDb", () => {
   it.each([
     ["prohibited nodes", workflow({ nodeType: "n8n-nodes-base.executeCommand" }), /prohibited/i],
     ["secret patterns", workflow({ parameterValue: "sk-proj-abcdefghijklmnopqrstuvwxyz123456" }), /secret/i],
+    ["credential references", workflow({ sensitiveKey: "credentials", parameterValue: { httpBasicAuth: { id: "7" } } }), /credential|sensitive/i],
+    ["innocuous passwords", workflow({ sensitiveKey: "Password", parameterValue: "not-a-token" }), /password|sensitive/i],
+    ["innocuous API keys", workflow({ sensitiveKey: "apiKey", parameterValue: "development-placeholder" }), /api.?key|sensitive/i],
     ["empty workflows", { nodes: [], connections: {} }, /empty|retained nodes/i],
   ])("fails for %s", (_label, unsafeWorkflow, expected) => {
     insertTemplate(1750, unsafeWorkflow);
@@ -164,6 +198,17 @@ function officialManifest(overrides: Partial<OfficialFetchManifest> = {}): Offic
   };
 }
 
+function largeOfficialManifest(overrides: Partial<OfficialFetchManifest> = {}): OfficialFetchManifest {
+  return officialManifest({
+    totalWorkflows: 5_100,
+    target: 5_000,
+    summaryCount: 5_000,
+    detailSuccessCount: 5_000,
+    acceptedCount: 5_000,
+    ...overrides,
+  });
+}
+
 function insertTemplate(id: number, storedWorkflow: unknown = workflow()): void {
   db.prepare(
     `INSERT INTO templates(
@@ -185,16 +230,20 @@ function insertTemplate(id: number, storedWorkflow: unknown = workflow()): void 
 
 function workflow(options: {
   nodeType?: string;
-  parameterValue?: string;
+  parameterValue?: unknown;
+  sensitiveKey?: string;
   target?: string;
 } = {}) {
+  const parameters = options.sensitiveKey
+    ? { [options.sensitiveKey]: options.parameterValue }
+    : { value: options.parameterValue ?? "safe" };
   return {
     nodes: [
       {
         id: "webhook-1",
         name: "Webhook",
         type: options.nodeType ?? "n8n-nodes-base.webhook",
-        parameters: { value: options.parameterValue ?? "safe" },
+        parameters,
       },
     ],
     connections: options.target

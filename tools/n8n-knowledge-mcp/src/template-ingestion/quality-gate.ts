@@ -1,4 +1,5 @@
 import Database from "better-sqlite3";
+import { z } from "zod";
 import {
   assertTemplateContainsNoSecrets,
   PROHIBITED_TEMPLATE_NODE_TYPES,
@@ -43,7 +44,8 @@ export class KnowledgeQualityError extends Error {
 
 export function verifyKnowledgeDb(input: VerifyKnowledgeDbInput): KnowledgeQualityReport {
   const errors: string[] = [];
-  const manifest = input.mode === "official" ? input.manifest : undefined;
+  const manifest = input.mode === "official" ? parseOfficialManifest(input.manifest) : undefined;
+  const sourceTarget = manifest ? Math.min(manifest.totalWorkflows, 5_000) : 0;
   const duplicateCuratedIds = duplicates(input.curatedIds);
   if (duplicateCuratedIds.length > 0) {
     errors.push(`Curated manifest contains duplicate template IDs: ${duplicateCuratedIds.join(", ")}`);
@@ -64,6 +66,20 @@ export function verifyKnowledgeDb(input: VerifyKnowledgeDbInput): KnowledgeQuali
       errors.push(`FTS row count mismatch: templates=${templateCount}, templates_fts=${ftsCount}`);
     }
 
+    const templateIds = new Set(
+      (db.prepare("SELECT id FROM templates").all() as Array<{ id: number }>).map((row) => row.id),
+    );
+    const ftsIds = new Set(
+      (db.prepare("SELECT rowid id FROM templates_fts").all() as Array<{ id: number }>).map((row) => row.id),
+    );
+    const missingFtsIds = [...templateIds].filter((id) => !ftsIds.has(id));
+    const orphanFtsIds = [...ftsIds].filter((id) => !templateIds.has(id));
+    if (missingFtsIds.length > 0 || orphanFtsIds.length > 0) {
+      errors.push(
+        `FTS ID mismatch: missing=${missingFtsIds.join(",") || "none"}; orphan=${orphanFtsIds.join(",") || "none"}`,
+      );
+    }
+
     const duplicateDatabaseIds = db
       .prepare("SELECT id FROM templates GROUP BY id HAVING COUNT(*) > 1 ORDER BY id")
       .all() as Array<{ id: number }>;
@@ -71,9 +87,7 @@ export function verifyKnowledgeDb(input: VerifyKnowledgeDbInput): KnowledgeQuali
       errors.push(`Template database contains duplicate IDs: ${duplicateDatabaseIds.map((row) => row.id).join(", ")}`);
     }
 
-    const presentIds = new Set(
-      (db.prepare("SELECT id FROM templates").all() as Array<{ id: number }>).map((row) => row.id),
-    );
+    const presentIds = templateIds;
     const uniqueCuratedIds = [...new Set(input.curatedIds)];
     curatedPresent = uniqueCuratedIds.filter((id) => presentIds.has(id)).length;
     const missingCuratedIds = uniqueCuratedIds.filter((id) => !presentIds.has(id));
@@ -90,7 +104,7 @@ export function verifyKnowledgeDb(input: VerifyKnowledgeDbInput): KnowledgeQuali
   }
 
   if (manifest) {
-    const minimumAccepted = Math.ceil(manifest.target * 0.95);
+    const minimumAccepted = Math.ceil(sourceTarget * 0.95);
     if (manifest.acceptedCount < minimumAccepted) {
       errors.push(
         `Official acceptance is below 95%: accepted=${manifest.acceptedCount}, required=${minimumAccepted}`,
@@ -107,7 +121,7 @@ export function verifyKnowledgeDb(input: VerifyKnowledgeDbInput): KnowledgeQuali
     mode: input.mode,
     ok: errors.length === 0,
     sourceTotal: manifest?.totalWorkflows ?? 0,
-    sourceTarget: manifest?.target ?? 0,
+    sourceTarget,
     acceptedOfficial: manifest?.acceptedCount ?? 0,
     rejectedOfficial: manifest?.rejectedCount ?? 0,
     templateCount,
@@ -141,8 +155,8 @@ function validateStoredWorkflow(id: number, serialized: string | null, errors: s
 
   try {
     assertTemplateContainsNoSecrets(workflow);
-  } catch {
-    errors.push(`Template ${id} contains a secret pattern`);
+  } catch (error) {
+    errors.push(`Template ${id} contains secret or sensitive data: ${(error as Error).message}`);
   }
 
   const nodeNames = new Set<string>();
@@ -206,4 +220,52 @@ function duplicates(values: number[]): number[] {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const manifestCount = z.number().int().nonnegative().finite();
+const manifestIds = z.array(z.number().int().positive()).superRefine((ids, context) => {
+  if (new Set(ids).size !== ids.length) {
+    context.addIssue({ code: z.ZodIssueCode.custom, message: "IDs must be unique" });
+  }
+});
+const officialManifestSchema = z.object({
+  source: z.literal("https://api.n8n.io"),
+  totalWorkflows: manifestCount,
+  target: manifestCount,
+  summaryCount: manifestCount,
+  detailSuccessCount: manifestCount,
+  detailFailureCount: manifestCount,
+  failedIds: manifestIds,
+  acceptedCount: manifestCount,
+  rejectedCount: manifestCount,
+  rejectedIds: manifestIds,
+  generatedAt: z.string().datetime(),
+}).strict().superRefine((manifest, context) => {
+  const derivedTarget = Math.min(manifest.totalWorkflows, 5_000);
+  const issue = (message: string) => context.addIssue({ code: z.ZodIssueCode.custom, message });
+  if (manifest.target !== derivedTarget) issue(`target must equal derived target ${derivedTarget}`);
+  if (manifest.summaryCount !== derivedTarget) issue(`summaryCount must equal derived target ${derivedTarget}`);
+  if (manifest.detailSuccessCount + manifest.detailFailureCount !== manifest.summaryCount) {
+    issue("detail success and failure counts must equal summaryCount");
+  }
+  if (manifest.failedIds.length !== manifest.detailFailureCount) {
+    issue("failedIds length must equal detailFailureCount");
+  }
+  if (manifest.acceptedCount + manifest.rejectedCount !== manifest.detailSuccessCount) {
+    issue("accepted and rejected counts must equal detailSuccessCount");
+  }
+  if (manifest.rejectedIds.length !== manifest.rejectedCount) {
+    issue("rejectedIds length must equal rejectedCount");
+  }
+  if (manifest.failedIds.some((id) => manifest.rejectedIds.includes(id))) {
+    issue("failedIds and rejectedIds must be disjoint");
+  }
+});
+
+function parseOfficialManifest(value: unknown): OfficialFetchManifest {
+  const parsed = officialManifestSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new Error(`Invalid official manifest: ${parsed.error.issues.map((issue) => issue.message).join("; ")}`);
+  }
+  return parsed.data;
 }

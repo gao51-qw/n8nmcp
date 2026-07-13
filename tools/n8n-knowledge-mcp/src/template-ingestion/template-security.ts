@@ -11,7 +11,7 @@ export const PROHIBITED_TEMPLATE_NODE_TYPES = new Set([
   "n8n-nodes-base.functionItem",
 ]);
 
-const SENSITIVE_KEYS = new Set([
+export const SENSITIVE_TEMPLATE_KEYS = new Set([
   "credentials",
   "credential",
   "authentication",
@@ -48,7 +48,7 @@ function removeSensitiveKeys(value: unknown): unknown {
 
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => !SENSITIVE_KEYS.has(key.toLowerCase()))
+      .filter(([key]) => !SENSITIVE_TEMPLATE_KEYS.has(key.toLowerCase()))
       .map(([key, child]) => [key, removeSensitiveKeys(child)]),
   );
 }
@@ -70,6 +70,9 @@ export function assertTemplateContainsNoSecrets(workflow: unknown): void {
     }
     visited.add(value);
     for (const [key, child] of Object.entries(value)) {
+      if (SENSITIVE_TEMPLATE_KEYS.has(key.toLowerCase())) {
+        throw new Error(`Template contains sensitive key: ${key}`);
+      }
       pending.push(key, child);
     }
   }
