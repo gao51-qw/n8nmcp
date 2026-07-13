@@ -54,6 +54,39 @@ describe("template source merge", () => {
     });
     expect(result.map((item) => item.workflow.id)).toEqual([1, 2, 4]);
   });
+
+  it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 5_001])(
+    "rejects invalid limit %s",
+    (limit) => {
+      expect(() =>
+        mergeTemplateSources({
+          official: [template(1, "official", 10)],
+          curated: [],
+          limit,
+        }),
+      ).toThrow(/limit/i);
+    },
+  );
+
+  it("rejects a limit smaller than the number of unique curated IDs", () => {
+    expect(() =>
+      mergeTemplateSources({
+        official: [],
+        curated: [template(1, "curated", 10), template(2, "curated", 9)],
+        limit: 1,
+      }),
+    ).toThrow(/curated|limit/i);
+  });
+
+  it("counts duplicate curated IDs only once when enforcing the limit", () => {
+    const result = mergeTemplateSources({
+      official: [],
+      curated: [template(1, "curated", 10), template(1, "curated", 9)],
+      limit: 1,
+    });
+
+    expect(result.map((item) => item.workflow.id)).toEqual([1]);
+  });
 });
 
 describe("curated template snapshots", () => {
