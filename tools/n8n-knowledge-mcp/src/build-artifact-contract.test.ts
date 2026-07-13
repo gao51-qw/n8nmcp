@@ -9,6 +9,7 @@ describe("verified knowledge image contract", () => {
     resolve(process.cwd(), "../../.github/workflows/n8n-knowledge-mcp.yml"),
     "utf8",
   );
+  const statsEmitter = readFileSync(resolve(process.cwd(), "scripts/6-emit-stats.ts"), "utf8");
   const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8"));
 
   it("defines one exact official knowledge build followed by production verification in CI", () => {
@@ -37,7 +38,22 @@ describe("verified knowledge image contract", () => {
     expect(dockerfile).toContain(
       "COPY data/knowledge-quality-report.json ./data/knowledge-quality-report.json",
     );
-    expect(dockerfile.match(/RUN npm run [^\r\n]+/g)).toEqual(["RUN npm run build"]);
+    expect(() => assertDockerfileBuildIsCompilationOnly(dockerfile)).not.toThrow();
+    for (const unsafeInstruction of [
+      "RUN npx tsx scripts/4-build-db.ts",
+      "RUN node scripts/5-fetch-official-templates.js",
+      "RUN npm run build:knowledge",
+      "RUN npm run build:templates",
+      "RUN npm run parse:nodes",
+      "RUN npm run import:external-candidates",
+      "RUN curl -fsSL https://example.com/nodes.db -o data/nodes.db",
+      "RUN wget https://example.com/stats.json",
+      "RUN apt-get update && apt-get install -y --no-install-recommends curl && curl https://example.com/nodes.db",
+      "ADD https://example.com/nodes.db /app/data/nodes.db",
+    ]) {
+      expect(() => assertDockerfileBuildIsCompilationOnly(`${dockerfile}\n${unsafeInstruction}\n`))
+        .toThrow();
+    }
     expect(dockerfile).toContain("USER app");
     expect(dockerfile).toContain("HEALTHCHECK");
     expect(dockerfile).toContain('CMD ["node", "dist/src/server.js"]');
@@ -45,9 +61,7 @@ describe("verified knowledge image contract", () => {
   });
 
   it("excludes rebuild inputs and SQLite sidecars without excluding verified artifacts", () => {
-    const ignored = new Set(
-      dockerignore.split(/\r?\n/).map((line) => line.trim()).filter(Boolean),
-    );
+    const ignored = new Set(dockerignorePatterns(dockerignore));
     expect(ignored).toContain(".tmp");
     expect(ignored).toContain("data/curated-templates");
     expect(ignored).toContain("data/nodes.db-shm");
@@ -55,5 +69,101 @@ describe("verified knowledge image contract", () => {
     expect(ignored).not.toContain("data/nodes.db");
     expect(ignored).not.toContain("data/stats.json");
     expect(ignored).not.toContain("data/knowledge-quality-report.json");
+
+    const requiredArtifacts = [
+      "data/nodes.db",
+      "data/stats.json",
+      "data/knowledge-quality-report.json",
+    ];
+    expect(requiredArtifacts.filter((path) => isDockerIgnored(path, dockerignore))).toEqual([]);
+    for (const broadExclusion of ["data", "data/*", "data/**"]) {
+      expect(requiredArtifacts.every((path) => isDockerIgnored(path, broadExclusion))).toBe(true);
+      expect(
+        requiredArtifacts.every((path) => isDockerIgnored(path, `${dockerignore}\n${broadExclusion}`)),
+      ).toBe(true);
+      const reIncluded = [
+        dockerignore,
+        broadExclusion,
+        "!data/nodes.db",
+        "!data/stats.json",
+        "!data/knowledge-quality-report.json",
+      ].join("\n");
+      expect(requiredArtifacts.some((path) => isDockerIgnored(path, reIncluded))).toBe(false);
+    }
+  });
+
+  it("emits the categories object required by production stats validation", () => {
+    expect(statsEmitter).toMatch(/const categories\s*=/);
+    expect(statsEmitter).toMatch(/const stats\s*=\s*\{[\s\S]*\bcategories,/);
   });
 });
+
+function assertDockerfileBuildIsCompilationOnly(contents: string): void {
+  const instructions = logicalDockerInstructions(contents);
+  const allowedRun = [
+    /^RUN apt-get update && apt-get install -y --no-install-recommends .+$/,
+    /^RUN corepack enable && npm install --no-audit --no-fund$/,
+    /^RUN npm run build$/,
+  ];
+  for (const instruction of instructions) {
+    if (instruction.startsWith("ADD ")) {
+      throw new Error(`Docker ADD is forbidden: ${instruction}`);
+    }
+    if (instruction.startsWith("RUN ") &&
+      /\b(?:curl|wget|fetch)\b|scripts[\\/]|npm run (?:build:(?:db|nodes|templates|knowledge|sqlite)|parse|import|fetch)/i
+        .test(instruction)
+    ) {
+      throw new Error(`Docker build/network command is forbidden: ${instruction}`);
+    }
+    if (instruction.startsWith("RUN ") && !allowedRun.some((pattern) => pattern.test(instruction))) {
+      throw new Error(`Docker RUN is not dependency installation or TypeScript compilation: ${instruction}`);
+    }
+  }
+}
+
+function logicalDockerInstructions(contents: string): string[] {
+  const instructions: string[] = [];
+  let current = "";
+  for (const rawLine of contents.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line || line.startsWith("#")) continue;
+    current = `${current} ${line.replace(/\\$/, "")}`.trim();
+    if (!line.endsWith("\\")) {
+      instructions.push(current.replace(/\s+/g, " "));
+      current = "";
+    }
+  }
+  if (current) instructions.push(current.replace(/\s+/g, " "));
+  return instructions;
+}
+
+function dockerignorePatterns(contents: string): string[] {
+  return contents
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+}
+
+function isDockerIgnored(path: string, contents: string): boolean {
+  let ignored = false;
+  for (const rawPattern of dockerignorePatterns(contents)) {
+    const negated = rawPattern.startsWith("!");
+    const pattern = (negated ? rawPattern.slice(1) : rawPattern).replace(/^\//, "");
+    if (matchesDockerignorePattern(path, pattern)) ignored = !negated;
+  }
+  return ignored;
+}
+
+function matchesDockerignorePattern(path: string, pattern: string): boolean {
+  const normalized = pattern.replace(/\/$/, "");
+  if (!normalized.includes("*") && !normalized.includes("?")) {
+    return path === normalized || path.startsWith(`${normalized}/`);
+  }
+  const expression = normalized
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&")
+    .replace(/\*\*/g, "\u0000")
+    .replace(/\*/g, "[^/]*")
+    .replace(/\u0000/g, ".*")
+    .replace(/\?/g, "[^/]");
+  return new RegExp(`^${expression}$`).test(path);
+}

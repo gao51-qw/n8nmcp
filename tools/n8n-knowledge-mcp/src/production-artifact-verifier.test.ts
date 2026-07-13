@@ -13,6 +13,18 @@ type Report = {
   ftsCount: number;
 };
 
+type Stats = {
+  totalNodes: number;
+  coreNodes: number;
+  communityNodes: number;
+  communityPackages: number;
+  aiTools: number;
+  triggers: number;
+  templates: number;
+  categories: Record<string, number>;
+  generatedAt: string;
+};
+
 const temporaryDirectories: string[] = [];
 
 afterEach(() => {
@@ -68,6 +80,79 @@ describe("production knowledge artifact verifier", () => {
     expect(result.stderr).toContain("SHA-256 mismatch");
   });
 
+  it("rejects an empty stats object", () => {
+    const artifacts = createArtifacts();
+    writeFileSync(artifacts.statsPath, "{}\n", "utf8");
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("missing required field totalNodes");
+  });
+
+  it("rejects stats fields with the wrong types", () => {
+    const artifacts = createArtifacts();
+    writeStats(artifacts.statsPath, { ...validStats(), categories: [] });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("stats.categories must be an object");
+  });
+
+  it("rejects missing required stats fields", () => {
+    const artifacts = createArtifacts();
+    const { generatedAt: _, ...missingGeneratedAt } = validStats();
+    writeStats(artifacts.statsPath, missingGeneratedAt);
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("missing required field generatedAt");
+  });
+
+  it("rejects invalid stats timestamps", () => {
+    const artifacts = createArtifacts({}, { generatedAt: "not-a-timestamp" });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("stats.generatedAt must be a valid timestamp");
+  });
+
+  it("rejects unknown stats fields", () => {
+    const artifacts = createArtifacts();
+    writeStats(artifacts.statsPath, { ...validStats(), unexpected: 1 });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("stats contains unknown field unexpected");
+  });
+
+  it("rejects stats whose template count is stale", () => {
+    const artifacts = createArtifacts({}, { templates: 1 });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("stats.templates mismatch");
+  });
+
+  it("rejects stats whose node count is stale", () => {
+    const artifacts = createArtifacts({}, {
+      totalNodes: 1,
+      coreNodes: 1,
+      communityNodes: 0,
+      categories: { Core: 1 },
+    });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("stats.totalNodes mismatch");
+  });
+
   it("accepts an official report whose counts and expected hashes match", () => {
     const artifacts = createArtifacts();
     const result = runVerifier(artifacts, {
@@ -81,7 +166,10 @@ describe("production knowledge artifact verifier", () => {
   });
 });
 
-function createArtifacts(overrides: Partial<Report> = {}) {
+function createArtifacts(
+  reportOverrides: Partial<Report> = {},
+  statsOverrides: Partial<Stats> = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), "n8n-production-artifacts-"));
   temporaryDirectories.push(directory);
   const dbPath = join(directory, "nodes.db");
@@ -90,23 +178,43 @@ function createArtifacts(overrides: Partial<Report> = {}) {
 
   const db = new Database(dbPath);
   db.exec(`
+    CREATE TABLE nodes (id INTEGER PRIMARY KEY, category TEXT);
     CREATE TABLE templates (id INTEGER PRIMARY KEY);
     CREATE TABLE templates_fts (name TEXT);
+    INSERT INTO nodes (id, category) VALUES (1, 'Core'), (2, 'Core');
     INSERT INTO templates (id) VALUES (1), (2);
     INSERT INTO templates_fts (name) VALUES ('one'), ('two');
   `);
   db.close();
 
-  writeFileSync(statsPath, `${JSON.stringify({ totalNodes: 2 })}\n`, "utf8");
+  writeStats(statsPath, { ...validStats(), ...statsOverrides });
   writeFileSync(reportPath, `${JSON.stringify({
     mode: "official",
     ok: true,
     templateCount: 2,
     ftsCount: 2,
-    ...overrides,
+    ...reportOverrides,
   })}\n`, "utf8");
 
   return { dbPath, statsPath, reportPath };
+}
+
+function validStats(): Stats {
+  return {
+    totalNodes: 2,
+    coreNodes: 2,
+    communityNodes: 0,
+    communityPackages: 0,
+    aiTools: 1,
+    triggers: 1,
+    templates: 2,
+    categories: { Core: 2 },
+    generatedAt: "2026-07-13T12:00:00.000Z",
+  };
+}
+
+function writeStats(path: string, stats: unknown): void {
+  writeFileSync(path, `${JSON.stringify(stats)}\n`, "utf8");
 }
 
 function runVerifier(

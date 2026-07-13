@@ -15,6 +15,7 @@ export type ExpectedArtifactHashes = {
 };
 
 export type ProductionArtifactVerification = {
+  nodeCount: number;
   templateCount: number;
   ftsCount: number;
   hashes: Required<ExpectedArtifactHashes>;
@@ -34,10 +35,13 @@ export function verifyProductionArtifacts(
 
   const reportedTemplateCount = positiveSafeInteger(report.templateCount, "templateCount");
   const reportedFtsCount = positiveSafeInteger(report.ftsCount, "ftsCount");
+  const stats = readStats(paths.statsPath);
   const db = new Database(paths.dbPath, { readonly: true, fileMustExist: true });
+  let nodeCount: number;
   let templateCount: number;
   let ftsCount: number;
   try {
+    nodeCount = databaseCount(db, "nodes");
     templateCount = databaseCount(db, "templates");
     ftsCount = databaseCount(db, "templates_fts");
   } finally {
@@ -55,8 +59,13 @@ export function verifyProductionArtifacts(
   if (templateCount !== ftsCount) {
     throw new Error(`SQLite template/FTS count mismatch: templates=${templateCount}, templates_fts=${ftsCount}`);
   }
+  if (stats.templates !== templateCount) {
+    throw new Error(`stats.templates mismatch: stats=${stats.templates}, sqlite=${templateCount}`);
+  }
+  if (stats.totalNodes !== nodeCount) {
+    throw new Error(`stats.totalNodes mismatch: stats=${stats.totalNodes}, sqlite=${nodeCount}`);
+  }
 
-  readJsonFile(paths.statsPath, "stats");
   const hashes = {
     nodesDb: sha256(paths.dbPath),
     stats: sha256(paths.statsPath),
@@ -70,7 +79,102 @@ export function verifyProductionArtifacts(
     expectedHashes.qualityReport,
   );
 
-  return { templateCount, ftsCount, hashes };
+  return { nodeCount, templateCount, ftsCount, hashes };
+}
+
+type ProductionStats = {
+  totalNodes: number;
+  coreNodes: number;
+  communityNodes: number;
+  communityPackages: number;
+  aiTools: number;
+  triggers: number;
+  templates: number;
+  categories: Record<string, number>;
+  generatedAt: string;
+};
+
+const requiredStatsCountFields = [
+  "totalNodes",
+  "coreNodes",
+  "communityNodes",
+  "communityPackages",
+  "aiTools",
+  "triggers",
+  "templates",
+] as const;
+
+const optionalStatsCountFields = [
+  "externalCandidateNodes",
+  "externalCommunityCandidates",
+  "externalVerifiedCommunityCandidates",
+  "externalToolVariantCandidates",
+  "verifiedExternalNodes",
+  "verifiedExternalCommunityNodes",
+  "verifiedExternalToolVariantNodes",
+] as const;
+
+function readStats(path: string): ProductionStats {
+  const stats = readJsonFile(path, "stats");
+  const knownFields = new Set<string>([
+    ...requiredStatsCountFields,
+    ...optionalStatsCountFields,
+    "categories",
+    "generatedAt",
+  ]);
+  for (const field of Object.keys(stats)) {
+    if (!knownFields.has(field)) throw new Error(`stats contains unknown field ${field}`);
+  }
+  for (const field of [...requiredStatsCountFields, "categories", "generatedAt"] as const) {
+    if (!Object.hasOwn(stats, field)) throw new Error(`stats missing required field ${field}`);
+  }
+  for (const field of requiredStatsCountFields) {
+    nonnegativeSafeInteger(stats[field], `stats.${field}`);
+  }
+  for (const field of optionalStatsCountFields) {
+    if (Object.hasOwn(stats, field)) nonnegativeSafeInteger(stats[field], `stats.${field}`);
+  }
+
+  if (typeof stats.categories !== "object" || stats.categories === null || Array.isArray(stats.categories)) {
+    throw new Error("stats.categories must be an object");
+  }
+  const categories: Record<string, number> = {};
+  for (const [category, count] of Object.entries(stats.categories)) {
+    if (category.trim().length === 0) throw new Error("stats.categories keys must be non-empty");
+    categories[category] = nonnegativeSafeInteger(count, `stats.categories.${category}`);
+  }
+
+  if (typeof stats.generatedAt !== "string" || !Number.isFinite(Date.parse(stats.generatedAt))) {
+    throw new Error("stats.generatedAt must be a valid timestamp");
+  }
+
+  const totalNodes = Number(stats.totalNodes);
+  const coreNodes = Number(stats.coreNodes);
+  const communityNodes = Number(stats.communityNodes);
+  if (coreNodes + communityNodes !== totalNodes) {
+    throw new Error(
+      `stats core/community count mismatch: core=${coreNodes}, community=${communityNodes}, total=${totalNodes}`,
+    );
+  }
+  const categoryTotal = Object.values(categories).reduce((sum, count) => sum + count, 0);
+  if (categoryTotal !== totalNodes) {
+    throw new Error(`stats.categories count mismatch: categories=${categoryTotal}, totalNodes=${totalNodes}`);
+  }
+  if (Number(stats.aiTools) > totalNodes || Number(stats.triggers) > totalNodes) {
+    throw new Error("stats aiTools/triggers counts must not exceed totalNodes");
+  }
+
+  return {
+    totalNodes,
+    coreNodes,
+    communityNodes,
+    communityPackages: Number(stats.communityPackages),
+    aiTools: Number(stats.aiTools),
+    triggers: Number(stats.triggers),
+    templates: Number(stats.templates),
+    categories,
+    generatedAt: stats.generatedAt,
+  };
 }
 
 function readQualityReport(path: string): Record<string, unknown> {
@@ -97,7 +201,14 @@ function positiveSafeInteger(value: unknown, field: string): number {
   return Number(value);
 }
 
-function databaseCount(db: Database.Database, table: "templates" | "templates_fts"): number {
+function nonnegativeSafeInteger(value: unknown, field: string): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error(`${field} must be a nonnegative safe integer`);
+  }
+  return Number(value);
+}
+
+function databaseCount(db: Database.Database, table: "nodes" | "templates" | "templates_fts"): number {
   const value = Number((db.prepare(`SELECT COUNT(*) count FROM ${table}`).get() as { count: number }).count);
   return positiveSafeInteger(value, `SQLite ${table} count`);
 }

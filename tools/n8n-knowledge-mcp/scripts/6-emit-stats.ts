@@ -51,6 +51,19 @@ async function main() {
       .get(...OFFICIAL_PACKAGES),
   );
 
+  const categoryRows = db
+    .prepare(
+      `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') category,
+              COUNT(*) count
+         FROM nodes
+        GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')
+        ORDER BY category`,
+    )
+    .all() as Array<{ category: string; count: number }>;
+  const categories = Object.fromEntries(
+    categoryRows.map((row) => [row.category, Number(row.count)]),
+  );
+
   db.close();
 
   const stats = {
@@ -61,6 +74,7 @@ async function main() {
     aiTools,
     triggers,
     templates,
+    categories,
     generatedAt: new Date().toISOString(),
   };
 
