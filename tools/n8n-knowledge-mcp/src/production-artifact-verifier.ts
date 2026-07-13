@@ -21,6 +21,8 @@ export type ProductionArtifactVerification = {
   hashes: Required<ExpectedArtifactHashes>;
 };
 
+const OFFICIAL_PACKAGES = ["n8n-nodes-base", "@n8n/n8n-nodes-langchain"] as const;
+
 export function verifyProductionArtifacts(
   paths: ProductionArtifactPaths,
   expectedHashes: ExpectedArtifactHashes = {},
@@ -37,16 +39,17 @@ export function verifyProductionArtifacts(
   const reportedFtsCount = positiveSafeInteger(report.ftsCount, "ftsCount");
   const stats = readStats(paths.statsPath);
   const db = new Database(paths.dbPath, { readonly: true, fileMustExist: true });
-  let nodeCount: number;
-  let templateCount: number;
+  let databaseStats: DatabaseDerivedStats;
   let ftsCount: number;
   try {
-    nodeCount = databaseCount(db, "nodes");
-    templateCount = databaseCount(db, "templates");
+    databaseStats = readDatabaseDerivedStats(db);
     ftsCount = databaseCount(db, "templates_fts");
   } finally {
     db.close();
   }
+
+  const nodeCount = databaseStats.totalNodes;
+  const templateCount = databaseStats.templates;
 
   if (reportedTemplateCount !== templateCount) {
     throw new Error(
@@ -59,11 +62,17 @@ export function verifyProductionArtifacts(
   if (templateCount !== ftsCount) {
     throw new Error(`SQLite template/FTS count mismatch: templates=${templateCount}, templates_fts=${ftsCount}`);
   }
-  if (stats.templates !== templateCount) {
-    throw new Error(`stats.templates mismatch: stats=${stats.templates}, sqlite=${templateCount}`);
+  for (const field of databaseDerivedCountFields) {
+    if (stats[field] !== databaseStats[field]) {
+      throw new Error(
+        `stats.${field} mismatch: stats=${stats[field]}, sqlite=${databaseStats[field]}`,
+      );
+    }
   }
-  if (stats.totalNodes !== nodeCount) {
-    throw new Error(`stats.totalNodes mismatch: stats=${stats.totalNodes}, sqlite=${nodeCount}`);
+  if (!equalCategoryCounts(stats.categories, databaseStats.categories)) {
+    throw new Error(
+      `stats.categories mismatch: stats=${JSON.stringify(stats.categories)}, sqlite=${JSON.stringify(databaseStats.categories)}`,
+    );
   }
 
   const hashes = {
@@ -94,6 +103,8 @@ type ProductionStats = {
   generatedAt: string;
 };
 
+type DatabaseDerivedStats = Omit<ProductionStats, "generatedAt">;
+
 const requiredStatsCountFields = [
   "totalNodes",
   "coreNodes",
@@ -103,6 +114,8 @@ const requiredStatsCountFields = [
   "triggers",
   "templates",
 ] as const;
+
+const databaseDerivedCountFields = requiredStatsCountFields;
 
 const optionalStatsCountFields = [
   "externalCandidateNodes",
@@ -149,25 +162,10 @@ function readStats(path: string): ProductionStats {
   }
 
   const totalNodes = Number(stats.totalNodes);
-  const coreNodes = Number(stats.coreNodes);
-  const communityNodes = Number(stats.communityNodes);
-  if (coreNodes + communityNodes !== totalNodes) {
-    throw new Error(
-      `stats core/community count mismatch: core=${coreNodes}, community=${communityNodes}, total=${totalNodes}`,
-    );
-  }
-  const categoryTotal = Object.values(categories).reduce((sum, count) => sum + count, 0);
-  if (categoryTotal !== totalNodes) {
-    throw new Error(`stats.categories count mismatch: categories=${categoryTotal}, totalNodes=${totalNodes}`);
-  }
-  if (Number(stats.aiTools) > totalNodes || Number(stats.triggers) > totalNodes) {
-    throw new Error("stats aiTools/triggers counts must not exceed totalNodes");
-  }
-
   return {
     totalNodes,
-    coreNodes,
-    communityNodes,
+    coreNodes: Number(stats.coreNodes),
+    communityNodes: Number(stats.communityNodes),
     communityPackages: Number(stats.communityPackages),
     aiTools: Number(stats.aiTools),
     triggers: Number(stats.triggers),
@@ -211,6 +209,64 @@ function nonnegativeSafeInteger(value: unknown, field: string): number {
 function databaseCount(db: Database.Database, table: "nodes" | "templates" | "templates_fts"): number {
   const value = Number((db.prepare(`SELECT COUNT(*) count FROM ${table}`).get() as { count: number }).count);
   return positiveSafeInteger(value, `SQLite ${table} count`);
+}
+
+function readDatabaseDerivedStats(db: Database.Database): DatabaseDerivedStats {
+  const placeholders = OFFICIAL_PACKAGES.map(() => "?").join(",");
+  const count = (sql: string, label: string, ...params: string[]) =>
+    nonnegativeSafeInteger(
+      (db.prepare(sql).get(...params) as { count: number }).count,
+      `SQLite ${label}`,
+    );
+  const categoryRows = db
+    .prepare(
+      `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') category,
+              COUNT(*) count
+         FROM nodes
+        GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')
+        ORDER BY category`,
+    )
+    .all() as Array<{ category: string; count: number }>;
+
+  return {
+    totalNodes: databaseCount(db, "nodes"),
+    coreNodes: count(
+      `SELECT COUNT(*) count FROM nodes WHERE package_name IN (${placeholders})`,
+      "coreNodes count",
+      ...OFFICIAL_PACKAGES,
+    ),
+    communityNodes: count(
+      `SELECT COUNT(*) count FROM nodes WHERE package_name NOT IN (${placeholders})`,
+      "communityNodes count",
+      ...OFFICIAL_PACKAGES,
+    ),
+    communityPackages: count(
+      `SELECT COUNT(DISTINCT package_name) count FROM nodes WHERE package_name NOT IN (${placeholders})`,
+      "communityPackages count",
+      ...OFFICIAL_PACKAGES,
+    ),
+    aiTools: count("SELECT COUNT(*) count FROM nodes WHERE is_ai_tool = 1", "aiTools count"),
+    triggers: count("SELECT COUNT(*) count FROM nodes WHERE is_trigger = 1", "triggers count"),
+    templates: databaseCount(db, "templates"),
+    categories: Object.fromEntries(
+      categoryRows.map(({ category, count: categoryCount }) => [
+        category,
+        nonnegativeSafeInteger(categoryCount, `SQLite categories.${category}`),
+      ]),
+    ),
+  };
+}
+
+function equalCategoryCounts(
+  statsCategories: Record<string, number>,
+  databaseCategories: Record<string, number>,
+): boolean {
+  const statsKeys = Object.keys(statsCategories);
+  const databaseKeys = Object.keys(databaseCategories);
+  return (
+    statsKeys.length === databaseKeys.length &&
+    statsKeys.every((category) => statsCategories[category] === databaseCategories[category])
+  );
 }
 
 function sha256(path: string): string {

@@ -130,6 +130,24 @@ describe("production knowledge artifact verifier", () => {
     expect(result.stderr).toContain("stats contains unknown field unexpected");
   });
 
+  it("accepts the known optional external-candidate counters", () => {
+    const artifacts = createArtifacts();
+    writeStats(artifacts.statsPath, {
+      ...validStats(),
+      externalCandidateNodes: 3,
+      externalCommunityCandidates: 2,
+      externalVerifiedCommunityCandidates: 1,
+      externalToolVariantCandidates: 1,
+      verifiedExternalNodes: 2,
+      verifiedExternalCommunityNodes: 1,
+      verifiedExternalToolVariantNodes: 1,
+    });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).toBe(0);
+  });
+
   it("rejects stats whose template count is stale", () => {
     const artifacts = createArtifacts({}, { templates: 1 });
 
@@ -141,16 +159,67 @@ describe("production knowledge artifact verifier", () => {
 
   it("rejects stats whose node count is stale", () => {
     const artifacts = createArtifacts({}, {
-      totalNodes: 1,
-      coreNodes: 1,
+      totalNodes: 2,
+      coreNodes: 2,
       communityNodes: 0,
-      categories: { Core: 1 },
+      categories: { AI: 1, Core: 1 },
     });
 
     const result = runVerifier(artifacts);
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("stats.totalNodes mismatch");
+  });
+
+  it.each([
+    {
+      field: "coreNodes",
+      overrides: { coreNodes: 1, communityNodes: 2 },
+    },
+    {
+      field: "communityNodes",
+      overrides: { communityNodes: 0 },
+    },
+    {
+      field: "communityPackages",
+      overrides: { communityPackages: 0 },
+    },
+    {
+      field: "aiTools",
+      overrides: { aiTools: 0 },
+    },
+    {
+      field: "triggers",
+      overrides: { triggers: 0 },
+    },
+    {
+      field: "categories",
+      overrides: { categories: { Forged: 3 } },
+    },
+  ] satisfies Array<{ field: keyof Stats; overrides: Partial<Stats> }>)(
+    "rejects stats.$field when it differs from SQLite",
+    ({ field, overrides }) => {
+      const artifacts = createArtifacts({}, overrides);
+
+      const result = runVerifier(artifacts);
+
+      expect(result.status).not.toBe(0);
+      expect(result.stderr).toContain(`stats.${field} mismatch`);
+    },
+  );
+
+  it("rejects the reviewer reproduction with forged derived stats", () => {
+    const artifacts = createArtifacts({}, {
+      coreNodes: 0,
+      communityNodes: 3,
+      communityPackages: 0,
+      categories: { Forged: 3 },
+    });
+
+    const result = runVerifier(artifacts);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("stats.coreNodes mismatch");
   });
 
   it("accepts an official report whose counts and expected hashes match", () => {
@@ -178,10 +247,19 @@ function createArtifacts(
 
   const db = new Database(dbPath);
   db.exec(`
-    CREATE TABLE nodes (id INTEGER PRIMARY KEY, category TEXT);
+    CREATE TABLE nodes (
+      id INTEGER PRIMARY KEY,
+      package_name TEXT NOT NULL,
+      category TEXT,
+      is_ai_tool INTEGER NOT NULL DEFAULT 0,
+      is_trigger INTEGER NOT NULL DEFAULT 0
+    );
     CREATE TABLE templates (id INTEGER PRIMARY KEY);
     CREATE TABLE templates_fts (name TEXT);
-    INSERT INTO nodes (id, category) VALUES (1, 'Core'), (2, 'Core');
+    INSERT INTO nodes (id, package_name, category, is_ai_tool, is_trigger) VALUES
+      (1, 'n8n-nodes-base', 'Core', 0, 1),
+      (2, '@n8n/n8n-nodes-langchain', 'AI', 1, 0),
+      (3, 'n8n-nodes-community-demo', 'Trigger', 0, 1);
     INSERT INTO templates (id) VALUES (1), (2);
     INSERT INTO templates_fts (name) VALUES ('one'), ('two');
   `);
@@ -201,14 +279,14 @@ function createArtifacts(
 
 function validStats(): Stats {
   return {
-    totalNodes: 2,
+    totalNodes: 3,
     coreNodes: 2,
-    communityNodes: 0,
-    communityPackages: 0,
+    communityNodes: 1,
+    communityPackages: 1,
     aiTools: 1,
-    triggers: 1,
+    triggers: 2,
     templates: 2,
-    categories: { Core: 2 },
+    categories: { AI: 1, Core: 1, Trigger: 1 },
     generatedAt: "2026-07-13T12:00:00.000Z",
   };
 }
