@@ -14,6 +14,7 @@
     "emit:stats": "tsx scripts/6-emit-stats.ts",
     "verify:knowledge": "tsx scripts/9-verify-knowledge-db.ts --mode=official",
     "verify:knowledge:fallback": "tsx scripts/9-verify-knowledge-db.ts --mode=fallback",
+    "verify:production-artifacts": "tsx scripts/10-verify-production-artifacts.ts",
     "build:knowledge": "npm run build:nodes && npm run fetch:templates && npm run build:templates && npm run emit:stats && npm run verify:knowledge",
     "build:db": "npm run build:nodes && npm run emit:stats",
     "verify:knowledge-db": "tsx scripts/9-verify-knowledge-db.ts",
