@@ -5,7 +5,6 @@ import { resolve } from "node:path";
 const DB_PATH = process.env.DB_PATH ?? resolve(process.cwd(), "data/nodes.db");
 
 export const db = new Database(DB_PATH, { readonly: true, fileMustExist: true });
-db.pragma("journal_mode = WAL");
 db.pragma("query_only = true");
 
 export type NodeRow = {
@@ -33,5 +32,14 @@ export function statsCount() {
     ai_tools: (db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_ai_tool=1").get() as { c: number }).c,
     triggers: (db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_trigger=1").get() as { c: number }).c,
     webhooks: (db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_webhook=1").get() as { c: number }).c,
+    templates: safeCount("SELECT COUNT(*) c FROM templates"),
   };
+}
+
+function safeCount(sql: string): number {
+  try {
+    return (db.prepare(sql).get() as { c: number }).c;
+  } catch {
+    return 0;
+  }
 }

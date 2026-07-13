@@ -61,6 +61,7 @@ async function main() {
   db.exec(`
     DROP TABLE IF EXISTS nodes;
     DROP TABLE IF EXISTS nodes_fts;
+    DROP TABLE IF EXISTS templates_fts;
     DROP TABLE IF EXISTS templates;
 
     CREATE TABLE nodes (
@@ -116,7 +117,7 @@ async function main() {
 
     CREATE VIRTUAL TABLE templates_fts USING fts5(
       name, description, categories, node_types,
-      content='templates', content_rowid='id',
+      content='', contentless_delete=1,
       tokenize='unicode61'
     );
   `);

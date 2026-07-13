@@ -25,6 +25,44 @@ function ftsEscape(q: string): string {
     .join(" OR ");
 }
 
+export function searchWorkflowTemplates(input: { query: string; limit?: number }) {
+  const limit = input.limit ?? 10;
+  const rows = db
+    .prepare(
+      `SELECT t.id, t.name, t.description, t.views, t.node_count
+         FROM templates_fts f JOIN templates t ON t.id = f.rowid
+        WHERE templates_fts MATCH ?
+        ORDER BY rank, t.views DESC LIMIT ?`,
+    )
+    .all(ftsEscape(input.query), limit);
+  return { count: rows.length, templates: rows };
+}
+
+export function getWorkflowTemplateById(id: number) {
+  const row = db.prepare("SELECT * FROM templates WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    categories: JSON.parse(String(row.categories_json || "[]")),
+    node_types: JSON.parse(String(row.node_types_json || "[]")),
+    author: {
+      name: row.author_name,
+      username: row.author_username,
+      avatar: row.author_avatar,
+    },
+    views: row.views,
+    node_count: row.node_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    source_url: row.source_url,
+    workflow: row.workflow_json ? JSON.parse(String(row.workflow_json)) : null,
+  };
+}
+
 export function registerAllTools(server: McpServer) {
   // ───────────────────── Discovery ─────────────────────
 
@@ -336,15 +374,7 @@ export function registerAllTools(server: McpServer) {
     "Alias for search_workflow_templates.",
     { query: z.string().min(1), limit: z.number().int().min(1).max(50).default(10) },
     async ({ query, limit }) => {
-      const fts = ftsEscape(query);
-      const rows = db
-        .prepare(
-          `SELECT t.id, t.name, t.description, t.views, t.node_count
-             FROM templates_fts f JOIN templates t ON t.id = f.rowid
-            WHERE templates_fts MATCH ? ORDER BY rank, t.views DESC LIMIT ?`,
-        )
-        .all(fts, limit);
-      return text({ count: rows.length, templates: rows });
+      return text(searchWorkflowTemplates({ query, limit }));
     },
   );
 
@@ -353,22 +383,8 @@ export function registerAllTools(server: McpServer) {
     "Fetch a template's full importable n8n workflow JSON plus metadata.",
     { id: z.number().int() },
     async ({ id }) => {
-      const r = db.prepare("SELECT * FROM templates WHERE id = ?").get(id) as any;
-      if (!r) return text({ error: `template not found: ${id}` });
-      return text({
-        id: r.id,
-        name: r.name,
-        description: r.description,
-        categories: JSON.parse(r.categories_json || "[]"),
-        node_types: JSON.parse(r.node_types_json || "[]"),
-        author: { name: r.author_name, username: r.author_username, avatar: r.author_avatar },
-        views: r.views,
-        node_count: r.node_count,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-        source_url: r.source_url,
-        workflow: r.workflow_json ? JSON.parse(r.workflow_json) : null,
-      });
+      const template = getWorkflowTemplateById(id);
+      return text(template ?? { error: `template not found: ${id}` });
     },
   );
 

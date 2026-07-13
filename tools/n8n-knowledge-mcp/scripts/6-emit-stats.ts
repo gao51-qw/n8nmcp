@@ -15,6 +15,14 @@ function pickInt(row: unknown): number {
   return Number((row as { c?: number } | undefined)?.c ?? 0);
 }
 
+function safeCount(db: Database.Database, sql: string): number {
+  try {
+    return pickInt(db.prepare(sql).get());
+  } catch {
+    return 0;
+  }
+}
+
 async function main() {
   const db = new Database(DB_PATH, { readonly: true });
 
@@ -25,6 +33,7 @@ async function main() {
   const triggers = pickInt(
     db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_trigger = 1").get(),
   );
+  const templates = safeCount(db, "SELECT COUNT(*) c FROM templates");
 
   const placeholders = [...OFFICIAL_PACKAGES].map(() => "?").join(",");
   const coreNodes = pickInt(
@@ -51,6 +60,7 @@ async function main() {
     communityPackages,
     aiTools,
     triggers,
+    templates,
     generatedAt: new Date().toISOString(),
   };
 
@@ -61,7 +71,7 @@ async function main() {
   await writeFile(REPO_OUT, json);
 
   console.log(
-    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools}`,
+    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools} templates=${templates}`,
   );
   console.log(`[stats] wrote ${LOCAL_OUT}`);
   console.log(`[stats] wrote ${REPO_OUT}`);
