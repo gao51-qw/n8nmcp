@@ -213,14 +213,73 @@ git commit -m "fix(knowledge): keep production builds official-only"
 
 ---
 
-### Task 3: Collect Fresh Release Evidence Without Overclaiming
+### Task 3: Synchronize the Production Lockfile on Linux
+
+**Files:**
+- Modify: `tools/n8n-knowledge-mcp/package-lock.json`
+
+**Interfaces:**
+- Consumes: the unchanged `tools/n8n-knowledge-mcp/package.json` dependency graph.
+- Produces: a lockfile accepted by `npm ci` under `node:20-bookworm` with npm 10.8.2.
+
+- [ ] **Step 1: Preserve the clean Linux RED evidence**
+
+Use the Task 3 evidence report from the first release attempt. A clean `git archive HEAD` in `node:20-bookworm` ran:
+
+```bash
+npm ci --no-audit --no-fund
+```
+
+Expected observed RED: exit 1 with missing lock entries `@emnapi/core@1.11.2` and `@emnapi/runtime@1.11.2`.
+
+- [ ] **Step 2: Regenerate only the lockfile with the production Node/npm family**
+
+From the repository root in PowerShell:
+
+```powershell
+$packageDir=(Resolve-Path 'tools/n8n-knowledge-mcp').Path
+docker run --rm --mount "type=bind,src=$packageDir,dst=/workspace" -w /workspace node:20-bookworm npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+```
+
+Expected: exit 0; only `tools/n8n-knowledge-mcp/package-lock.json` changes.
+
+- [ ] **Step 3: Verify GREEN in a fresh Linux volume**
+
+Create a disposable `node:20-bookworm` container with a fresh named volume mounted at `/workspace`, copy only the updated `package.json` and `package-lock.json` into it with `docker cp`, and start it with:
+
+```bash
+npm ci --ignore-scripts --no-audit --no-fund
+```
+
+Expected: exit 0. Remove the test container and named volume after the run and verify both are absent.
+
+- [ ] **Step 4: Verify package tests and TypeScript**
+
+```powershell
+npx --yes node@20 ./node_modules/vitest/vitest.mjs run --maxWorkers=1
+npx --yes node@20 ./node_modules/typescript/bin/tsc -p tsconfig.json
+git diff --check -- tools/n8n-knowledge-mcp/package-lock.json
+```
+
+Expected: complete Knowledge suite and TypeScript exit 0; lockfile diff check exits 0.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add -- tools/n8n-knowledge-mcp/package-lock.json
+git commit -m "fix(knowledge): synchronize production lockfile"
+```
+
+---
+
+### Task 4: Collect Fresh Release Evidence Without Overclaiming
 
 **Files:**
 - Create: `.superpowers/sdd/knowledge-release-evidence.md` (scratch evidence; do not commit).
 - Modify: `src/data/n8n-stats.json` only through the verified build command if the online build succeeds.
 
 **Interfaces:**
-- Consumes: Task 2 official-only `build:knowledge`.
+- Consumes: Task 2 official-only `build:knowledge` and Task 3 Linux-clean `npm ci` lockfile.
 - Produces: fresh evidence separating local, online build, Docker smoke, GHCR, and VPS status.
 
 - [ ] **Step 1: Run the official online build under Node 20**
