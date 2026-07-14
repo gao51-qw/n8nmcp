@@ -115,3 +115,44 @@ nginx 日志：`/var/log/nginx/{access,error}.log`。
 - Lovable 预览 / 编辑器仍然可用，依然走 Cloudflare Worker（`vite.config.ts`）。
 - 生产正式访问走 VPS（`vite.config.vps.ts` + `Dockerfile`）。
 - **不要再点 Lovable 的 Publish 当作正式发布**——以 GHCR 镜像为准。
+
+## Automated Knowledge Refresh
+
+The `build-and-publish` GitHub Actions workflow refreshes the knowledge image
+every Monday at 02:00 UTC. It builds one verified database snapshot, runs the
+local image with a temporary bearer token, and checks that authenticated
+`/health` reports the template count from `knowledge-quality-report.json`.
+Only that smoke-tested local image is tagged and pushed, first as immutable
+`YYYYMMDD-<run-id>` and then as `latest`.
+
+Configure these six repository Actions secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `VPS_HOST` | VPS hostname or IP address. |
+| `VPS_PORT` | SSH port. |
+| `VPS_USER` | Restricted deployment account. |
+| `VPS_SSH_KEY` | Private Ed25519 key for that account. |
+| `VPS_KNOWN_HOSTS` | Reviewed OpenSSH known-hosts entry for the VPS. |
+| `DEPLOY_PATH` | Absolute directory containing `.env` and `docker-compose.yml`, for example `/opt/n8nworkflow`. |
+
+The deployment account needs read/write access to `DEPLOY_PATH`, permission to
+replace `.env`, and permission to run Docker Compose without an interactive
+`sudo` prompt (normally by using rootless Docker or membership in the `docker`
+group). The VPS Docker client must already be authenticated to GHCR with
+`read:packages` access when the package is private. Keep `.env` readable only by
+the deployment account because it contains `MCP_AUTH_TOKEN`.
+
+If the official template fetch fails, CI builds and verifies the curated
+fallback, uploads `degraded-knowledge-fallback` containing `nodes.db`,
+`stats.json`, and `knowledge-quality-report.json`, and then fails explicitly.
+That fallback is diagnostic only: it never updates an image tag and is never
+deployed.
+
+For an on-demand refresh, open GitHub Actions, select `build-and-publish`, choose
+**Run workflow**, select the intended branch, and confirm the run. A successful
+run copies `update-knowledge.sh` into `DEPLOY_PATH` and invokes it with the
+immutable image tag and verified template count. The script changes only the
+`mcp` service. If the new container or authenticated count check fails, it
+restores the previous `MCP_IMAGE_TAG`, recreates only `mcp`, verifies rollback
+health, and leaves the failed deployment non-zero for CI visibility.

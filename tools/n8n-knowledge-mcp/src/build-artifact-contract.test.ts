@@ -12,24 +12,53 @@ describe("verified knowledge image contract", () => {
   const statsEmitter = readFileSync(resolve(process.cwd(), "scripts/6-emit-stats.ts"), "utf8");
   const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8"));
 
-  it("defines one exact official knowledge build followed by production verification in CI", () => {
+  it("builds nodes once and gates production verification and Docker on official success", () => {
     expect(pkg.scripts["build:knowledge"]).toBe(
       "npm run build:nodes && npm run fetch:templates && npm run build:templates && npm run emit:stats && npm run verify:knowledge",
     );
     expect(pkg.scripts["verify:production-artifacts"]).toBe(
       "tsx scripts/10-verify-production-artifacts.ts",
     );
-    expect(workflow.match(/npm run build:knowledge/g)).toHaveLength(1);
+    expect([...workflow.matchAll(/npm run build:nodes/g)]).toHaveLength(1);
     expect(workflow.match(/npm run verify:production-artifacts/g)).toHaveLength(1);
     expect(workflow).not.toContain("npm run build:db");
-    expect(workflow).not.toContain("verify:knowledge:fallback");
 
-    const buildKnowledgeAt = workflow.indexOf("npm run build:knowledge");
+    const buildNodesAt = workflow.indexOf("npm run build:nodes");
+    const officialBuildAt = workflow.indexOf("name: Build and verify official template database");
+    const fallbackBuildAt = workflow.indexOf("name: Build curated fallback database");
+    const fallbackUploadAt = workflow.indexOf("name: Upload degraded fallback");
+    const fallbackStopAt = workflow.indexOf("name: Stop after degraded fallback");
+    const verifyStepAt = workflow.indexOf("name: Verify production artifacts");
     const verifyArtifactsAt = workflow.indexOf("npm run verify:production-artifacts");
-    const dockerBuildAt = workflow.indexOf("docker/build-push-action");
-    expect(buildKnowledgeAt).toBeGreaterThan(-1);
-    expect(verifyArtifactsAt).toBeGreaterThan(buildKnowledgeAt);
+    const dockerBuildAt = workflow.indexOf("name: Build local Linux image");
+    const smokeAt = workflow.indexOf("name: Smoke local image");
+    expect(buildNodesAt).toBeGreaterThan(-1);
+    expect(officialBuildAt).toBeGreaterThan(buildNodesAt);
+    expect(fallbackBuildAt).toBeGreaterThan(officialBuildAt);
+    expect(fallbackUploadAt).toBeGreaterThan(fallbackBuildAt);
+    expect(fallbackStopAt).toBeGreaterThan(fallbackUploadAt);
+    expect(verifyArtifactsAt).toBeGreaterThan(fallbackStopAt);
     expect(dockerBuildAt).toBeGreaterThan(verifyArtifactsAt);
+
+    expect(workflow.slice(officialBuildAt, fallbackBuildAt)).toContain(
+      "if: steps.official.outcome == 'success'",
+    );
+    expect(workflow.slice(fallbackBuildAt, fallbackUploadAt)).toContain(
+      "if: steps.official.outcome != 'success'",
+    );
+    expect(workflow.slice(fallbackUploadAt, fallbackStopAt)).toContain(
+      "if: steps.official.outcome != 'success'",
+    );
+    expect(workflow.slice(fallbackStopAt, verifyArtifactsAt)).toContain("run: exit 1");
+    expect(workflow.slice(fallbackStopAt, verifyArtifactsAt)).toContain(
+      "if: steps.official.outcome != 'success'",
+    );
+    expect(workflow.slice(verifyStepAt, verifyArtifactsAt)).toContain(
+      "if: steps.official.outcome == 'success'",
+    );
+    expect(workflow.slice(dockerBuildAt, smokeAt)).toContain(
+      "if: steps.official.outcome == 'success'",
+    );
   });
 
   it("copies every verified artifact and only compiles application code in Docker", () => {
