@@ -193,9 +193,20 @@ function validateStoredWorkflow(id: number, serialized: string | null, errors: s
           continue;
         }
         for (const target of branch) {
-          if (!isRecord(target) || typeof target.node !== "string") {
+          if (!isRecord(target)
+            || typeof target.node !== "string"
+            || target.node.trim().length === 0) {
             errors.push(`Template ${id} has a malformed connection target for ${source}`);
-          } else if (!nodeNames.has(target.node)) {
+            continue;
+          }
+          if (typeof target.type !== "string"
+            || target.type.trim().length === 0
+            || typeof target.index !== "number"
+            || !Number.isInteger(target.index)
+            || target.index < 0) {
+            errors.push(`Template ${id} has a malformed connection target for ${source}`);
+          }
+          if (!nodeNames.has(target.node)) {
             errors.push(`Template ${id} connection target is stale: ${target.node}`);
           }
         }

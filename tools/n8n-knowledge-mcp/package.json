@@ -17,11 +17,14 @@
     "verify:production-artifacts": "tsx scripts/10-verify-production-artifacts.ts",
     "build:knowledge": "npm run build:nodes && npm run fetch:templates && npm run build:templates && npm run emit:stats && npm run verify:knowledge",
     "build:db": "npm run build:nodes && npm run emit:stats",
+    "build:db:with-external": "tsx scripts/1-fetch-packages.ts && tsx scripts/2-parse-nodes.ts && tsx scripts/3-parse-docs.ts && tsx scripts/4-build-db.ts && tsx scripts/7-import-external-candidates.ts && tsx scripts/8-verify-external-nodes.ts && tsx scripts/6-emit-stats.ts",
     "verify:knowledge-db": "tsx scripts/9-verify-knowledge-db.ts",
     "fetch": "tsx scripts/1-fetch-packages.ts",
     "parse:nodes": "tsx scripts/2-parse-nodes.ts",
     "parse:docs": "tsx scripts/3-parse-docs.ts",
     "build:sqlite": "tsx scripts/4-build-db.ts",
+    "import:external-candidates": "tsx scripts/7-import-external-candidates.ts",
+    "verify:external-nodes": "tsx scripts/8-verify-external-nodes.ts",
     "refresh:curated": "tsx scripts/refresh-curated-templates.ts"
   },
   "dependencies": {

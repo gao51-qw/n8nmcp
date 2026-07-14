@@ -138,6 +138,6 @@ describe("curated template snapshots", () => {
       expect(JSON.stringify(snapshot)).not.toMatch(prohibitedNodeTypes);
     }
 
-    expect(descriptiveMatchCount).toBe(4);
+    expect(descriptiveMatchCount).toBe(2);
   });
 });

@@ -321,63 +321,6 @@
           "typeVersion": 1
         },
         {
-          "id": "0fec2702-e2c9-4090-a327-f1d723b144b6",
-          "name": "4. The Customer (GET with Headers/Auth)",
-          "type": "n8n-nodes-base.httpRequest",
-          "notes": "© 2025 Lucas Peyrin",
-          "position": [
-            1312,
-            2608
-          ],
-          "parameters": {
-            "url": "={{ $json.base_url }}/tutorial/api/secret-dish",
-            "options": {},
-            "sendHeaders": true,
-            "headerParameters": {
-              "parameters": [
-                {
-                  "name": "x-api-key",
-                  "value": "super-secret-key"
-                }
-              ]
-            }
-          },
-          "typeVersion": 4.1
-        },
-        {
-          "id": "a35c1fc1-65a3-4d84-b29e-22939d334005",
-          "name": "4. The Kitchen (GET /secret-dish)",
-          "type": "n8n-nodes-base.webhook",
-          "notes": "© 2025 Lucas Peyrin",
-          "position": [
-            1632,
-            2608
-          ],
-          "webhookId": "d4e5f6a7-b8c9-0123-4567-890abcdef123",
-          "parameters": {
-            "path": "/tutorial/api/secret-dish",
-            "options": {},
-            "responseMode": "responseNode"
-          },
-          "typeVersion": 2
-        },
-        {
-          "id": "8cb4d6d3-c29f-4562-a966-d13beafd8f40",
-          "name": "Sticky Note4",
-          "type": "n8n-nodes-base.stickyNote",
-          "position": [
-            1248,
-            1968
-          ],
-          "parameters": {
-            "color": 7,
-            "width": 1056,
-            "height": 908,
-            "content": "#### Lesson 4: Identification (Headers & Auth)\n\nHeaders contain meta-information *about* your request. They're not part of the data itself, but they provide important context. Authentication is a common use case.\n\n- **Headers:** Think of this as **showing your VIP membership card** or whispering a secret password to the waiter. It's information that proves who you are or what your request's properties are.\n\n- **Authentication (Auth):** This is the process of proving your identity. Here, we use a custom header (`x-api-key`) as a \"secret key\". In the real world, this is how most APIs control access.\n\n\n**➡️ The Webhook checks for the correct secret key in the headers. If it's wrong or missing, it denies the request with a `401 Unauthorized` status code. Try changing the key in the HTTP Request node!**"
-          },
-          "typeVersion": 1
-        },
-        {
           "id": "3ab5e611-71d2-4ff3-9462-fb69d60b48aa",
           "name": "5. The Customer (Request with Timeout)",
           "type": "n8n-nodes-base.httpRequest",
@@ -468,41 +411,6 @@
           "typeVersion": 1.1
         },
         {
-          "id": "42619763-955e-40d6-bbdb-23eea3c0bd85",
-          "name": "IF Authorized",
-          "type": "n8n-nodes-base.if",
-          "notes": "© 2025 Lucas Peyrin",
-          "position": [
-            1856,
-            2608
-          ],
-          "parameters": {
-            "options": {},
-            "conditions": {
-              "options": {
-                "version": 2,
-                "leftValue": "",
-                "caseSensitive": true,
-                "typeValidation": "strict"
-              },
-              "combinator": "and",
-              "conditions": [
-                {
-                  "id": "ca861c2d-78d9-403b-8bab-28d8e7dcf39c",
-                  "operator": {
-                    "name": "filter.operator.equals",
-                    "type": "string",
-                    "operation": "equals"
-                  },
-                  "leftValue": "={{ $json.headers['x-api-key'] }}",
-                  "rightValue": "super-secret-key"
-                }
-              ]
-            }
-          },
-          "typeVersion": 2.2
-        },
-        {
           "id": "562d4436-df8c-47bf-b259-eea95ea88147",
           "name": "IF extra cheese",
           "type": "n8n-nodes-base.if",
@@ -577,72 +485,6 @@
             }
           },
           "typeVersion": 3.4
-        },
-        {
-          "id": "e5f25f10-a1f0-4d67-b0fb-c3a2b8abf786",
-          "name": "Sticky Note8",
-          "type": "n8n-nodes-base.stickyNote",
-          "position": [
-            1264,
-            2288
-          ],
-          "parameters": {
-            "color": 3,
-            "width": 304,
-            "height": 496,
-            "content": "### ⚠️ **Security Best Practice**\n\nFor this tutorial, we are putting the API key directly in the header. \n\n**In a real project, NEVER do this!**\n\nAlways use n8n's built-in **Credentials** system to store and manage secret keys. You would create a \"Header Auth\" credential and select it in the HTTP Request node's \"Authentication\" parameter. This keeps your secrets safe and out of your workflow JSON."
-          },
-          "typeVersion": 1
-        },
-        {
-          "id": "e908261b-cced-4539-9ea0-f40fb9e009e5",
-          "name": "Respond with Secret",
-          "type": "n8n-nodes-base.respondToWebhook",
-          "notes": "© 2025 Lucas Peyrin",
-          "position": [
-            2064,
-            2496
-          ],
-          "parameters": {
-            "options": {},
-            "respondWith": "json",
-            "responseBody": "{\n  \"dish\": \"The Chef's Special Truffle Pasta\"\n}"
-          },
-          "typeVersion": 1.4
-        },
-        {
-          "id": "52d54052-eab2-45b8-ac9a-389b7fdf40d3",
-          "name": "Respond: Unauthorized (401)",
-          "type": "n8n-nodes-base.respondToWebhook",
-          "notes": "© 2025 Lucas Peyrin",
-          "position": [
-            2064,
-            2704
-          ],
-          "parameters": {
-            "options": {
-              "responseCode": 401
-            },
-            "respondWith": "text",
-            "responseBody": "You are not authorized to see the secret dish."
-          },
-          "typeVersion": 1.4
-        },
-        {
-          "id": "f9d72d6c-47b8-4f51-8a69-ce4d557ae90f",
-          "name": "OpenAPI Spec",
-          "type": "n8n-nodes-base.stickyNote",
-          "position": [
-            2336,
-            704
-          ],
-          "parameters": {
-            "color": 6,
-            "width": 696,
-            "height": 2096,
-            "content": "# What other services give you\n\nReal-world APIs have documentation that tells developers how to use them. This is what the documentation for our little tutorial API would look like. To put you in context, you would see this documentation and create http request nodes accordingly.\n\n**Remember**, AI can help you !\n\n\n# API Documentation Example\n\nA simple API to demonstrate http requests in n8n.\n\n## API Endpoints\n\n### GET /tutorial/api/menu\n\n**Summary:** Get the menu\n\n**Responses:**\n*   `200 OK`: The restaurant menu.\n\n---\n\n### GET /tutorial/api/order\n\n**Summary:** Get a customized order\n\n**Parameters:**\n*   `extra_cheese` (query, string, example: `true`): Whether to add extra cheese.\n\n\n**Responses:**\n*   `200 OK`: Your customized pizza order.\n\n---\n\n### POST /tutorial/api/review\n\n**Summary:** Submit a review\n\n**Request Body (application/json):**\n```json\n{\n  \"comment\": \"string\",\n  \"rating\": 0\n}\n```\n*   `comment` (string): The review comment.\n*   `rating` (integer): The rating given (e.g., 1-5).\n\n\n**Responses:**\n*   `200 OK`: Confirmation of review receipt.\n\n---\n\n### GET /tutorial/api/secret-dish\n\n**Summary:** Get the secret dish (Auth Required)\n\n**Authentication:** Requires API Key. See [Authentication](https://docs.n8n.io/integrations/builtin/credentials/httprequest/) section for details.\n\n**Responses:**\n*   `200 OK`: The secret dish.\n*   `401 Unauthorized`: Authentication is required or invalid.\n\n---\n\n### GET /tutorial/api/slow-service\n\n**Summary:** A slow endpoint to test timeouts\n\n**Responses:**\n*   `200 OK`: A delayed response.\n\n---\n\n## Authentication\n\nThis API uses an API Key for authentication on certain endpoints.\n\n### API Key Authentication (`ApiKeyAuth`)\n\n*   **Type:** API Key\n*   **Location:** Header\n*   **Header Name:** `x-api-key`\n\n\nTo authenticate, include your API key in the `x-api-key` header of your request.\n\n**Example:**\n```\nGET /tutorial/api/secret-dish\nHost: your-api-domain.com\nx-api-key: YOUR_API_KEY_HERE\n```"
-          },
-          "typeVersion": 1
         },
         {
           "id": "fba94b52-0c18-4f3c-a702-aa883a3df293",
@@ -732,22 +574,6 @@
           "typeVersion": 3.4
         },
         {
-          "id": "9eb6ee32-0d75-4817-a3d0-3106d88b14e6",
-          "name": "Sticky Note14",
-          "type": "n8n-nodes-base.stickyNote",
-          "position": [
-            1600,
-            2272
-          ],
-          "parameters": {
-            "color": 7,
-            "width": 400,
-            "height": 256,
-            "content": "![Key](https://media2.giphy.com/media/v1.Y2lkPTc5MGI3NjExb2VlZDBvZGQxMGtnbW9pMDBrZTFobXZ2ZnRvdmo5OHViNzdib2Z4dSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/HqVH7T3o1ggAguE4Oh/giphy.gif)"
-          },
-          "typeVersion": 1
-        },
-        {
           "id": "1d450c34-d278-40cf-a5af-8d697cd39b59",
           "name": "Sticky Note13",
           "type": "n8n-nodes-base.stickyNote",
@@ -799,30 +625,7 @@
                 "index": 0
               },
               {
-                "node": "4. The Customer (GET with Headers/Auth)",
-                "type": "main",
-                "index": 0
-              },
-              {
                 "node": "5. The Customer (Request with Timeout)",
-                "type": "main",
-                "index": 0
-              }
-            ]
-          ]
-        },
-        "IF Authorized": {
-          "main": [
-            [
-              {
-                "node": "Respond with Secret",
-                "type": "main",
-                "index": 0
-              }
-            ],
-            [
-              {
-                "node": "Respond: Unauthorized (401)",
                 "type": "main",
                 "index": 0
               }
@@ -907,17 +710,6 @@
             [
               {
                 "node": "Process Review Data",
-                "type": "main",
-                "index": 0
-              }
-            ]
-          ]
-        },
-        "4. The Kitchen (GET /secret-dish)": {
-          "main": [
-            [
-              {
-                "node": "IF Authorized",
                 "type": "main",
                 "index": 0
               }

@@ -76,6 +76,34 @@ describe("template security", () => {
       .toThrow(/sensitive|secret/i);
   });
 
+  it.each(["x-api-key", "authorization", "password", "token"])(
+    "sanitizes and rejects credential-like name/value parameter %s",
+    (name) => {
+      const detail = {
+        id: 2,
+        name: "Credential-like parameter",
+        workflow: {
+          nodes: [{
+            id: "n1",
+            name: "HTTP",
+            type: "n8n-nodes-base.httpRequest",
+            parameters: {
+              headerParameters: {
+                parameters: [{ name, value: "fixed-example-value" }],
+              },
+            },
+            position: [0, 0],
+          }],
+          connections: {},
+        },
+      };
+
+      expect(() => assertTemplateContainsNoSecrets(detail.workflow)).toThrow(/sensitive|secret/i);
+      const sanitized = normalizeAndSanitizeTemplate(detail);
+      expect(JSON.stringify(sanitized.workflow.workflow)).not.toContain("fixed-example-value");
+    },
+  );
+
   it("rejects empty and malformed workflows", () => {
     expect(() => normalizeAndSanitizeTemplate({ id: 1, name: "Empty", workflow: { nodes: [], connections: {} } })).toThrow(/nodes/i);
   });
@@ -211,6 +239,26 @@ describe("template security", () => {
           [{ node: "C", type: "main", index: 0 }],
         ],
       },
+    });
+  });
+
+  it("normalizes official null output placeholders without shifting branch indices", () => {
+    const result = normalizeAndSanitizeTemplate({
+      id: 2327,
+      name: "Official loop placeholder",
+      workflow: {
+        nodes: [
+          { id: "loop", name: "Loop", type: "n8n-nodes-base.splitInBatches", parameters: {}, position: [0, 0] },
+          { id: "work", name: "Work", type: "n8n-nodes-base.noOp", parameters: {}, position: [200, 0] },
+        ],
+        connections: {
+          Loop: { main: [null, [{ node: "Work", type: "main", index: 0 }]] },
+        },
+      },
+    });
+
+    expect(result.workflow.workflow.connections).toEqual({
+      Loop: { main: [[], [{ node: "Work", type: "main", index: 0 }]] },
     });
   });
 

@@ -111,6 +111,32 @@ describe("verifyKnowledgeDb", () => {
     expect(captureOfficialFailure()).toMatch(/FTS[\s\S]*Missing node/i);
   });
 
+  it.each([
+    ["missing type", { node: "Webhook", index: 0 }],
+    ["empty type", { node: "Webhook", type: "   ", index: 0 }],
+    ["missing index", { node: "Webhook", type: "main" }],
+    ["negative index", { node: "Webhook", type: "main", index: -1 }],
+    ["fractional index", { node: "Webhook", type: "main", index: 0.5 }],
+  ])("collects malformed connection descriptor errors in official mode: %s", (_label, descriptor) => {
+    insertTemplate(1750, workflowWithDescriptor(descriptor));
+
+    expect(captureOfficialFailure()).toMatch(/malformed connection target/i);
+  });
+
+  it.each([
+    ["missing type", { node: "Webhook", index: 0 }],
+    ["empty type", { node: "Webhook", type: "", index: 0 }],
+    ["missing index", { node: "Webhook", type: "main" }],
+    ["negative index", { node: "Webhook", type: "main", index: -1 }],
+    ["fractional index", { node: "Webhook", type: "main", index: 0.5 }],
+  ])("collects malformed connection descriptor errors in fallback mode: %s", (_label, descriptor) => {
+    insertTemplate(1750, workflowWithDescriptor(descriptor));
+
+    const report = verifyKnowledgeDb({ dbPath, curatedIds: [1750], mode: "fallback" });
+    expect(report.ok).toBe(false);
+    expect(report.errors.join("\n")).toMatch(/malformed connection target/i);
+  });
+
   it("fails when template and FTS counts match but their IDs differ", () => {
     insertTemplate(1750);
     db.prepare("DELETE FROM templates_fts WHERE rowid = 1750").run();
@@ -276,6 +302,18 @@ function workflow(options: {
     connections: options.target
       ? { Webhook: { main: [[{ node: options.target, type: "main", index: 0 }]] } }
       : {},
+  };
+}
+
+function workflowWithDescriptor(descriptor: Record<string, unknown>) {
+  return {
+    nodes: [{
+      id: "webhook-1",
+      name: "Webhook",
+      type: "n8n-nodes-base.webhook",
+      parameters: {},
+    }],
+    connections: { Webhook: { main: [[descriptor]] } },
   };
 }
 

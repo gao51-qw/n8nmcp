@@ -102,6 +102,9 @@ rollback() {
   if ! set_tag "$OLD_TAG"; then
     echo "failed to restore previous mcp tag configuration" >&2
   fi
+  if ! docker image rm "${IMAGE}:${ROLLBACK_TAG}" >/dev/null 2>&1; then
+    echo "failed to remove temporary rollback image tag" >&2
+  fi
   (( failed_status != 0 )) || failed_status=1
   exit "$failed_status"
 }

@@ -39,15 +39,17 @@ npm run build:sqlite
 npm run emit:stats
 ```
 
-## Current Official Registry Count
+## Official Registry Count — 2026-06-10 Generated Snapshot
 
-The official-only database is generated from the GitHub `package.json -> n8n.nodes` registry:
+The following values are the generated 2026-06-10 snapshot of the GitHub `package.json -> n8n.nodes` registry:
 
 ```txt
 n8n-nodes-base: 439
 @n8n/n8n-nodes-langchain: 122
 total official nodes: 561
 ```
+
+For current verified values, rebuild and verify the knowledge artifact, then read `data/stats.json` (or the authenticated `/health` inventory) rather than relying on this historical label.
 
 Do not use `.node.ts` file count as the production recommendation count. Some files are version implementations or internal helpers and are not registered as loadable nodes.
 
@@ -111,7 +113,7 @@ The production refresh reads only these official API endpoints:
 
 The fetcher deduplicates IDs, stages no more than 5,000 official candidates, and sorts accepted templates by numeric ID before the deterministic official/curated merge. The merged database is capped at 5,000 templates. The official quality gate requires at least 95% of `min(totalWorkflows, 5000)` to be accepted. Therefore, when the API advertises at least 5,000 workflows, both the accepted-official count and final database count must be at least 4,750. All curated IDs must also be present, and the `templates` and `templates_fts` tables must have identical IDs and row counts.
 
-The reviewed offline fallback is defined by `data/curated-templates/manifest.json` and currently contains IDs `1750`, `3880`, `5171`, `584`, `1954`, `2397`, `2089`, `2732`, `2462`, `2859`, `3986`, and `1747`. Refresh these sanitized snapshots deliberately from the official API with:
+The reviewed offline fallback is defined by `data/curated-templates/manifest.json` and currently contains IDs `1750`, `2327`, `5171`, `584`, `1954`, `2397`, `2089`, `2732`, `2462`, `2859`, `3986`, and `1747`. Refresh these sanitized snapshots deliberately from the official API with:
 
 ```bash
 npm run refresh:curated
@@ -131,11 +133,27 @@ Fetch and sanitization are the network boundary. `npm run build:templates` is ne
 
 ```json
 {
+  "source": "curated",
+  "curated": true,
+  "views": 0,
+  "sourceUrl": "https://example.invalid/custom-template/900001",
   "workflow": {
-    "id": "template-id",
+    "id": 900001,
     "name": "Template name",
+    "description": "A locally reviewed workflow template.",
+    "totalViews": 0,
+    "createdAt": null,
+    "user": null,
     "workflow": {
-      "nodes": [],
+      "nodes": [
+        {
+          "id": "manual-trigger-1",
+          "name": "Start",
+          "type": "n8n-nodes-base.manualTrigger",
+          "parameters": {},
+          "position": [0, 0]
+        }
+      ],
       "connections": {}
     }
   }

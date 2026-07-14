@@ -22,6 +22,12 @@ export const SENSITIVE_TEMPLATE_KEYS = new Set([
   "clientsecret",
   "password",
   "privatekey",
+  "token",
+]);
+
+const SENSITIVE_NAME_VALUE_PARAMETERS = new Set([
+  ...SENSITIVE_TEMPLATE_KEYS,
+  "xapikey",
 ]);
 
 const SECRET_PATTERNS = [
@@ -38,6 +44,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function normalizedCredentialName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function isSensitiveKey(value: string): boolean {
+  return SENSITIVE_TEMPLATE_KEYS.has(normalizedCredentialName(value));
+}
+
+function isSensitiveNameValueParameter(value: Record<string, unknown>): boolean {
+  return typeof value.name === "string"
+    && SENSITIVE_NAME_VALUE_PARAMETERS.has(normalizedCredentialName(value.name))
+    && Object.keys(value).some((key) => key.toLowerCase() === "value");
+}
+
 function removeSensitiveKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(removeSensitiveKeys);
@@ -46,9 +66,12 @@ function removeSensitiveKeys(value: unknown): unknown {
     return value;
   }
 
+  const sensitiveNameValueParameter = isSensitiveNameValueParameter(value);
+
   return Object.fromEntries(
     Object.entries(value)
-      .filter(([key]) => !SENSITIVE_TEMPLATE_KEYS.has(key.toLowerCase()))
+      .filter(([key]) => !isSensitiveKey(key)
+        && !(sensitiveNameValueParameter && key.toLowerCase() === "value"))
       .map(([key, child]) => [key, removeSensitiveKeys(child)]),
   );
 }
@@ -69,8 +92,11 @@ export function assertTemplateContainsNoSecrets(workflow: unknown): void {
       continue;
     }
     visited.add(value);
+    if (isRecord(value) && isSensitiveNameValueParameter(value)) {
+      throw new Error(`Template contains sensitive name/value parameter: ${String(value.name)}`);
+    }
     for (const [key, child] of Object.entries(value)) {
-      if (SENSITIVE_TEMPLATE_KEYS.has(key.toLowerCase())) {
+      if (isSensitiveKey(key)) {
         throw new Error(`Template contains sensitive key: ${key}`);
       }
       pending.push(key, child);
@@ -124,6 +150,9 @@ function sanitizeConnections(
       }
 
       const retainedBranches = outputBranches.map((branch) => {
+        if (branch === null) {
+          return [];
+        }
         if (!Array.isArray(branch)) {
           throw new Error("Workflow connection branches must be arrays");
         }

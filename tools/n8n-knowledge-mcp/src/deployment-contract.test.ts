@@ -144,6 +144,7 @@ describe("knowledge publication and deployment contracts", () => {
     expect(result.log).not.toContain("compose-tag=latest");
     expect(result.log).toMatch(/compose -f compose\.yml up -d --no-deps --pull never mcp/);
     expect(result.log.match(/exec n8n-knowledge-mcp node/g)).toHaveLength(2);
+    expect(result.log).toContain(`image rm ghcr.io/example/n8n-knowledge-mcp:${rollbackTag}`);
     expect(result.log).not.toMatch(/\b(?:app|caddy)\b/);
   });
 
