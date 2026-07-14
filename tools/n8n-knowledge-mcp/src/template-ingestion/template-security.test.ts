@@ -226,6 +226,40 @@ describe("template security", () => {
     });
   });
 
+  it("rejects duplicate retained node names instead of guessing connection ownership", () => {
+    expect(() => normalizeAndSanitizeTemplate({
+      id: 636,
+      name: "Ambiguous duplicate",
+      workflow: {
+        nodes: [
+          { id: "a", name: "GS Read Data2", type: "n8n-nodes-base.googleSheets", parameters: {}, position: [0, 0] },
+          { id: "b", name: "GS Read Data2", type: "n8n-nodes-base.googleSheets", parameters: {}, position: [200, 0] },
+        ],
+        connections: {
+          "GS Read Data2": {
+            main: [[{ node: "GS Read Data2", type: "main", index: 0 }]],
+          },
+        },
+      },
+    })).toThrow("Workflow contains duplicate node name GS Read Data2");
+  });
+
+  it("does not treat a removed prohibited node as a retained-name duplicate", () => {
+    const result = normalizeAndSanitizeTemplate({
+      id: 637,
+      name: "Removed duplicate",
+      workflow: {
+        nodes: [
+          { id: "safe", name: "Step", type: "n8n-nodes-base.noOp", parameters: {}, position: [0, 0] },
+          { id: "removed", name: "Step", type: "n8n-nodes-base.executeCommand", parameters: {}, position: [200, 0] },
+        ],
+        connections: {},
+      },
+    });
+
+    expect(result.workflow.workflow.nodes.map((node) => node.id)).toEqual(["safe"]);
+  });
+
   it("preserves IF and Switch output positions while trimming only trailing empty outputs", () => {
     const result = normalizeAndSanitizeTemplate({
       id: 10,

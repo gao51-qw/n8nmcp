@@ -106,6 +106,7 @@ export function assertTemplateContainsNoSecrets(workflow: unknown): void {
 
 function sanitizeNodes(nodes: unknown[]): Array<Record<string, unknown>> {
   const retained: Array<Record<string, unknown>> = [];
+  const retainedNodeNames = new Set<string>();
 
   for (const node of nodes) {
     if (!isRecord(node)) {
@@ -120,6 +121,10 @@ function sanitizeNodes(nodes: unknown[]): Array<Record<string, unknown>> {
       || node.type.trim().length === 0) {
       throw new Error("Workflow nodes must have names and types");
     }
+    if (retainedNodeNames.has(node.name)) {
+      throw new Error(`Workflow contains duplicate node name ${node.name}`);
+    }
+    retainedNodeNames.add(node.name);
     retained.push(node);
   }
 

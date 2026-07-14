@@ -42,6 +42,50 @@ describe("official template staging publication", () => {
     expect(await readdir(join(targetDirectory, "official"))).toEqual(["1.json"]);
   });
 
+  it("accounts for duplicate-name templates as rejected without publishing them", async () => {
+    const root = await temporaryRoot();
+    const targetDirectory = join(root, "templates");
+    const curatedDirectory = join(root, "curated");
+    await writeCuratedSet(curatedDirectory, [5]);
+    const client = frozenClient([1, 2]);
+    client.fetchDetails = async () => ({
+      details: [
+        detail(1),
+        {
+          ...detail(2),
+          workflow: {
+            nodes: [
+              { id: "first", name: "Duplicate", type: "n8n-nodes-base.noOp", parameters: {}, position: [0, 0] },
+              { id: "second", name: "Duplicate", type: "n8n-nodes-base.noOp", parameters: {}, position: [200, 0] },
+            ],
+            connections: {
+              Duplicate: {
+                main: [[{ node: "Duplicate", type: "main", index: 0 }]],
+              },
+            },
+          },
+        },
+      ],
+      failedIds: [],
+    });
+
+    const manifest = await stageOfficialTemplates({
+      client,
+      curatedDirectory,
+      targetDirectory,
+      runId: "duplicate-names",
+    });
+
+    expect(manifest).toMatchObject({
+      detailSuccessCount: 2,
+      acceptedCount: 1,
+      rejectedCount: 1,
+      rejectedIds: [2],
+    });
+    expect(await readdir(join(targetDirectory, "official"))).toEqual(["1.json"]);
+    expect(await readdir(join(targetDirectory, "merged"))).not.toContain("2.json");
+  });
+
   it("fails fast when a second publisher targets a locked directory", async () => {
     const root = await temporaryRoot();
     const targetDirectory = join(root, "templates");
