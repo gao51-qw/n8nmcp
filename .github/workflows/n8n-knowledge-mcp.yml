@@ -31,7 +31,7 @@ jobs:
         run: npm ci --no-audit --no-fund
 
       - name: Build node database
-        run: npm run build:nodes
+        run: npm run build:nodes:official
 
       - name: Fetch official templates
         id: official

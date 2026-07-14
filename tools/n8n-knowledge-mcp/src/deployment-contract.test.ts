@@ -15,8 +15,12 @@ import { describe, expect, it } from "vitest";
 const repositoryRoot = resolve(process.cwd(), "../..");
 const workflowPath = resolve(repositoryRoot, ".github/workflows/n8n-knowledge-mcp.yml");
 const deployPath = resolve(repositoryRoot, "deploy/update-knowledge.sh");
+const packagePath = resolve(process.cwd(), "package.json");
+const fetchScriptPath = resolve(process.cwd(), "scripts/1-fetch-packages.ts");
 const workflow = readFileSync(workflowPath, "utf8");
 const deploy = existsSync(deployPath) ? readFileSync(deployPath, "utf8") : "";
+const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
+const fetchScript = readFileSync(fetchScriptPath, "utf8");
 
 describe("knowledge publication and deployment contracts", () => {
   it("keeps weekly/manual entry points and makes the official/fallback paths fail closed", () => {
@@ -25,6 +29,10 @@ describe("knowledge publication and deployment contracts", () => {
     expect(workflow).toContain("continue-on-error: true");
     expect(workflow).toContain("if: steps.official.outcome == 'success'");
     expect(workflow).toContain("if: steps.official.outcome != 'success'");
+    expect(pkg.scripts["build:nodes:official"]).toContain("--official-only");
+    expect(pkg.scripts["build:knowledge"]).toContain("npm run build:nodes:official");
+    expect(step(workflow, "Build node database")).toContain("npm run build:nodes:official");
+    expect(fetchScript).toContain("shouldSkipCommunityPackages(process.argv");
 
     expectOrdered(workflow, [
       "name: Fetch official templates",

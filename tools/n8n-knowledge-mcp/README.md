@@ -29,7 +29,7 @@ curl -H "Authorization: Bearer $AUTH_TOKEN" \
      http://localhost:3000/mcp
 ```
 
-For an official-only rebuild:
+Production builds use `npm run build:knowledge`, which selects the official-only node build. Use `npm run build:nodes` when optional community enrichment is desired. The environment selector remains compatible for an official-only fetch:
 
 ```bash
 N8N_KNOWLEDGE_SKIP_COMMUNITY=1 npm run fetch
@@ -175,7 +175,7 @@ Run the complete official refresh and quality gate with:
 npm run build:knowledge
 ```
 
-This builds node knowledge, fetches and stages official templates, imports the deterministic merge, emits `data/stats.json` and `../../src/data/n8n-stats.json`, then runs `npm run verify:knowledge`. The machine-readable result is `data/knowledge-quality-report.json`; production requires `ok: true`.
+This builds official-only node knowledge, fetches and stages official templates, imports the deterministic merge, emits `data/stats.json` and `../../src/data/n8n-stats.json`, then runs `npm run verify:knowledge`. The machine-readable result is `data/knowledge-quality-report.json`; production requires `ok: true`.
 
 If the official API is unavailable, CI builds a diagnostic curated-only fallback after the node database exists:
 

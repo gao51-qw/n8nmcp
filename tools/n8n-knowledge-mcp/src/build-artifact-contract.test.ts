@@ -14,16 +14,16 @@ describe("verified knowledge image contract", () => {
 
   it("builds nodes once and gates production verification and Docker on official success", () => {
     expect(pkg.scripts["build:knowledge"]).toBe(
-      "npm run build:nodes && npm run fetch:templates && npm run build:templates && npm run emit:stats && npm run verify:knowledge",
+      "npm run build:nodes:official && npm run fetch:templates && npm run build:templates && npm run emit:stats && npm run verify:knowledge",
     );
     expect(pkg.scripts["verify:production-artifacts"]).toBe(
       "tsx scripts/10-verify-production-artifacts.ts",
     );
-    expect([...workflow.matchAll(/npm run build:nodes/g)]).toHaveLength(1);
+    expect([...workflow.matchAll(/npm run build:nodes:official/g)]).toHaveLength(1);
     expect(workflow.match(/npm run verify:production-artifacts/g)).toHaveLength(1);
     expect(workflow).not.toContain("npm run build:db");
 
-    const buildNodesAt = workflow.indexOf("npm run build:nodes");
+    const buildNodesAt = workflow.indexOf("npm run build:nodes:official");
     const officialBuildAt = workflow.indexOf("name: Build and verify official template database");
     const fallbackBuildAt = workflow.indexOf("name: Build curated fallback database");
     const fallbackUploadAt = workflow.indexOf("name: Upload degraded fallback");

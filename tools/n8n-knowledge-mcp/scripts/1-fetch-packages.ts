@@ -10,11 +10,13 @@ import * as tar from "tar";
 import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { shouldSkipCommunityPackages } from "../src/package-fetch-policy.js";
 
 const exec = promisify(execFile);
 const ROOT = resolve(process.cwd());
 const TMP = resolve(ROOT, ".tmp/pkgs");
 const CFG = JSON.parse(await readFile(resolve(ROOT, "packages.json"), "utf8"));
+const SKIP_COMMUNITY = shouldSkipCommunityPackages(process.argv);
 
 type PkgRef = { name: string; version: string; tarball: string; source: "official" | "community" };
 
@@ -103,33 +105,37 @@ async function main() {
     refs.push({ name, version: meta.version, tarball: meta.tarball, source: "official" });
   }
 
-  console.log("[fetch] searching community packages...");
-  const community = await searchCommunity();
-  console.log(`[fetch] ${community.length} community candidates after name filter & blacklist`);
-  const minDl: number = CFG.community.min_monthly_downloads ?? 0;
-  let kept = 0;
-  // Resolve metadata with bounded concurrency so this stays fast at ~1000 pkgs.
   const downloads: Record<string, number> = {};
-  const CONC = 8;
-  for (let i = 0; i < community.length; i += CONC) {
-    const chunk = community.slice(i, i + CONC);
-    const results = await Promise.all(
-      chunk.map(async (name) => {
-        try {
-          const dl = await npmDownloads(name);
-          if (dl < minDl) return null;
-          const meta = await npmRegistryMeta(name);
-          downloads[name] = dl;
-          return { name, version: meta.version, tarball: meta.tarball, source: "community" as const };
-        } catch (e) {
-          console.warn(`[fetch] skip ${name}: ${(e as Error).message}`);
-          return null;
-        }
-      }),
-    );
-    for (const r of results) if (r) { refs.push(r); kept++; }
+  if (!SKIP_COMMUNITY) {
+    console.log("[fetch] searching community packages...");
+    const community = await searchCommunity();
+    console.log(`[fetch] ${community.length} community candidates after name filter & blacklist`);
+    const minDl: number = CFG.community.min_monthly_downloads ?? 0;
+    let kept = 0;
+    // Resolve metadata with bounded concurrency so this stays fast at ~1000 pkgs.
+    const CONC = 8;
+    for (let i = 0; i < community.length; i += CONC) {
+      const chunk = community.slice(i, i + CONC);
+      const results = await Promise.all(
+        chunk.map(async (name) => {
+          try {
+            const dl = await npmDownloads(name);
+            if (dl < minDl) return null;
+            const meta = await npmRegistryMeta(name);
+            downloads[name] = dl;
+            return { name, version: meta.version, tarball: meta.tarball, source: "community" as const };
+          } catch (e) {
+            console.warn(`[fetch] skip ${name}: ${(e as Error).message}`);
+            return null;
+          }
+        }),
+      );
+      for (const r of results) if (r) { refs.push(r); kept++; }
+    }
+    console.log(`[fetch] kept ${kept} community packages (min ${minDl} dl/month)`);
+  } else {
+    console.log("[fetch] skipping community packages for the official-only build");
   }
-  console.log(`[fetch] kept ${kept} community packages (min ${minDl} dl/month)`);
 
   const index: Array<PkgRef & { dir: string }> = [];
   for (const ref of refs) {
