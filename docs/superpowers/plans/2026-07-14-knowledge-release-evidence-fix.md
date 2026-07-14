@@ -82,6 +82,7 @@ git commit -m "test(knowledge): support CRLF deployment contracts"
 - Modify: `tools/n8n-knowledge-mcp/scripts/1-fetch-packages.ts`
 - Modify: `tools/n8n-knowledge-mcp/package.json`
 - Modify: `.github/workflows/n8n-knowledge-mcp.yml`
+- Modify: `tools/n8n-knowledge-mcp/src/build-artifact-contract.test.ts`
 - Modify: `tools/n8n-knowledge-mcp/src/deployment-contract.test.ts`
 - Modify: `tools/n8n-knowledge-mcp/README.md`
 
@@ -123,10 +124,22 @@ expect(step(workflow, "Build node database")).toContain("npm run build:nodes:off
 expect(fetchScript).toContain("shouldSkipCommunityPackages(process.argv");
 ```
 
+Update only the obsolete production-entry assertions in `src/build-artifact-contract.test.ts`:
+
+```ts
+expect(pkg.scripts["build:knowledge"]).toBe(
+  "npm run build:nodes:official && npm run fetch:templates && npm run build:templates && npm run emit:stats && npm run verify:knowledge",
+);
+expect([...workflow.matchAll(/npm run build:nodes:official/g)]).toHaveLength(1);
+const buildNodesAt = workflow.indexOf("npm run build:nodes:official");
+```
+
+Keep every remaining artifact-verification, fallback, Docker, and smoke ordering assertion unchanged.
+
 - [ ] **Step 2: Run focused tests to verify RED**
 
 ```powershell
-npx --yes node@20 ./node_modules/vitest/vitest.mjs run src/package-fetch-policy.test.ts src/deployment-contract.test.ts --maxWorkers=1
+npx --yes node@20 ./node_modules/vitest/vitest.mjs run src/package-fetch-policy.test.ts src/deployment-contract.test.ts src/build-artifact-contract.test.ts --maxWorkers=1
 ```
 
 Expected: FAIL because the policy module and official-only entry point do not exist.
@@ -184,7 +197,7 @@ Update the README to state that `npm run build:knowledge` is official-only, `npm
 - [ ] **Step 6: Verify GREEN**
 
 ```powershell
-npx --yes node@20 ./node_modules/vitest/vitest.mjs run src/package-fetch-policy.test.ts src/deployment-contract.test.ts --maxWorkers=1
+npx --yes node@20 ./node_modules/vitest/vitest.mjs run src/package-fetch-policy.test.ts src/deployment-contract.test.ts src/build-artifact-contract.test.ts --maxWorkers=1
 npx --yes node@20 ./node_modules/vitest/vitest.mjs run --maxWorkers=1
 npx --yes node@20 ./node_modules/typescript/bin/tsc -p tsconfig.json
 ```
@@ -194,7 +207,7 @@ Expected: focused and complete tests PASS; TypeScript exits 0.
 - [ ] **Step 7: Commit**
 
 ```powershell
-git add -- .github/workflows/n8n-knowledge-mcp.yml tools/n8n-knowledge-mcp/README.md tools/n8n-knowledge-mcp/package.json tools/n8n-knowledge-mcp/scripts/1-fetch-packages.ts tools/n8n-knowledge-mcp/src/deployment-contract.test.ts tools/n8n-knowledge-mcp/src/package-fetch-policy.ts tools/n8n-knowledge-mcp/src/package-fetch-policy.test.ts
+git add -- .github/workflows/n8n-knowledge-mcp.yml tools/n8n-knowledge-mcp/README.md tools/n8n-knowledge-mcp/package.json tools/n8n-knowledge-mcp/scripts/1-fetch-packages.ts tools/n8n-knowledge-mcp/src/build-artifact-contract.test.ts tools/n8n-knowledge-mcp/src/deployment-contract.test.ts tools/n8n-knowledge-mcp/src/package-fetch-policy.ts tools/n8n-knowledge-mcp/src/package-fetch-policy.test.ts
 git commit -m "fix(knowledge): keep production builds official-only"
 ```
 
