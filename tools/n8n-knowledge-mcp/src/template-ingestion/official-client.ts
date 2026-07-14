@@ -28,7 +28,7 @@ const summarySchema = z.object({
   name: z.string(),
   description: z.string().nullable(),
   totalViews: z.number(),
-  price: z.number(),
+  price: z.number().optional(),
   purchaseUrl: z.string().nullable(),
   user: userSchema,
   createdAt: z.string().nullable(),

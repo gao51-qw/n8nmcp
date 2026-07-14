@@ -31,6 +31,42 @@ const detail = (id: number) => ({
 });
 
 describe("official template client", () => {
+  it("accepts workflow summaries when price is absent", async () => {
+    const workflowWithoutPrice = {
+      id: 1,
+      name: "Template 1",
+      description: "Description",
+      totalViews: 9_999,
+      purchaseUrl: null,
+      user: { name: "n8n Team", username: "n8n-team", avatar: null },
+      createdAt: "2026-07-01T00:00:00.000Z",
+      nodes: [],
+    };
+    const client = createOfficialTemplateClient({
+      fetch: vi.fn().mockResolvedValue(
+        Response.json({ totalWorkflows: 1, workflows: [workflowWithoutPrice] }),
+      ),
+    });
+
+    const result = await client.collectSummaries(1);
+
+    expect(result.summaries).toEqual([workflowWithoutPrice]);
+    expect(result.summaries[0]).not.toHaveProperty("price");
+  });
+
+  it("rejects a malformed present workflow price", async () => {
+    const client = createOfficialTemplateClient({
+      fetch: vi.fn().mockResolvedValue(
+        Response.json({
+          totalWorkflows: 1,
+          workflows: [{ ...summary(1), price: "free" }],
+        }),
+      ),
+    });
+
+    await expect(client.collectSummaries(1)).rejects.toThrow();
+  });
+
   it("deduplicates paginated results and stops at the configured limit", async () => {
     const fetch = vi
       .fn()
