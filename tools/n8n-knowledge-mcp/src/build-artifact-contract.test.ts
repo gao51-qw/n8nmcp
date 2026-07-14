@@ -10,6 +10,7 @@ describe("verified knowledge image contract", () => {
     "utf8",
   );
   const statsEmitter = readFileSync(resolve(process.cwd(), "scripts/6-emit-stats.ts"), "utf8");
+  const nodeParser = readFileSync(resolve(process.cwd(), "scripts/2-parse-nodes.ts"), "utf8");
   const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8"));
 
   it("builds nodes once and gates production verification and Docker on official success", () => {
@@ -124,6 +125,16 @@ describe("verified knowledge image contract", () => {
   it("emits the categories object required by production stats validation", () => {
     expect(statsEmitter).toMatch(/const categories\s*=/);
     expect(statsEmitter).toMatch(/const stats\s*=\s*\{[\s\S]*\bcategories,/);
+  });
+
+  it("delegates node package parsing without owning dynamic module loading", () => {
+    expect(nodeParser).toMatch(
+      /import\s*\{[^}]*parseNodePackage[^}]*\}\s*from\s*["']\.\.\/src\/node-package-parser\.js["']/,
+    );
+    expect(nodeParser).toContain("parseNodePackage(pkg)");
+    expect(nodeParser).toContain("pkg.source");
+    expect(nodeParser).not.toContain("pathToFileURL");
+    expect(nodeParser).not.toMatch(/\bimport\s*\(/);
   });
 });
 
