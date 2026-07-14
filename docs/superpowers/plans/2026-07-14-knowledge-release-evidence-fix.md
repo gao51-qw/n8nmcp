@@ -272,14 +272,75 @@ git commit -m "fix(knowledge): synchronize production lockfile"
 
 ---
 
-### Task 4: Collect Fresh Release Evidence Without Overclaiming
+### Task 4: Enforce Linux Shell Line Endings
+
+**Files:**
+- Create: `.gitattributes`
+- Normalize: `deploy/update-knowledge.sh`
+
+**Interfaces:**
+- Consumes: the committed VPS deployment script.
+- Produces: Git blobs for shell scripts with LF line endings on every checkout.
+
+- [ ] **Step 1: Preserve the Linux RED evidence**
+
+From a clean Linux copy of the committed source, the deployment contract must reproduce:
+
+```text
+deploy/update-knowledge.sh: line 2: set: pipefail\r: invalid option name
+```
+
+Expected: deployment contract fails because the committed shell blob contains CRLF.
+
+- [ ] **Step 2: Add the repository line-ending contract**
+
+Create `.gitattributes`:
+
+```gitattributes
+*.sh text eol=lf
+```
+
+Renormalize only the production deployment script:
+
+```powershell
+git add --renormalize -- deploy/update-knowledge.sh
+```
+
+Do not change script logic.
+
+- [ ] **Step 3: Verify the normalized blob and Linux shell syntax**
+
+Verify the staged blob contains no carriage returns, then run in Linux:
+
+```bash
+bash -n deploy/update-knowledge.sh
+```
+
+Expected: no carriage-return bytes; Bash syntax exits 0.
+
+- [ ] **Step 4: Run focused deployment contracts on Windows and Linux**
+
+Run `src/deployment-contract.test.ts` under Node 20 in the Windows worktree and in a real Linux Git checkout that includes `.git` metadata.
+
+Expected: 9/9 PASS in both environments.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add -- .gitattributes deploy/update-knowledge.sh
+git commit -m "fix(deploy): enforce LF shell scripts"
+```
+
+---
+
+### Task 5: Collect Fresh Release Evidence Without Overclaiming
 
 **Files:**
 - Create: `.superpowers/sdd/knowledge-release-evidence.md` (scratch evidence; do not commit).
 - Modify: `src/data/n8n-stats.json` only through the verified build command if the online build succeeds.
 
 **Interfaces:**
-- Consumes: Task 2 official-only `build:knowledge` and Task 3 Linux-clean `npm ci` lockfile.
+- Consumes: Task 2 official-only `build:knowledge`, Task 3 Linux-clean `npm ci` lockfile, and Task 4 LF-normalized deployment scripts.
 - Produces: fresh evidence separating local, online build, Docker smoke, GHCR, and VPS status.
 
 - [ ] **Step 1: Run the official online build under Node 20**
