@@ -112,7 +112,12 @@ jobs:
             headers: { authorization: `Bearer ${process.env.AUTH_TOKEN}` },
           }).then(async (response) => {
             if (!response.ok) throw new Error("authenticated health check failed");
-            const body = await response.json();
+            let body;
+            try {
+              body = await response.json();
+            } catch {
+              throw new Error("health response was not valid JSON");
+            }
             if (body.templates !== Number(expected)) throw new Error("template count mismatch");
           }).catch((error) => {
             console.error(error.message);

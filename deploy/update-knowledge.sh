@@ -16,6 +16,19 @@ GHCR_OWNER="$(grep -m1 -E '^GHCR_OWNER=' "$ENV_FILE" | cut -d= -f2- | tr -d '"')
 [[ "$GHCR_OWNER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "invalid GHCR owner" >&2; exit 2; }
 
 IMAGE="ghcr.io/${GHCR_OWNER}/n8n-knowledge-mcp"
+CURRENT_IMAGE_ID="$(docker inspect --format '{{.Image}}' n8n-knowledge-mcp 2>/dev/null)" || {
+  echo "unable to determine current mcp image identity" >&2
+  exit 2
+}
+[[ "$CURRENT_IMAGE_ID" =~ ^sha256:[a-f0-9]{64}$ ]] || {
+  echo "invalid current mcp image identity" >&2
+  exit 2
+}
+ROLLBACK_TAG="rollback-${NEW_TAG}-$(date -u +%Y%m%d%H%M%S)-$$"
+docker tag "$CURRENT_IMAGE_ID" "${IMAGE}:${ROLLBACK_TAG}" || {
+  echo "unable to preserve current mcp image" >&2
+  exit 2
+}
 ROLLING_BACK=0
 
 set_tag() {
@@ -55,7 +68,12 @@ wait_for_health() {
       headers: { authorization: `Bearer ${process.env.AUTH_TOKEN}` },
     }).then(async (response) => {
       if (!response.ok) throw new Error("authenticated health check failed");
-      const body = await response.json();
+      let body;
+      try {
+        body = await response.json();
+      } catch {
+        throw new Error("health response was not valid JSON");
+      }
       if (expected && body.templates !== Number(expected)) {
         throw new Error("template count mismatch");
       }
@@ -74,10 +92,15 @@ rollback() {
   fi
   ROLLING_BACK=1
   echo "knowledge deployment failed; rolling back mcp" >&2
-  set_tag "$OLD_TAG"
-  docker compose -f "$COMPOSE_FILE" up -d --no-deps mcp
-  if ! wait_for_health ""; then
+  if ! set_tag "$ROLLBACK_TAG"; then
+    echo "failed to select preserved rollback image" >&2
+  elif ! docker compose -f "$COMPOSE_FILE" up -d --no-deps --pull never mcp; then
+    echo "failed to recreate mcp from preserved rollback image" >&2
+  elif ! wait_for_health ""; then
     echo "rollback health verification failed" >&2
+  fi
+  if ! set_tag "$OLD_TAG"; then
+    echo "failed to restore previous mcp tag configuration" >&2
   fi
   (( failed_status != 0 )) || failed_status=1
   exit "$failed_status"
@@ -91,3 +114,4 @@ set_tag "$NEW_TAG"
 docker compose -f "$COMPOSE_FILE" up -d --no-deps mcp
 wait_for_health "$EXPECTED_TEMPLATES"
 rm -f -- "${ENV_FILE}.bak"
+docker image rm "${IMAGE}:${ROLLBACK_TAG}" >/dev/null 2>&1 || true
