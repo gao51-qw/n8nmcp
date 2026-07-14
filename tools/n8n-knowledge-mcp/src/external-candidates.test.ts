@@ -211,6 +211,48 @@ describe("external candidate opt-in commands", () => {
     },
   );
 
+  it.each([
+    ["properties_schema", ""],
+    ["properties_schema", "   \t"],
+    ["credentials_required", ""],
+    ["credentials_required", "   \t"],
+    ["operations", ""],
+    ["operations", "   \t"],
+  ] as const)(
+    "rejects empty or whitespace-only %s JSON (%j), rolls back, and does not promote it",
+    (field, value) => {
+      const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
+      const initial = runImporter(fixture.root, fixture.externalPath);
+      expect(initial.status, initial.stderr).toBe(0);
+
+      const invalidNodeType = `n8n-nodes-fixture.bad-${field}`;
+      const external = new Database(fixture.externalPath);
+      external.prepare(`UPDATE nodes SET node_type = ?, ${field} = ?`)
+        .run(invalidNodeType, value);
+      external.close();
+
+      const imported = runImporter(fixture.root, fixture.externalPath);
+      expect(imported.status).not.toBe(0);
+      expect(imported.stderr).toContain(invalidNodeType);
+      expect(imported.stderr).toContain(field);
+
+      const verified = runVerifier(fixture.root);
+      expect(verified.status, verified.stderr).toBe(0);
+
+      const db = new Database(fixture.localPath, { readonly: true });
+      for (const table of [
+        "external_node_candidates",
+        "external_node_candidates_fts",
+        "verified_external_nodes",
+        "verified_external_nodes_fts",
+      ]) {
+        expect(db.prepare(`SELECT node_type FROM ${table} ORDER BY node_type`).all())
+          .toEqual([{ node_type: "n8n-nodes-fixture.previous" }]);
+      }
+      db.close();
+    },
+  );
+
   it("rolls back candidate and FTS replacement when a later insert fails", () => {
     const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
     const initial = runImporter(fixture.root, fixture.externalPath);

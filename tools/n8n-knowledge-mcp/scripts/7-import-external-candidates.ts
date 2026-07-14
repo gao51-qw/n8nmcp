@@ -56,11 +56,11 @@ function normalizeToolVariantOf(value: string | null): string | null {
 }
 
 function parseJsonArray(
-  value: string | null,
+  value: string | null | undefined,
   field: "properties_schema" | "credentials_required" | "operations",
   nodeType: string,
 ): unknown[] {
-  if (!value) return [];
+  if (value === null || value === undefined) return [];
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
