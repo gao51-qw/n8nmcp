@@ -281,12 +281,13 @@ exit 0
 }
 
 function extractBetween(contents: string, startMarker: string, endMarker: string): string {
-  const start = contents.indexOf(startMarker);
+  const normalizedContents = contents.replace(/\r\n/g, "\n");
+  const start = normalizedContents.indexOf(startMarker);
   expect(start, `missing embedded Node start marker: ${startMarker}`).toBeGreaterThanOrEqual(0);
   const bodyStart = start + startMarker.length;
-  const end = contents.indexOf(endMarker, bodyStart);
+  const end = normalizedContents.indexOf(endMarker, bodyStart);
   expect(end, `missing embedded Node end marker: ${endMarker}`).toBeGreaterThan(bodyStart);
-  return contents.slice(bodyStart, end);
+  return normalizedContents.slice(bodyStart, end);
 }
 
 function runEmbeddedHealth(code: string, marker: string): {
