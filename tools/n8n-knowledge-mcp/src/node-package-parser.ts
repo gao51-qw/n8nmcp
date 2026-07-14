@@ -51,11 +51,11 @@ async function parseOfficialNodePackage(
   pkg: NodePackageReference,
 ): Promise<NodePackageParseResult> {
   const known = validateKnownMetadata(
-    JSON.parse(await readFile(join(pkg.dir, "dist", "known", "nodes.json"), "utf8")),
+    await readOfficialMetadata(pkg, "dist/known/nodes.json"),
     pkg.name,
   );
   const rows = validateTypeMetadata(
-    JSON.parse(await readFile(join(pkg.dir, "dist", "types", "nodes.json"), "utf8")),
+    await readOfficialMetadata(pkg, "dist/types/nodes.json"),
     pkg.name,
   );
   const descriptions = selectDescriptions(rows);
@@ -116,6 +116,20 @@ async function parseCommunityNodePackage(
   }
 
   return { nodes, expectedNodeCount: null, failures };
+}
+
+async function readOfficialMetadata(
+  pkg: NodePackageReference,
+  metadataPath: string,
+): Promise<unknown> {
+  try {
+    return JSON.parse(await readFile(join(pkg.dir, metadataPath), "utf8"));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`${pkg.name}: failed to read or parse ${metadataPath}: ${message}`, {
+      cause: error,
+    });
+  }
 }
 
 function validateKnownMetadata(value: unknown, packageName: string): Record<string, KnownNode> {

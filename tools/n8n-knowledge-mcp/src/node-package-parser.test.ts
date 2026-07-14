@@ -73,6 +73,28 @@ describe("parseNodePackage", () => {
     );
   });
 
+  it("identifies the package and path when official metadata is missing", async () => {
+    const root = await temporaryDirectory();
+    await writeOfficialFixture(root);
+    await rm(join(root, "dist", "known", "nodes.json"));
+
+    const error = await captureFailure(parseNodePackage(officialPackage(root)));
+
+    expect(error.message).toMatch(/n8n-nodes-base.*dist\/known\/nodes\.json/i);
+    expect(error.cause).toBeInstanceOf(Error);
+  });
+
+  it("identifies the package and path when official metadata JSON is malformed", async () => {
+    const root = await temporaryDirectory();
+    await writeOfficialFixture(root);
+    await writeFile(join(root, "dist", "types", "nodes.json"), "{ malformed json");
+
+    const error = await captureFailure(parseNodePackage(officialPackage(root)));
+
+    expect(error.message).toMatch(/n8n-nodes-base.*dist\/types\/nodes\.json/i);
+    expect(error.cause).toBeInstanceOf(Error);
+  });
+
   it("surfaces community dynamic-import failures", async () => {
     const root = await temporaryDirectory();
     await writeFile(
@@ -155,4 +177,14 @@ function communityPackage(root: string): NodePackageReference {
     dir: root,
     source: "community",
   };
+}
+
+async function captureFailure(promise: Promise<unknown>): Promise<Error & { cause?: unknown }> {
+  try {
+    await promise;
+  } catch (error) {
+    if (error instanceof Error) return error;
+    throw new Error(`Expected an Error rejection, received ${String(error)}`);
+  }
+  throw new Error("Expected parseNodePackage to reject");
 }
