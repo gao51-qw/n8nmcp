@@ -55,14 +55,69 @@ function normalizeToolVariantOf(value: string | null): string | null {
   return value ? normalizeExternalType(value) : null;
 }
 
-function parseJsonArray(value: string | null): unknown[] {
+function parseJsonArray(
+  value: string | null,
+  field: "properties_schema" | "credentials_required" | "operations",
+  nodeType: string,
+): unknown[] {
   if (!value) return [];
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed : [];
+    parsed = JSON.parse(value);
   } catch {
-    return [];
+    throw new Error(`Invalid external candidate ${nodeType}: ${field} must be valid JSON`);
   }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`Invalid external candidate ${nodeType}: ${field} must be a JSON array`);
+  }
+  return parsed;
+}
+
+function ensureCandidateTables(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS external_node_candidates (
+      source TEXT NOT NULL,
+      package_name TEXT NOT NULL,
+      node_type TEXT NOT NULL,
+      normalized_node_type TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      version TEXT,
+      candidate_kind TEXT NOT NULL,
+      verification_status TEXT NOT NULL DEFAULT 'external-unverified',
+      is_ai_tool INTEGER NOT NULL DEFAULT 0,
+      is_trigger INTEGER NOT NULL DEFAULT 0,
+      is_webhook INTEGER NOT NULL DEFAULT 0,
+      is_tool_variant INTEGER NOT NULL DEFAULT 0,
+      tool_variant_of TEXT,
+      normalized_tool_variant_of TEXT,
+      is_community INTEGER NOT NULL DEFAULT 0,
+      is_verified INTEGER NOT NULL DEFAULT 0,
+      npm_package_name TEXT,
+      npm_version TEXT,
+      npm_downloads INTEGER NOT NULL DEFAULT 0,
+      properties_json TEXT NOT NULL DEFAULT '[]',
+      credentials_json TEXT NOT NULL DEFAULT '[]',
+      documentation TEXT,
+      operations_json TEXT NOT NULL DEFAULT '[]',
+      source_metadata_json TEXT NOT NULL DEFAULT '{}',
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY (source, package_name, node_type)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_external_node_candidates_kind
+      ON external_node_candidates(candidate_kind);
+    CREATE INDEX IF NOT EXISTS idx_external_node_candidates_package
+      ON external_node_candidates(package_name);
+    CREATE INDEX IF NOT EXISTS idx_external_node_candidates_verified
+      ON external_node_candidates(is_verified);
+
+    CREATE VIRTUAL TABLE IF NOT EXISTS external_node_candidates_fts USING fts5(
+      node_type, normalized_node_type, display_name, description, package_name, documentation,
+      tokenize='unicode61'
+    );
+  `);
 }
 
 function candidateKind(row: ExternalNode, officialNodeTypes: Set<string>): string | null {
@@ -93,6 +148,7 @@ function main() {
 
   const local = new Database(LOCAL_DB);
   const external = new Database(EXTERNAL_DB, { readonly: true });
+  ensureCandidateTables(local);
 
   const officialNodeTypes = new Set(
     (
@@ -104,11 +160,6 @@ function main() {
         .all() as Array<{ node_type: string }>
     ).map((row) => row.node_type),
   );
-
-  local.exec(`
-    DELETE FROM external_node_candidates;
-    DELETE FROM external_node_candidates_fts;
-  `);
 
   const insert = local.prepare(`
     INSERT INTO external_node_candidates(
@@ -158,6 +209,11 @@ function main() {
   const now = new Date().toISOString();
 
   const tx = local.transaction(() => {
+    local.exec(`
+      DELETE FROM external_node_candidates;
+      DELETE FROM external_node_candidates_fts;
+    `);
+
     for (const row of rows) {
       const kind = candidateKind(row, officialNodeTypes);
       if (!kind) {
@@ -167,9 +223,15 @@ function main() {
 
       const normalized = normalizeExternalType(row.node_type);
       const normalizedBase = normalizeToolVariantOf(row.tool_variant_of);
-      const properties = JSON.stringify(parseJsonArray(row.properties_schema));
-      const credentials = JSON.stringify(parseJsonArray(row.credentials_required));
-      const operations = JSON.stringify(parseJsonArray(row.operations));
+      const properties = JSON.stringify(
+        parseJsonArray(row.properties_schema, "properties_schema", row.node_type),
+      );
+      const credentials = JSON.stringify(
+        parseJsonArray(row.credentials_required, "credentials_required", row.node_type),
+      );
+      const operations = JSON.stringify(
+        parseJsonArray(row.operations, "operations", row.node_type),
+      );
       const metadata = JSON.stringify({
         author_name: row.author_name,
         author_github_url: row.author_github_url,

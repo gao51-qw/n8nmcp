@@ -22,11 +22,11 @@ export const SENSITIVE_TEMPLATE_KEYS = new Set([
   "clientsecret",
   "password",
   "privatekey",
-  "token",
 ]);
 
 const SENSITIVE_NAME_VALUE_PARAMETERS = new Set([
   ...SENSITIVE_TEMPLATE_KEYS,
+  "token",
   "xapikey",
 ]);
 

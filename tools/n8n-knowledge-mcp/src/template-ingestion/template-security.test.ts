@@ -174,6 +174,37 @@ describe("template security", () => {
     expect(detail.workflow.nodes[0].parameters.headers[0]).toHaveProperty("Authorization");
   });
 
+  it("preserves ordinary recursive token fields while credential name/value pairs stay protected", () => {
+    const detail = {
+      id: 13,
+      name: "Pagination token",
+      workflow: {
+        nodes: [{
+          id: "n1",
+          name: "Transform",
+          type: "n8n-nodes-base.set",
+          parameters: {
+            data: { token: "safe-pagination-token" },
+            headers: [{ name: "token", value: "credential-secret" }],
+          },
+          position: [0, 0],
+        }],
+        connections: {},
+      },
+    };
+
+    expect(() => assertTemplateContainsNoSecrets(detail.workflow)).toThrow(/sensitive|secret/i);
+    const result = normalizeAndSanitizeTemplate(detail);
+
+    expect(result.workflow.workflow.nodes[0]).toMatchObject({
+      parameters: {
+        data: { token: "safe-pagination-token" },
+        headers: [{ name: "token" }],
+      },
+    });
+    expect(JSON.stringify(result.workflow.workflow)).not.toContain("credential-secret");
+  });
+
   it("keeps only connections between retained nodes without shifting output indices", () => {
     const result = normalizeAndSanitizeTemplate({
       id: 8,

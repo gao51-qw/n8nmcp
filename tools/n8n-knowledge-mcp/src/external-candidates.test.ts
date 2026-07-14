@@ -1,7 +1,118 @@
+import Database from "better-sqlite3";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+
+type ExternalNodeFixture = {
+  node_type: string;
+  package_name?: string;
+  display_name?: string;
+  properties_schema?: string | null;
+  operations?: string | null;
+  credentials_required?: string | null;
+};
+
+const tempDirectories: string[] = [];
+
+function createImportFixture(rows: ExternalNodeFixture[]) {
+  const root = mkdtempSync(join(tmpdir(), "n8n-external-import-"));
+  tempDirectories.push(root);
+  const dataDirectory = join(root, "data");
+  mkdirSync(dataDirectory);
+  const localPath = join(dataDirectory, "nodes.db");
+  const externalPath = join(root, "external.db");
+
+  const local = new Database(localPath);
+  local.exec(`
+    CREATE TABLE nodes (node_type TEXT NOT NULL, package_name TEXT NOT NULL);
+    INSERT INTO nodes(node_type, package_name) VALUES ('manualTrigger', 'n8n-nodes-base');
+  `);
+  local.close();
+
+  const external = new Database(externalPath);
+  external.exec(`
+    CREATE TABLE nodes (
+      node_type TEXT NOT NULL,
+      package_name TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      version TEXT,
+      documentation TEXT,
+      properties_schema TEXT,
+      operations TEXT,
+      credentials_required TEXT,
+      is_ai_tool INTEGER,
+      is_trigger INTEGER,
+      is_webhook INTEGER,
+      is_tool_variant INTEGER,
+      tool_variant_of TEXT,
+      is_community INTEGER,
+      is_verified INTEGER,
+      npm_package_name TEXT,
+      npm_version TEXT,
+      npm_downloads INTEGER,
+      author_name TEXT,
+      author_github_url TEXT,
+      development_style TEXT
+    );
+  `);
+  const insert = external.prepare(`
+    INSERT INTO nodes VALUES (
+      @node_type, @package_name, @display_name, 'Fixture node', 'Transform', '1',
+      'Fixture docs', @properties_schema, @operations, @credentials_required,
+      0, 0, 0, 0, NULL, 1, 1, @package_name, '1.0.0', 100,
+      'Fixture Author', 'https://example.test/author', 'programmatic'
+    )
+  `);
+  for (const row of rows) {
+    insert.run({
+      node_type: row.node_type,
+      package_name: row.package_name ?? "n8n-nodes-fixture",
+      display_name: row.display_name ?? "Fixture",
+      properties_schema: row.properties_schema ?? "[]",
+      operations: row.operations ?? "[]",
+      credentials_required: row.credentials_required ?? "[]",
+    });
+  }
+  external.close();
+
+  return { root, localPath, externalPath };
+}
+
+function runImporter(root: string, externalPath: string) {
+  return spawnSync(
+    process.execPath,
+    [
+      resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
+      resolve(process.cwd(), "scripts/7-import-external-candidates.ts"),
+    ],
+    {
+      cwd: root,
+      encoding: "utf8",
+      env: { ...process.env, EXTERNAL_N8N_MCP_DB: externalPath },
+    },
+  );
+}
+
+function runVerifier(root: string) {
+  return spawnSync(
+    process.execPath,
+    [
+      resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
+      resolve(process.cwd(), "scripts/8-verify-external-nodes.ts"),
+    ],
+    { cwd: root, encoding: "utf8", env: process.env },
+  );
+}
+
+afterEach(() => {
+  while (tempDirectories.length > 0) {
+    rmSync(tempDirectories.pop()!, { recursive: true, force: true });
+  }
+});
 
 describe("external candidate opt-in commands", () => {
   const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8"));
@@ -39,5 +150,99 @@ describe("external candidate opt-in commands", () => {
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toMatch(/Usage:/);
+  });
+
+  it("creates candidate schema on a fresh official database and imports idempotently with FTS parity", () => {
+    const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.example" }]);
+
+    const first = runImporter(fixture.root, fixture.externalPath);
+    expect(first.status, first.stderr).toBe(0);
+    const second = runImporter(fixture.root, fixture.externalPath);
+    expect(second.status, second.stderr).toBe(0);
+
+    const db = new Database(fixture.localPath, { readonly: true });
+    const tables = db.prepare(`
+      SELECT name FROM sqlite_master
+      WHERE name IN ('external_node_candidates', 'external_node_candidates_fts')
+      ORDER BY name
+    `).all() as Array<{ name: string }>;
+    const candidates = db.prepare(
+      "SELECT node_type FROM external_node_candidates ORDER BY node_type",
+    ).all() as Array<{ node_type: string }>;
+    const ftsCandidates = db.prepare(
+      "SELECT node_type FROM external_node_candidates_fts ORDER BY node_type",
+    ).all() as Array<{ node_type: string }>;
+    db.close();
+
+    expect(tables.map((row) => row.name)).toEqual([
+      "external_node_candidates",
+      "external_node_candidates_fts",
+    ]);
+    expect(candidates.map((row) => row.node_type)).toEqual(["n8n-nodes-fixture.example"]);
+    expect(ftsCandidates).toEqual(candidates);
+  });
+
+  it.each(["properties_schema", "credentials_required", "operations"] as const)(
+    "rejects malformed %s JSON without inserting or promoting the candidate",
+    (field) => {
+      const fixture = createImportFixture([{
+        node_type: `n8n-nodes-fixture.bad-${field}`,
+        [field]: "{not-json",
+      }]);
+
+      const imported = runImporter(fixture.root, fixture.externalPath);
+      expect(imported.status).not.toBe(0);
+      expect(imported.stderr).toContain(`n8n-nodes-fixture.bad-${field}`);
+      expect(imported.stderr).toContain(field);
+
+      const verified = runVerifier(fixture.root);
+      expect(verified.status, verified.stderr).toBe(0);
+
+      const db = new Database(fixture.localPath, { readonly: true });
+      expect(db.prepare("SELECT COUNT(*) AS count FROM external_node_candidates").get())
+        .toEqual({ count: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS count FROM external_node_candidates_fts").get())
+        .toEqual({ count: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS count FROM verified_external_nodes").get())
+        .toEqual({ count: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS count FROM verified_external_nodes_fts").get())
+        .toEqual({ count: 0 });
+      db.close();
+    },
+  );
+
+  it("rolls back candidate and FTS replacement when a later insert fails", () => {
+    const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
+    const initial = runImporter(fixture.root, fixture.externalPath);
+    expect(initial.status, initial.stderr).toBe(0);
+
+    const external = new Database(fixture.externalPath);
+    external.exec("DELETE FROM nodes");
+    const insertDuplicate = external.prepare(`
+      INSERT INTO nodes VALUES (
+        'n8n-nodes-fixture.replacement', 'n8n-nodes-fixture', 'Replacement',
+        'Fixture node', 'Transform', '1', 'Fixture docs', '[]', '[]', '[]',
+        0, 0, 0, 0, NULL, 1, 1, 'n8n-nodes-fixture', '1.0.0', 100,
+        'Fixture Author', 'https://example.test/author', 'programmatic'
+      )
+    `);
+    insertDuplicate.run();
+    insertDuplicate.run();
+    external.close();
+
+    const replacement = runImporter(fixture.root, fixture.externalPath);
+    expect(replacement.status).not.toBe(0);
+
+    const db = new Database(fixture.localPath, { readonly: true });
+    const candidates = db.prepare(
+      "SELECT node_type FROM external_node_candidates ORDER BY node_type",
+    ).all() as Array<{ node_type: string }>;
+    const ftsCandidates = db.prepare(
+      "SELECT node_type FROM external_node_candidates_fts ORDER BY node_type",
+    ).all() as Array<{ node_type: string }>;
+    db.close();
+
+    expect(candidates).toEqual([{ node_type: "n8n-nodes-fixture.previous" }]);
+    expect(ftsCandidates).toEqual(candidates);
   });
 });
