@@ -4,7 +4,7 @@ export type OfficialTemplateSummary = {
   description: string | null;
   totalViews: number;
   price?: number;
-  purchaseUrl: string | null;
+  purchaseUrl?: string | null;
   user: { name?: string; username?: string; avatar?: string | null } | null;
   createdAt: string | null;
   nodes: unknown[];

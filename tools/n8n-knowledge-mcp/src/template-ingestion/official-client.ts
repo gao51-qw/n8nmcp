@@ -29,7 +29,7 @@ const summarySchema = z.object({
   description: z.string().nullable(),
   totalViews: z.number(),
   price: z.number().optional(),
-  purchaseUrl: z.string().nullable(),
+  purchaseUrl: z.string().nullable().optional(),
   user: userSchema,
   createdAt: z.string().nullable(),
   nodes: z.array(z.unknown()),
