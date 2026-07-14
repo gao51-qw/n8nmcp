@@ -144,13 +144,23 @@ export function shouldSkipCommunityPackages(
 }
 ```
 
-Import it in `scripts/1-fetch-packages.ts` and replace the direct environment comparison with:
+Import it in `scripts/1-fetch-packages.ts` and define the fetch policy after loading `packages.json`:
 
 ```ts
 const SKIP_COMMUNITY = shouldSkipCommunityPackages(process.argv);
 ```
 
-Keep the existing skip log and community branch unchanged.
+Wrap the existing community search, download-count filter, and community ref additions in:
+
+```ts
+if (!SKIP_COMMUNITY) {
+  // Existing community discovery and ref population stays here unchanged.
+} else {
+  console.log("[fetch] skipping community packages for the official-only build");
+}
+```
+
+Official package resolution and download remain outside this branch, so both modes still produce the official node database.
 
 - [ ] **Step 4: Wire official production entry points**
 
@@ -240,4 +250,3 @@ Expected: authenticated health reports `ok: true` and the verified template coun
 - [ ] **Step 5: Record external evidence boundaries**
 
 Record GHCR push and VPS deployment as not executed unless credentials and explicit production authority are available and the commands actually run. Do not publish or deploy merely to satisfy this plan.
-
