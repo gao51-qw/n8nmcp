@@ -469,15 +469,15 @@ git commit -m "test(knowledge): await deployment contract processes"
 - Modify: `tools/n8n-knowledge-mcp/src/deployment-contract.test.ts`
 
 **Interfaces:**
-- Extends test-only `DeploymentCommandControl` with `terminationGraceMs?: number`; normal callers use the four-second default.
+- Extends test-only `DeploymentCommandControl` with `terminationGraceMs?: number`, `triggerDeadlineOnExit?: boolean`, and `terminationTargetPid?: number`; normal callers use the four-second grace default, real child PID, and never trigger a deadline from `exit`.
 - Produces: `DeploymentCommandError` with readonly `cleanupSafe: boolean`.
 - Preserves: the 30-second execution deadline, 35-second behavioral wrappers, explicit Git Bash/PATH boundary, numeric-status rules, and every deployment assertion.
 
 - [ ] **Step 1: Replace the current lifecycle fixture with the parent-exited RED**
 
-In the existing `defines an atomic mcp-only deployment...` test, replace the tree fixture so the direct Node parent spawns a descendant with inherited stdout/stderr and exits immediately. Give the descendant a finite 2,000ms lifetime so a failed RED cannot leak indefinitely. Invoke `runDeploymentCommand` with `deadlineMs: 100` and `terminationGraceMs: 300`.
+In the existing `defines an atomic mcp-only deployment...` test, replace the tree fixture so the direct Node parent spawns a descendant with inherited stdout/stderr and exits immediately. Give the descendant a finite 2,000ms lifetime so a failed RED cannot leak indefinitely. Invoke `runDeploymentCommand` with `deadlineMs: 5_000`, `terminationGraceMs: 300`, `triggerDeadlineOnExit: true`, and `terminationTargetPid: 2_147_483_647`. The exit trigger must call the same idempotent handler used by the real execution timer; the target override must feed the real Windows `taskkill` or POSIX group-kill implementation. Neither may create a second implementation path.
 
-The assertion must require deterministic rejection before 1,500ms. On Windows it must also require `cleanupSafe === false` and diagnostics containing `termination grace`; on POSIX it may report confirmed group termination with `cleanupSafe === true`. Keep this inside the existing test so the suite remains 210 tests.
+The assertion must require deterministic rejection before 1,500ms, `cleanupSafe === false`, and diagnostics containing `termination grace` on every platform. Keep this inside the existing test so the suite remains 210 tests.
 
 - [ ] **Step 2: Run the lifecycle test and verify the correct RED**
 
@@ -485,7 +485,7 @@ The assertion must require deterministic rejection before 1,500ms. On Windows it
 & $node ./node_modules/vitest/vitest.mjs run src/deployment-contract.test.ts -t "defines an atomic mcp-only deployment with authenticated count verification and rollback" --maxWorkers=1
 ```
 
-Expected before implementation: exit 1 because the parent-exited descendant keeps the inherited pipe open beyond the new bounded-settlement assertion, or because the old helper lacks `terminationGraceMs`/`cleanupSafe`. A TypeScript signature failure alone does not count; use a temporary test-local type adaptation until the behavioral failure executes, then remove it before GREEN.
+Expected before implementation: exit 1 because the parent-exited descendant keeps the inherited pipe open beyond the new bounded-settlement assertion, or because the old helper lacks `terminationGraceMs`/`triggerDeadlineOnExit`/`terminationTargetPid`/`cleanupSafe`. A TypeScript signature failure alone does not count; use a temporary test-local type adaptation until the behavioral failure executes, then remove it before GREEN.
 
 - [ ] **Step 3: Implement a single bounded termination-confirmation stage**
 
@@ -502,7 +502,7 @@ class DeploymentCommandError extends Error {
 }
 ```
 
-Extend `DeploymentCommandControl` with `terminationGraceMs?: number`. When the execution deadline fires, start the existing Windows tree termination or POSIX process-group termination and one grace timer. If `close` is confirmed, clear both timers and reject the original timeout with `cleanupSafe: true`. If grace expires first, stop waiting on the termination command, destroy the original child's local stdout/stderr streams, unref any still-running termination helper, and reject exactly once with `cleanupSafe: false` plus command, elapsed, termination, and fixture diagnostics. Late `close`, `error`, or termination completion must be settle-once no-ops.
+Extend `DeploymentCommandControl` with `terminationGraceMs?: number`, `triggerDeadlineOnExit?: boolean`, and `terminationTargetPid?: number`. Extract the execution timer callback into one idempotent deadline handler. The normal timer and, only when explicitly enabled by the regression, the direct child's `exit` event call that same handler. The handler terminates `control.terminationTargetPid ?? child.pid`, so normal callers always use the real child PID. Start the existing Windows tree termination or POSIX process-group termination and one grace timer. If `close` is confirmed, clear both timers and reject the original timeout with `cleanupSafe: true`. If grace expires first, stop waiting on the termination command, destroy the original child's local stdout/stderr streams, unref any still-running termination helper, and reject exactly once with `cleanupSafe: false` plus command, elapsed, termination, and fixture diagnostics. Late `close`, `error`, or termination completion must be settle-once no-ops.
 
 Change the Windows termination helper to return both its completion promise and a release function so the single grace timer can destroy its pipes, attempt to kill it, and unref it. Do not add retries or another timer.
 

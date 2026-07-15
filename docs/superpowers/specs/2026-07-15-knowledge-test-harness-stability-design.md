@@ -119,10 +119,13 @@ plus four-second termination grace settle first; no global timeout changes.
 
 The lifecycle regression must cover the adversarial ordering that triggered review:
 the direct parent spawns a descendant with inherited stdout/stderr and exits immediately.
-On Windows the vanished parent PID can make `taskkill /T /F` fail, but the helper must
-still reject within the grace bound and mark cleanup unsafe. On POSIX the detached
-process group may still be terminated successfully; either platform must reject the
-execution deadline deterministically without hanging.
+A test-only `triggerDeadlineOnExit` control invokes the same idempotent deadline handler
+after the direct parent's `exit`, avoiding a new load-sensitive cold-start threshold.
+The regression also supplies a guaranteed-nonexistent `terminationTargetPid`, causing
+the real Windows `taskkill /T /F` or POSIX group kill to fail deterministically while
+the descendant retains the inherited pipes. Normal callers enable neither control and
+retain the real child PID and 30-second timer. The helper must reject within the grace
+bound, mark cleanup unsafe, and never hang.
 
 The Docker stub and production deployment script remain separate processes so the
 tests still exercise the real script boundary. The controlled shell and path remove
