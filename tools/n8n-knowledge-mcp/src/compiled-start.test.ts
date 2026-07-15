@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
@@ -20,23 +20,24 @@ afterEach(async () => {
 });
 
 describe("compiled server entrypoint", () => {
-  it("uses the emitted server path in package and Docker metadata", () => {
+  it("uses the emitted server path and one global runtime build", () => {
     const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
       scripts: { start: string };
     };
     const dockerfile = readFileSync(resolve("Dockerfile"), "utf8");
+    const config = readFileSync(resolve("vitest.config.ts"), "utf8");
+    const externalTest = readFileSync(resolve("src/external-candidates.test.ts"), "utf8");
+    const compiledTest = readFileSync(resolve("src/compiled-start.test.ts"), "utf8");
 
     expect(packageJson.scripts.start).toBe("node dist/src/server.js");
     expect(dockerfile).toContain('CMD ["node", "dist/src/server.js"]');
+    expect(config).toContain('globalSetup: ["./vitest.global-setup.ts"]');
+    expect(externalTest).not.toMatch(/beforeAll\(\(\) => \{\s*execFileSync\([\s\S]*typescript\/bin\/tsc/);
+    expect(compiledTest).not.toMatch(/execFileSync\([\s\S]*typescript\/bin\/tsc/);
   });
 
   it("builds and starts the compiled server, then serves anonymous health", async () => {
     const deadline = Date.now() + 29_000;
-    execFileSync(
-      process.execPath,
-      [resolve("node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
-      { stdio: "pipe" },
-    );
     temporaryDirectory = mkdtempSync(join(tmpdir(), "knowledge-compiled-start-"));
     const dbPath = join(temporaryDirectory, "nodes.db");
     const db = new Database(dbPath);

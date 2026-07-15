@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 type ExternalNodeFixture = {
   node_type: string;
@@ -105,14 +105,6 @@ function runVerifier(root: string) {
     { cwd: root, encoding: "utf8", env: process.env },
   );
 }
-
-beforeAll(() => {
-  execFileSync(
-    process.execPath,
-    [resolve(packageRoot, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
-    { cwd: packageRoot, stdio: "pipe" },
-  );
-});
 
 afterEach(() => {
   while (tempDirectories.length > 0) {
