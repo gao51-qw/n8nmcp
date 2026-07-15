@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -99,7 +99,7 @@ describe("knowledge publication and deployment contracts", () => {
     expect(deployStep).toContain("'${IMMUTABLE_TAG}' '${EXPECTED_TEMPLATES}'");
   });
 
-  it("defines an atomic mcp-only deployment with authenticated count verification and rollback", () => {
+  it("defines an atomic mcp-only deployment with authenticated count verification and rollback", async () => {
     expect(existsSync(deployPath)).toBe(true);
     expect(deploy).toMatch(/OLD_TAG=.*MCP_IMAGE_TAG=/s);
     expect(deploy).toContain("mktemp");
@@ -116,6 +116,47 @@ describe("knowledge publication and deployment contracts", () => {
       'docker image rm "${IMAGE}:${ROLLBACK_TAG}"',
     ]);
     expect(deploy).not.toMatch(/docker compose[^\n]+(?:up|restart|stop)[^\n]+\b(?:app|caddy)\b/);
+
+    const signalOutcome = runDeploymentCommand(
+      process.execPath,
+      ["-e", "setTimeout(() => {}, 2_500)"],
+      { cwd: process.cwd(), env: process.env },
+      { onSpawn: (child: ChildProcess) => { child.kill("SIGTERM"); } },
+    ).then(
+      (result) => `resolved status=${result.status} signal=${result.signal}`,
+      (error: unknown) => String(error),
+    );
+    const descendantLifetimeMs = 4_000;
+    const treeCloseLimitMs = 3_000;
+    const treeStartedAt = Date.now();
+    const treeOutcome = runDeploymentCommand(
+      process.execPath,
+      [
+        "-e",
+        `const { spawn } = require("node:child_process");
+const descendant = spawn(process.execPath, ["-e", "setTimeout(() => {}, ${descendantLifetimeMs})"], {
+  stdio: "inherit",
+});
+descendant.once("error", (error) => { throw error; });
+setTimeout(() => {}, ${descendantLifetimeMs});`,
+      ],
+      { cwd: process.cwd(), env: process.env },
+      { deadlineMs: 100 },
+    ).then(
+      (result) => `resolved status=${result.status} signal=${result.signal}`,
+      (error: unknown) => String(error),
+    );
+    const [signalResult, treeResult] = await Promise.all([signalOutcome, treeOutcome]);
+    const treeElapsedMs = Date.now() - treeStartedAt;
+    expect({
+      signalRejected: /unexpected signal.*SIGTERM/is.test(signalResult),
+      treeRejected: /exceeded 100ms/is.test(treeResult),
+      treeClosedPromptly: treeElapsedMs < treeCloseLimitMs,
+    }, `signal=${signalResult}\ntree=${treeResult}\ntreeElapsedMs=${treeElapsedMs}`).toEqual({
+      signalRejected: true,
+      treeRejected: true,
+      treeClosedPromptly: true,
+    });
   });
 
   it("persists the new tag and recreates only mcp after a healthy deployment", async () => {
@@ -214,6 +255,11 @@ type DeployCommandResult = {
   stderr: string;
 };
 
+type DeploymentCommandControl = {
+  deadlineMs?: number;
+  onSpawn?: (child: ChildProcess) => void;
+};
+
 type DeployStubResult = {
   status: number | null;
   stderr: string;
@@ -223,50 +269,149 @@ type DeployStubResult = {
 };
 
 async function runDeploymentCommand(
-  bash: string,
+  command: string,
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv },
+  control: DeploymentCommandControl = {},
 ): Promise<DeployCommandResult> {
   const startedAt = Date.now();
   return await new Promise<DeployCommandResult>((resolveCommand, rejectCommand) => {
-    const child = spawn(bash, args, {
+    const child = spawn(command, args, {
       ...options,
+      detached: process.platform !== "win32",
       stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
     let timedOut = false;
     let settled = false;
+    let postSpawnError: Error | null = null;
+    let terminationPromise: Promise<string> | null = null;
 
     child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
     child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
 
     const diagnostics = (status: number | null, signal: NodeJS.Signals | null) =>
-      `command=${bash} ${args.join(" ")} elapsedMs=${Date.now() - startedAt} `
-      + `status=${status} signal=${signal ?? "none"} stdout=${stdout} stderr=${stderr}`;
+      `command=${command} ${args.join(" ")} elapsedMs=${Date.now() - startedAt} `
+      + `status=${status} signal=${signal ?? "none"} stdout=${stdout} stderr=${stderr}`
+      + ` postSpawnError=${postSpawnError?.message ?? "none"}`;
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
       callback();
     };
+    const deadlineMs = control.deadlineMs ?? DEPLOY_STUB_DEADLINE_MS;
     const deadline = setTimeout(() => {
       timedOut = true;
-      child.kill();
-    }, DEPLOY_STUB_DEADLINE_MS);
+      if (child.pid === undefined) {
+        terminationPromise = Promise.resolve("pid=unavailable");
+      } else if (process.platform === "win32") {
+        terminationPromise = terminateWindowsProcessTree(child.pid);
+      } else {
+        terminationPromise = Promise.resolve().then(() => {
+          process.kill(-child.pid!, "SIGKILL");
+          return `processGroup=${-child.pid!} signal=SIGKILL`;
+        });
+      }
+    }, deadlineMs);
 
     child.once("error", (error) => {
-      finish(() => rejectCommand(new Error(
-        `Deployment stub failed to start: ${error.message}; ${diagnostics(child.exitCode, child.signalCode)}`,
-      )));
-    });
-    child.once("close", (status, signal) => {
-      if (timedOut) {
+      if (child.pid === undefined) {
         finish(() => rejectCommand(new Error(
-          `Deployment stub exceeded ${DEPLOY_STUB_DEADLINE_MS}ms; ${diagnostics(status, signal)}`,
+          `Deployment stub failed to start: ${error.message}; ${diagnostics(child.exitCode, child.signalCode)}`,
+        )));
+      } else {
+        postSpawnError ??= error;
+      }
+    });
+    child.once("spawn", () => {
+      try {
+        control.onSpawn?.(child);
+      } catch (error) {
+        postSpawnError ??= error instanceof Error ? error : new Error(String(error));
+      }
+    });
+    child.once("close", async (status, signal) => {
+      if (timedOut) {
+        let terminationDiagnostics: string;
+        try {
+          terminationDiagnostics = await (terminationPromise ?? Promise.resolve("not-started"));
+        } catch (error) {
+          terminationDiagnostics = `failed=${error instanceof Error ? error.message : String(error)}`;
+        }
+        finish(() => rejectCommand(new Error(
+          `Deployment stub exceeded ${deadlineMs}ms; termination=${terminationDiagnostics}; `
+          + diagnostics(status, signal),
+        )));
+      } else if (postSpawnError !== null) {
+        const processError = postSpawnError;
+        finish(() => rejectCommand(new Error(
+          `Deployment stub process error after start: ${processError.message}; `
+          + diagnostics(status, signal),
+        )));
+      } else if (signal !== null) {
+        finish(() => rejectCommand(new Error(
+          `Deployment stub exited with unexpected signal ${signal}; ${diagnostics(status, signal)}`,
+        )));
+      } else if (status === null) {
+        finish(() => rejectCommand(new Error(
+          `Deployment stub closed without a numeric exit status; ${diagnostics(status, signal)}`,
         )));
       } else {
         finish(() => resolveCommand({ status, signal, stdout, stderr }));
+      }
+    });
+  });
+}
+
+async function terminateWindowsProcessTree(pid: number): Promise<string> {
+  const taskkill = resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
+  const args = ["/PID", String(pid), "/T", "/F"];
+  return await new Promise<string>((resolveTermination, rejectTermination) => {
+    const child = spawn(taskkill, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
+    });
+    let stdout = "";
+    let stderr = "";
+    let postSpawnError: Error | null = null;
+    let settled = false;
+
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+    const diagnostics = (status: number | null, signal: NodeJS.Signals | null) =>
+      `command=${taskkill} ${args.join(" ")} status=${status} signal=${signal ?? "none"} `
+      + `stdout=${stdout} stderr=${stderr}`;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      callback();
+    };
+
+    child.once("error", (error) => {
+      if (child.pid === undefined) {
+        finish(() => rejectTermination(new Error(
+          `Process-tree termination failed to start: ${error.message}; `
+          + diagnostics(child.exitCode, child.signalCode),
+        )));
+      } else {
+        postSpawnError ??= error;
+      }
+    });
+    child.once("close", (status, signal) => {
+      if (postSpawnError !== null) {
+        const terminationError = postSpawnError;
+        finish(() => rejectTermination(new Error(
+          `Process-tree termination error after start: ${terminationError.message}; `
+          + diagnostics(status, signal),
+        )));
+      } else if (signal !== null || status !== 0) {
+        finish(() => rejectTermination(new Error(
+          `Process-tree termination failed; ${diagnostics(status, signal)}`,
+        )));
+      } else {
+        finish(() => resolveTermination(diagnostics(status, signal)));
       }
     });
   });
