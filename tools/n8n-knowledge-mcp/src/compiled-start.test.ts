@@ -1,10 +1,16 @@
 import Database from "better-sqlite3";
 import { spawn, type ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { PassThrough } from "node:stream";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  runRuntimeTestBuild,
+  type RuntimeBuildChild,
+} from "../vitest.global-setup.js";
 
 let child: ChildProcess | undefined;
 let childSettlement: ChildSettlement | undefined;
@@ -50,6 +56,97 @@ describe("compiled server entrypoint", () => {
     const missingSettlement = observeChildSettlement(missing);
     await missingSettlement.closed;
     expect(missingSettlement.isClosed()).toBe(true);
+
+    vi.useFakeTimers();
+    try {
+      const stdout = new PassThrough();
+      const stderr = new PassThrough();
+      const events = new EventEmitter();
+      let killCalls = 0;
+      let unrefCalls = 0;
+      const fakeChild = Object.assign(events, {
+        pid: 43_210,
+        exitCode: null,
+        signalCode: null,
+        stdout,
+        stderr,
+        kill: () => {
+          killCalls += 1;
+          return false;
+        },
+        unref: () => { unrefCalls += 1; },
+      }) as RuntimeBuildChild;
+      let outcome: Error | null | undefined;
+      const observed = runRuntimeTestBuild({
+        spawnBuild: () => fakeChild,
+        buildDeadlineMs: 60_000,
+        terminationGraceMs: 4_000,
+      }).then(
+        () => { outcome = null; },
+        (error: unknown) => { outcome = error as Error; },
+      );
+      stdout.write("compiler stdout");
+      stderr.write("compiler stderr");
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(killCalls).toBe(1);
+      expect(outcome).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(3_999);
+      expect(outcome).toBeUndefined();
+      await vi.advanceTimersByTimeAsync(1);
+      await observed;
+
+      expect(outcome).toBeInstanceOf(Error);
+      expect(String(outcome)).toContain("pid=43210");
+      expect(String(outcome)).toContain("killRequested=false");
+      expect(String(outcome)).toContain("killError=none");
+      expect(String(outcome)).toContain("settlement=termination-grace");
+      expect(String(outcome)).toContain("compiler stdout");
+      expect(String(outcome)).toContain("compiler stderr");
+      expect(stdout.destroyed).toBe(true);
+      expect(stderr.destroyed).toBe(true);
+      expect(unrefCalls).toBe(1);
+
+      const settledMessage = String(outcome);
+      events.emit("close", null, null);
+      events.emit("error", new Error("late error"));
+      expect(String(outcome)).toBe(settledMessage);
+      expect(unrefCalls).toBe(1);
+
+      const throwingStdout = new PassThrough();
+      const throwingStderr = new PassThrough();
+      const throwingEvents = new EventEmitter();
+      let throwingUnrefCalls = 0;
+      const throwingChild = Object.assign(throwingEvents, {
+        pid: 43_211,
+        exitCode: null,
+        signalCode: null,
+        stdout: throwingStdout,
+        stderr: throwingStderr,
+        kill: () => { throw new Error("kill refused"); },
+        unref: () => { throwingUnrefCalls += 1; },
+      }) as RuntimeBuildChild;
+      let throwingOutcome: Error | null | undefined;
+      const throwingObserved = runRuntimeTestBuild({
+        spawnBuild: () => throwingChild,
+        buildDeadlineMs: 60_000,
+        terminationGraceMs: 4_000,
+      }).then(
+        () => { throwingOutcome = null; },
+        (error: unknown) => { throwingOutcome = error as Error; },
+      );
+      await vi.advanceTimersByTimeAsync(64_000);
+      await throwingObserved;
+      expect(String(throwingOutcome)).toContain("pid=43211");
+      expect(String(throwingOutcome)).toContain("killRequested=false");
+      expect(String(throwingOutcome)).toContain("killError=kill refused");
+      expect(String(throwingOutcome)).toContain("settlement=termination-grace");
+      expect(throwingStdout.destroyed).toBe(true);
+      expect(throwingStderr.destroyed).toBe(true);
+      expect(throwingUnrefCalls).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("builds and starts the compiled server, then serves anonymous health", async () => {
