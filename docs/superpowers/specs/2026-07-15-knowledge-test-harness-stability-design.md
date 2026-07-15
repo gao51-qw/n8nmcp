@@ -103,14 +103,26 @@ diagnostics; it never silently skips the behavioral assertions.
 ### Asynchronous deployment process boundary
 
 Change `runDeployStub` to return a promise. It starts exactly one top-level Git Bash
-child with `spawn`, captures stdout/stderr, and waits on `error`, `exit`, or one
-30-second total deadline. The two behavioral tests become async and await the
-result.
+child with `spawn`, captures stdout/stderr, and waits on `error`, `close`, or one
+30-second execution deadline. The behavioral tests become async and await the result.
 
-On timeout, the helper terminates the child, waits for process settlement, removes
-the fixture directory, and rejects with the command, elapsed time, exit/signal, and
-captured output. Test wrappers receive a 35-second ceiling only so the helper's
-30-second diagnostic deadline wins; no global timeout changes.
+On timeout, the helper starts whole-tree termination and enters a separate four-second
+termination-confirmation grace stage. This grace stage does not extend the execution
+budget and is never used by successful commands. If the original child closes during
+grace, the helper rejects with the command, elapsed time, exit/signal, captured output,
+and termination diagnostics, then permits fixture cleanup. If closure cannot be
+confirmed before grace expires, the helper rejects deterministically with
+`cleanupSafe: false`, releases its local pipe and termination-command handles, and
+retains the fixture directory instead of deleting data that a surviving descendant may
+still use. Test wrappers receive a 35-second ceiling so the 30-second execution deadline
+plus four-second termination grace settle first; no global timeout changes.
+
+The lifecycle regression must cover the adversarial ordering that triggered review:
+the direct parent spawns a descendant with inherited stdout/stderr and exits immediately.
+On Windows the vanished parent PID can make `taskkill /T /F` fail, but the helper must
+still reject within the grace bound and mark cleanup unsafe. On POSIX the detached
+process group may still be terminated successfully; either platform must reject the
+execution deadline deterministically without hanging.
 
 The Docker stub and production deployment script remain separate processes so the
 tests still exercise the real script boundary. The controlled shell and path remove
@@ -131,18 +143,23 @@ Vitest invocation
        -> controlled Git/MSYS PATH
        -> real update-knowledge.sh
        -> /usr/bin/bash Docker stub
-       -> exit/error/deadline result
+       -> exit/error/execution deadline
+       -> bounded termination confirmation
+       -> cleanup-safe result or retained fixture
 ```
 
 ## Error Handling
 
 - A compiler spawn error, non-zero exit, signal, or 60-second deadline fails setup
   before any test consumes `dist`.
-- A deployment shell spawn error, non-zero/zero exit, or 30-second deadline is
-  returned or rejected with full diagnostics. Business assertions still decide
+- A deployment shell spawn error, non-zero/zero exit, or 30-second execution deadline
+  is returned or rejected with full diagnostics. Business assertions still decide
   whether a zero or non-zero deployment status is expected.
-- Cleanup runs after process settlement. It does not remove a directory while a
-  child may still be using it.
+- Deadline termination receives one four-second confirmation grace. Grace expiry is a
+  deterministic failure, never a retry or a successful result.
+- Cleanup runs only after confirmed process settlement. An unconfirmed tree produces a
+  `cleanupSafe: false` error and retains the fixture directory with its path in the
+  diagnostics.
 - No retry converts a failing build or deployment into a passing test.
 
 ## Testing Strategy
@@ -155,7 +172,8 @@ Follow strict RED-GREEN TDD:
    path state and proves the deployment helper still selects explicit Git Bash and
    `/usr/bin/bash` for the Docker stub.
 3. Add focused error/deadline coverage for the asynchronous process helper so a
-   child error, non-zero exit, and deadline settle once and include diagnostics.
+   child error, non-zero exit, deadline, and parent-exited pipe-holding descendant
+   settle once and include diagnostics.
 4. Run the external and compiled-start files together under Node 20, then the
    deployment contract file, then the complete Knowledge suite once.
 5. Run Node 20 TypeScript, `git diff --check`, and verify the worktree is clean after

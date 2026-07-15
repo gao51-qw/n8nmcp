@@ -4,7 +4,7 @@
 
 **Goal:** Remove the remaining load-sensitive Knowledge MCP test failures by compiling emitted artifacts once per Vitest invocation and replacing the blocking, path-ambiguous deployment fixture with a deterministic asynchronous process boundary.
 
-**Architecture:** Vitest global setup owns the single TypeScript build and fails before tests consume an incomplete `dist` tree. Deployment contract tests use an explicit Git Bash environment and an asynchronous `spawn` helper whose `error`, `close`, and one total deadline race without blocking the Node event loop.
+**Architecture:** Vitest global setup owns the single TypeScript build and fails before tests consume an incomplete `dist` tree. Deployment contract tests use an explicit Git Bash environment and an asynchronous `spawn` helper whose `error`, `close`, and execution deadline race without blocking the Node event loop. A separate bounded termination-confirmation grace handles failed tree termination without unsafe fixture cleanup.
 
 **Tech Stack:** TypeScript, Node.js 20, Vitest 4, Node child-process APIs, Git Bash/MSYS on Windows.
 
@@ -13,7 +13,8 @@
 - Compile runtime test artifacts exactly once per Vitest invocation; no test file or file-level hook may invoke `tsc`.
 - Preserve all external-import, compiled-server health, successful-deployment, rollback, image-pinning, and mcp-only recreation assertions.
 - Use explicit Git Bash and Git utility paths on Windows; never resolve Bash through the WSL shim or inherited host path order.
-- Deployment subprocess handling must be asynchronous and bounded by one terminating 30-second total deadline; the Vitest wrapper may use 35 seconds only so helper diagnostics win.
+- Deployment subprocess handling must be asynchronous and bounded by a 30-second execution deadline followed, only on timeout, by a four-second termination-confirmation grace; the Vitest wrapper remains 35 seconds so helper diagnostics win.
+- Grace expiry must reject with `cleanupSafe: false`, release local pipe/termination handles, and retain the fixture directory with its path in diagnostics. It must not retry the command or convert a failure into success.
 - Compiler setup must be asynchronous and bounded by one terminating 60-second total deadline.
 - Do not change production source, `deploy/update-knowledge.sh`, dependencies, lockfiles, generated databases, Dockerfiles, or release workflows.
 - Do not increase global Vitest `testTimeout` or `hookTimeout`, skip platform coverage, retry failures, or weaken assertions.
@@ -460,6 +461,71 @@ Confirm only `src/deployment-contract.test.ts` changed since the Task 13 commit,
 ```powershell
 git add -- tools/n8n-knowledge-mcp/src/deployment-contract.test.ts
 git commit -m "test(knowledge): await deployment contract processes"
+```
+
+### Task 14 Review Repair: Bound Failed Termination Without Unsafe Cleanup
+
+**Files:**
+- Modify: `tools/n8n-knowledge-mcp/src/deployment-contract.test.ts`
+
+**Interfaces:**
+- Extends test-only `DeploymentCommandControl` with `terminationGraceMs?: number`; normal callers use the four-second default.
+- Produces: `DeploymentCommandError` with readonly `cleanupSafe: boolean`.
+- Preserves: the 30-second execution deadline, 35-second behavioral wrappers, explicit Git Bash/PATH boundary, numeric-status rules, and every deployment assertion.
+
+- [ ] **Step 1: Replace the current lifecycle fixture with the parent-exited RED**
+
+In the existing `defines an atomic mcp-only deployment...` test, replace the tree fixture so the direct Node parent spawns a descendant with inherited stdout/stderr and exits immediately. Give the descendant a finite 2,000ms lifetime so a failed RED cannot leak indefinitely. Invoke `runDeploymentCommand` with `deadlineMs: 100` and `terminationGraceMs: 300`.
+
+The assertion must require deterministic rejection before 1,500ms. On Windows it must also require `cleanupSafe === false` and diagnostics containing `termination grace`; on POSIX it may report confirmed group termination with `cleanupSafe === true`. Keep this inside the existing test so the suite remains 210 tests.
+
+- [ ] **Step 2: Run the lifecycle test and verify the correct RED**
+
+```powershell
+& $node ./node_modules/vitest/vitest.mjs run src/deployment-contract.test.ts -t "defines an atomic mcp-only deployment with authenticated count verification and rollback" --maxWorkers=1
+```
+
+Expected before implementation: exit 1 because the parent-exited descendant keeps the inherited pipe open beyond the new bounded-settlement assertion, or because the old helper lacks `terminationGraceMs`/`cleanupSafe`. A TypeScript signature failure alone does not count; use a temporary test-local type adaptation until the behavioral failure executes, then remove it before GREEN.
+
+- [ ] **Step 3: Implement a single bounded termination-confirmation stage**
+
+Add:
+
+```ts
+const DEPLOY_TERMINATION_GRACE_MS = 4_000;
+
+class DeploymentCommandError extends Error {
+  constructor(message: string, readonly cleanupSafe: boolean) {
+    super(message);
+    this.name = "DeploymentCommandError";
+  }
+}
+```
+
+Extend `DeploymentCommandControl` with `terminationGraceMs?: number`. When the execution deadline fires, start the existing Windows tree termination or POSIX process-group termination and one grace timer. If `close` is confirmed, clear both timers and reject the original timeout with `cleanupSafe: true`. If grace expires first, stop waiting on the termination command, destroy the original child's local stdout/stderr streams, unref any still-running termination helper, and reject exactly once with `cleanupSafe: false` plus command, elapsed, termination, and fixture diagnostics. Late `close`, `error`, or termination completion must be settle-once no-ops.
+
+Change the Windows termination helper to return both its completion promise and a release function so the single grace timer can destroy its pipes, attempt to kill it, and unref it. Do not add retries or another timer.
+
+- [ ] **Step 4: Gate fixture cleanup on the error contract**
+
+In `runDeployStub`, track whether cleanup remains safe. A `DeploymentCommandError` with `cleanupSafe: false` must be rethrown with `fixtureRetained=<root>` diagnostics and must skip `rmSync(root, ...)`. All pre-spawn errors, confirmed closures, normal numeric exits, and unrelated post-command assertion/read failures retain existing cleanup behavior.
+
+- [ ] **Step 5: Verify focused GREEN and static scope**
+
+```powershell
+& $node ./node_modules/vitest/vitest.mjs run src/deployment-contract.test.ts --maxWorkers=1
+& $node ./node_modules/typescript/bin/tsc -p tsconfig.json
+git diff --check
+git diff --name-only 3c229b4
+```
+
+Expected: 1 file, 9/9 tests, zero skipped; TypeScript and diff check exit zero; only the design, plan, and `tools/n8n-knowledge-mcp/src/deployment-contract.test.ts` differ from `3c229b4`; production deployment code and global timeout configuration remain unchanged.
+
+- [ ] **Step 6: Commit the review repair**
+
+```powershell
+git add -- docs/superpowers/specs/2026-07-15-knowledge-test-harness-stability-design.md docs/superpowers/plans/2026-07-15-knowledge-test-harness-stability.md tools/n8n-knowledge-mcp/src/deployment-contract.test.ts
+git commit -m "test(knowledge): bound deployment termination grace"
 ```
 
 ---
