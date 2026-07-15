@@ -44,4 +44,26 @@ describe("single application architecture", () => {
       ),
     ).toEqual([]);
   });
+
+  it("ignores reproducible local workspace state", () => {
+    const gitignore = readFileSync(resolve(root, ".gitignore"), "utf8");
+    for (const rule of [
+      ".tmp/",
+      ".npm-cache/",
+      ".worktrees/",
+      "test-results/",
+      "*.tsbuildinfo",
+      ".superpowers/sdd/",
+    ]) {
+      expect(gitignore, rule).toContain(rule);
+    }
+  });
+
+  it("documents the root Next application as the active architecture", () => {
+    const guide = readFileSync(resolve(root, "AGENTS.md"), "utf8");
+    expect(guide).toContain("Root Next.js application");
+    expect(guide).toContain("tools/n8n-knowledge-mcp");
+    expect(guide).toContain("npm ci");
+    expect(guide).not.toMatch(/Turborepo|pnpm|apps\/api|apps\/dashboard|packages\/types/);
+  });
 });
