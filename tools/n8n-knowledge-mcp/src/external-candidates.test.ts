@@ -3,7 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 type ExternalNodeFixture = {
   node_type: string;
@@ -15,6 +15,10 @@ type ExternalNodeFixture = {
 };
 
 const tempDirectories: string[] = [];
+const packageRoot = process.cwd();
+const tsxCli = resolve(packageRoot, "node_modules/tsx/dist/cli.mjs");
+const importCompiled = resolve(packageRoot, "dist/scripts/7-import-external-candidates.js");
+const verifyCompiled = resolve(packageRoot, "dist/scripts/8-verify-external-nodes.js");
 
 function createImportFixture(rows: ExternalNodeFixture[]) {
   const root = mkdtempSync(join(tmpdir(), "n8n-external-import-"));
@@ -85,10 +89,7 @@ function createImportFixture(rows: ExternalNodeFixture[]) {
 function runImporter(root: string, externalPath: string) {
   return spawnSync(
     process.execPath,
-    [
-      resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-      resolve(process.cwd(), "scripts/7-import-external-candidates.ts"),
-    ],
+    [importCompiled],
     {
       cwd: root,
       encoding: "utf8",
@@ -100,13 +101,18 @@ function runImporter(root: string, externalPath: string) {
 function runVerifier(root: string) {
   return spawnSync(
     process.execPath,
-    [
-      resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs"),
-      resolve(process.cwd(), "scripts/8-verify-external-nodes.ts"),
-    ],
+    [verifyCompiled],
     { cwd: root, encoding: "utf8", env: process.env },
   );
 }
+
+beforeAll(() => {
+  execFileSync(
+    process.execPath,
+    [resolve(packageRoot, "node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
+    { cwd: packageRoot, stdio: "pipe" },
+  );
+});
 
 afterEach(() => {
   while (tempDirectories.length > 0) {
@@ -144,8 +150,8 @@ describe("external candidate opt-in commands", () => {
   ])("runs the %s help path without a database or external checkout", (file) => {
     const result = spawnSync(
       process.execPath,
-      [resolve(process.cwd(), "node_modules/tsx/dist/cli.mjs"), resolve(process.cwd(), file), "--help"],
-      { cwd: process.cwd(), encoding: "utf8" },
+      [tsxCli, resolve(packageRoot, file), "--help"],
+      { cwd: packageRoot, encoding: "utf8" },
     );
 
     expect(result.status, result.stderr).toBe(0);
