@@ -1,9 +1,9 @@
 import Database from "better-sqlite3";
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 type ExternalNodeFixture = {
   node_type: string;
@@ -14,11 +14,16 @@ type ExternalNodeFixture = {
   credentials_required?: string | null;
 };
 
+type ImportedFixtureSnapshot = {
+  local: Buffer;
+  external: Buffer;
+};
+
 const tempDirectories: string[] = [];
 const packageRoot = process.cwd();
-const tsxCli = resolve(packageRoot, "node_modules/tsx/dist/cli.mjs");
 const importCompiled = resolve(packageRoot, "dist/scripts/7-import-external-candidates.js");
 const verifyCompiled = resolve(packageRoot, "dist/scripts/8-verify-external-nodes.js");
+let importedFixtureSnapshot: ImportedFixtureSnapshot | undefined;
 
 function createImportFixture(rows: ExternalNodeFixture[]) {
   const root = mkdtempSync(join(tmpdir(), "n8n-external-import-"));
@@ -106,6 +111,26 @@ function runVerifier(root: string) {
   );
 }
 
+beforeAll(() => {
+  const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
+  const initial = runImporter(fixture.root, fixture.externalPath);
+  if (initial.status !== 0) {
+    throw new Error(`Unable to prepare imported fixture: ${initial.stderr}`);
+  }
+  importedFixtureSnapshot = {
+    local: readFileSync(fixture.localPath),
+    external: readFileSync(fixture.externalPath),
+  };
+});
+
+function createImportedFixture() {
+  if (!importedFixtureSnapshot) throw new Error("Imported fixture snapshot is unavailable");
+  const fixture = createImportFixture([]);
+  writeFileSync(fixture.localPath, importedFixtureSnapshot.local);
+  writeFileSync(fixture.externalPath, importedFixtureSnapshot.external);
+  return fixture;
+}
+
 afterEach(() => {
   while (tempDirectories.length > 0) {
     rmSync(tempDirectories.pop()!, { recursive: true, force: true });
@@ -121,6 +146,13 @@ describe("external candidate opt-in commands", () => {
   ];
 
   it("ships every file referenced by the documented opt-in commands", () => {
+    const testSource = readFileSync(resolve("src/external-candidates.test.ts"), "utf8");
+    const runtimeConstantsSource = testSource.slice(
+      testSource.indexOf("\nconst packageRoot"),
+      testSource.indexOf("\nfunction createImportFixture"),
+    );
+    expect(runtimeConstantsSource).not.toContain("node_modules/tsx");
+
     expect(pkg.scripts["build:db:with-external"]).toContain("7-import-external-candidates.ts");
     expect(pkg.scripts["build:db:with-external"]).toContain("8-verify-external-nodes.ts");
     expect(pkg.scripts["import:external-candidates"]).toContain("7-import-external-candidates.ts");
@@ -137,12 +169,12 @@ describe("external candidate opt-in commands", () => {
   });
 
   it.each([
-    "scripts/7-import-external-candidates.ts",
-    "scripts/8-verify-external-nodes.ts",
-  ])("runs the %s help path without a database or external checkout", (file) => {
+    ["scripts/7-import-external-candidates.ts", importCompiled],
+    ["scripts/8-verify-external-nodes.ts", verifyCompiled],
+  ])("runs the %s help path without a database or external checkout", (_file, compiled) => {
     const result = spawnSync(
       process.execPath,
-      [tsxCli, resolve(packageRoot, file), "--help"],
+      [compiled, "--help"],
       { cwd: packageRoot, encoding: "utf8" },
     );
 
@@ -219,9 +251,7 @@ describe("external candidate opt-in commands", () => {
   ] as const)(
     "rejects empty or whitespace-only %s JSON (%j), rolls back, and does not promote it",
     (field, value) => {
-      const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
-      const initial = runImporter(fixture.root, fixture.externalPath);
-      expect(initial.status, initial.stderr).toBe(0);
+      const fixture = createImportedFixture();
 
       const invalidNodeType = `n8n-nodes-fixture.bad-${field}`;
       const external = new Database(fixture.externalPath);
@@ -252,9 +282,7 @@ describe("external candidate opt-in commands", () => {
   );
 
   it("rolls back candidate and FTS replacement when a later insert fails", () => {
-    const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
-    const initial = runImporter(fixture.root, fixture.externalPath);
-    expect(initial.status, initial.stderr).toBe(0);
+    const fixture = createImportedFixture();
 
     const external = new Database(fixture.externalPath);
     external.exec("DELETE FROM nodes");

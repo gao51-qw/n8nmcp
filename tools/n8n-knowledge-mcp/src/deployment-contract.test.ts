@@ -152,7 +152,32 @@ descendant.once("spawn", () => descendant.unref());`,
       (result) => ({ error: null, result }),
       (error: unknown) => ({ error, result: null }),
     );
-    const [signalResult, treeResult] = await Promise.all([signalOutcome, treeOutcome]);
+    let pendingTerminationReleased = false;
+    const pendingTerminationOutcome = runDeploymentCommand(
+      process.execPath,
+      ["-e", ""],
+      { cwd: process.cwd(), env: process.env },
+      {
+        deadlineMs: 5_000,
+        terminationGraceMs: 100,
+        triggerDeadlineOnExit: true,
+        terminationFactory: () => ({
+          completion: new Promise<string>(() => {}),
+          release: () => {
+            pendingTerminationReleased = true;
+            return "pending termination released";
+          },
+        }),
+      },
+    ).then(
+      (result) => ({ error: null, result }),
+      (error: unknown) => ({ error, result: null }),
+    );
+    const [signalResult, treeResult, pendingResult] = await Promise.all([
+      signalOutcome,
+      treeOutcome,
+      pendingTerminationOutcome,
+    ]);
     const treeElapsedMs = Date.now() - treeStartedAt;
     const treeError = treeResult.error instanceof Error ? treeResult.error : null;
     expect({
@@ -162,6 +187,13 @@ descendant.once("spawn", () => descendant.unref());`,
       treeErrorName: treeError?.name,
       cleanupSafe: treeError instanceof DeploymentCommandError ? treeError.cleanupSafe : undefined,
       terminationGrace: /termination grace/is.test(String(treeError)),
+      pendingRejected: pendingResult.result === null,
+      pendingErrorName: pendingResult.error instanceof Error ? pendingResult.error.name : undefined,
+      pendingCleanupSafe: pendingResult.error instanceof DeploymentCommandError
+        ? pendingResult.error.cleanupSafe
+        : undefined,
+      pendingTerminationGrace: /termination grace/is.test(String(pendingResult.error)),
+      pendingTerminationReleased,
     }, `signal=${signalResult}\ntree=${String(treeError)}\ntreeElapsedMs=${treeElapsedMs}`).toEqual({
       signalRejected: true,
       treeRejected: true,
@@ -169,6 +201,11 @@ descendant.once("spawn", () => descendant.unref());`,
       treeErrorName: "DeploymentCommandError",
       cleanupSafe: false,
       terminationGrace: true,
+      pendingRejected: true,
+      pendingErrorName: "DeploymentCommandError",
+      pendingCleanupSafe: false,
+      pendingTerminationGrace: true,
+      pendingTerminationReleased: true,
     });
   });
 
@@ -282,6 +319,7 @@ type DeploymentCommandControl = {
   terminationTargetPid?: number;
   triggerDeadlineOnExit?: boolean;
   onSpawn?: (child: ChildProcess) => void;
+  terminationFactory?: (pid: number) => ProcessTreeTermination;
 };
 
 type ProcessTreeTermination = {
@@ -318,6 +356,8 @@ async function runDeploymentCommand(
     let termination: ProcessTreeTermination | null = null;
     let terminationDiagnostics = "not-started";
     let terminationGraceExpiresAt: number | null = null;
+    let childClosure: { status: number | null; signal: NodeJS.Signals | null } | null = null;
+    let terminationSucceeded = false;
     let deadline: ReturnType<typeof setTimeout> | undefined;
     let terminationGrace: ReturnType<typeof setTimeout> | undefined;
 
@@ -337,6 +377,20 @@ async function runDeploymentCommand(
     };
     const deadlineMs = control.deadlineMs ?? DEPLOY_STUB_DEADLINE_MS;
     const terminationGraceMs = control.terminationGraceMs ?? DEPLOY_TERMINATION_GRACE_MS;
+    const tryFinishTimedOutCommand = () => {
+      if (!timedOut || !childClosure || !terminationSucceeded || settled) return;
+      if (terminationGraceExpiresAt === null || Date.now() >= terminationGraceExpiresAt) return;
+      const { status, signal } = childClosure;
+      finish(() => {
+        const releaseDiagnostics = termination?.release() ?? "termination=unavailable";
+        rejectCommand(new DeploymentCommandError(
+          `Deployment stub exceeded ${deadlineMs}ms; termination grace confirmed closure and tree termination; `
+          + `cleanupSafe=true termination=${terminationDiagnostics} release=${releaseDiagnostics}; `
+          + diagnostics(status, signal),
+          true,
+        ));
+      });
+    };
     const beginDeadline = () => {
       if (settled || timedOut) return;
       timedOut = true;
@@ -347,22 +401,21 @@ async function runDeploymentCommand(
           completion: Promise.resolve("pid=unavailable"),
           release: () => "pid=unavailable release=not-required",
         };
-      } else if (process.platform === "win32") {
-        termination = terminateWindowsProcessTree(terminationTargetPid);
       } else {
-        const processGroup = -terminationTargetPid;
-        termination = {
-          completion: Promise.resolve().then(() => {
-            process.kill(processGroup, "SIGKILL");
-            return `processGroup=${processGroup} signal=SIGKILL`;
-          }),
-          release: () => `processGroup=${processGroup} release=not-required`,
-        };
+        const createTermination = control.terminationFactory
+          ?? ((pid: number) => process.platform === "win32"
+            ? terminateWindowsProcessTree(pid)
+            : terminatePosixProcessGroup(pid));
+        termination = createTermination(terminationTargetPid);
       }
       terminationDiagnostics = "pending";
       void termination.completion.then(
         (value) => {
-          if (!settled) terminationDiagnostics = value;
+          if (!settled) {
+            terminationDiagnostics = value;
+            terminationSucceeded = true;
+            tryFinishTimedOutCommand();
+          }
         },
         (error: unknown) => {
           if (!settled) {
@@ -411,29 +464,8 @@ async function runDeploymentCommand(
     child.once("close", (status, signal) => {
       if (settled) return;
       if (timedOut) {
-        if (terminationGraceExpiresAt !== null && Date.now() >= terminationGraceExpiresAt) {
-          finish(() => {
-            const releaseDiagnostics = termination?.release() ?? "termination=unavailable";
-            child.stdout?.destroy();
-            child.stderr?.destroy();
-            rejectCommand(new DeploymentCommandError(
-              `Deployment stub exceeded ${deadlineMs}ms; termination grace ${terminationGraceMs}ms expired; `
-              + `cleanupSafe=false termination=${terminationDiagnostics} release=${releaseDiagnostics}; `
-              + diagnostics(status, signal),
-              false,
-            ));
-          });
-          return;
-        }
-        finish(() => {
-          const releaseDiagnostics = termination?.release() ?? "termination=unavailable";
-          rejectCommand(new DeploymentCommandError(
-            `Deployment stub exceeded ${deadlineMs}ms; termination grace confirmed closure; `
-            + `cleanupSafe=true termination=${terminationDiagnostics} release=${releaseDiagnostics}; `
-            + diagnostics(status, signal),
-            true,
-          ));
-        });
+        childClosure = { status, signal };
+        tryFinishTimedOutCommand();
       } else if (postSpawnError !== null) {
         const processError = postSpawnError;
         finish(() => rejectCommand(new Error(
@@ -453,6 +485,17 @@ async function runDeploymentCommand(
       }
     });
   });
+}
+
+function terminatePosixProcessGroup(pid: number): ProcessTreeTermination {
+  const processGroup = -pid;
+  return {
+    completion: Promise.resolve().then(() => {
+      process.kill(processGroup, "SIGKILL");
+      return `processGroup=${processGroup} signal=SIGKILL`;
+    }),
+    release: () => `processGroup=${processGroup} release=not-required`,
+  };
 }
 
 function terminateWindowsProcessTree(pid: number): ProcessTreeTermination {

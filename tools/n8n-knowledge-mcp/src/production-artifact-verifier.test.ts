@@ -26,6 +26,7 @@ type Stats = {
 };
 
 const temporaryDirectories: string[] = [];
+const verifierCompiled = resolve(process.cwd(), "dist/scripts/10-verify-production-artifacts.js");
 
 afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
@@ -35,6 +36,17 @@ afterEach(() => {
 
 describe("production knowledge artifact verifier", () => {
   it("rejects malformed quality report JSON", () => {
+    const testSource = readFileSync(resolve("src/production-artifact-verifier.test.ts"), "utf8");
+    const runVerifierSource = testSource.slice(
+      testSource.indexOf("\nfunction runVerifier("),
+      testSource.indexOf("\nfunction sha256("),
+    );
+    expect(testSource).toContain(
+      'const verifierCompiled = resolve(process.cwd(), "dist/scripts/10-verify-production-artifacts.js")',
+    );
+    expect(runVerifierSource).toContain("[verifierCompiled]");
+    expect(runVerifierSource).not.toContain("node_modules/tsx");
+
     const artifacts = createArtifacts();
     writeFileSync(artifacts.reportPath, "{", "utf8");
 
@@ -301,10 +313,7 @@ function runVerifier(
 ) {
   const result = spawnSync(
     process.execPath,
-    [
-      resolve("node_modules/tsx/dist/cli.mjs"),
-      resolve("scripts/10-verify-production-artifacts.ts"),
-    ],
+    [verifierCompiled],
     {
       cwd: process.cwd(),
       encoding: "utf8",

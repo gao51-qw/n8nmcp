@@ -7,20 +7,24 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 
 let child: ChildProcess | undefined;
+let childSettlement: ChildSettlement | undefined;
 let temporaryDirectory: string | undefined;
 
 afterEach(async () => {
-  if (child && child.exitCode === null) {
-    child.kill();
-    await new Promise<void>((resolveExit) => child!.once("exit", () => resolveExit()));
+  if (child && childSettlement) {
+    if (!childSettlement.isClosed() && child.exitCode === null && child.signalCode === null) {
+      child.kill();
+    }
+    await childSettlement.closed;
   }
   child = undefined;
+  childSettlement = undefined;
   if (temporaryDirectory) rmSync(temporaryDirectory, { recursive: true, force: true });
   temporaryDirectory = undefined;
 });
 
 describe("compiled server entrypoint", () => {
-  it("uses the emitted server path and one global runtime build", () => {
+  it("uses the emitted server path and one global runtime build", async () => {
     const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8")) as {
       scripts: { start: string };
     };
@@ -34,6 +38,18 @@ describe("compiled server entrypoint", () => {
     expect(config).toContain('globalSetup: ["./vitest.global-setup.ts"]');
     expect(externalTest).not.toMatch(/beforeAll\(\(\) => \{\s*execFileSync\([\s\S]*typescript\/bin\/tsc/);
     expect(compiledTest).not.toMatch(/execFileSync\([\s\S]*typescript\/bin\/tsc/);
+
+    const signaled = spawn(process.execPath, ["-e", "process.kill(process.pid, 'SIGTERM')"], {
+      stdio: "ignore",
+    });
+    const signaledSettlement = observeChildSettlement(signaled);
+    await signaledSettlement.closed;
+    expect(signaledSettlement.isClosed()).toBe(true);
+
+    const missing = spawn(join(tmpdir(), "knowledge-missing-executable"), [], { stdio: "ignore" });
+    const missingSettlement = observeChildSettlement(missing);
+    await missingSettlement.closed;
+    expect(missingSettlement.isClosed()).toBe(true);
   });
 
   it("builds and starts the compiled server, then serves anonymous health", async () => {
@@ -53,6 +69,7 @@ describe("compiled server entrypoint", () => {
       env: { ...process.env, AUTH_TOKEN: "compiled-smoke", DB_PATH: dbPath, PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    childSettlement = observeChildSettlement(child);
     child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
     child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
 
@@ -80,6 +97,24 @@ type ChildOutput = {
   stdout: () => string;
   stderr: () => string;
 };
+
+type ChildSettlement = { closed: Promise<void>; isClosed: () => boolean };
+
+function observeChildSettlement(process: ChildProcess): ChildSettlement {
+  let closed = false;
+  let resolveClosed!: () => void;
+  const closedPromise = new Promise<void>((resolve) => { resolveClosed = resolve; });
+  const finish = () => {
+    if (closed) return;
+    closed = true;
+    resolveClosed();
+  };
+  process.once("close", finish);
+  process.once("error", () => {
+    if (process.pid === undefined) finish();
+  });
+  return { closed: closedPromise, isClosed: () => closed };
+}
 
 async function waitForHealth(
   url: string,
