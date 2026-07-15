@@ -1,4 +1,4 @@
-import { spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import {
   chmodSync,
   existsSync,
@@ -118,9 +118,9 @@ describe("knowledge publication and deployment contracts", () => {
     expect(deploy).not.toMatch(/docker compose[^\n]+(?:up|restart|stop)[^\n]+\b(?:app|caddy)\b/);
   });
 
-  it("persists the new tag and recreates only mcp after a healthy deployment", () => {
+  it("persists the new tag and recreates only mcp after a healthy deployment", async () => {
     if (!existsSync(deployPath)) return;
-    const result = runDeployStub({ failFirstHealth: false });
+    const result = await runDeployStub({ failFirstHealth: false });
     expect(result.status, result.stderr).toBe(0);
     expect(result.env).toContain("MCP_IMAGE_TAG=20260714-123");
     expect(result.log).toContain("pull ghcr.io/example/n8n-knowledge-mcp:20260714-123");
@@ -129,13 +129,13 @@ describe("knowledge publication and deployment contracts", () => {
     expect(result.log).toContain(" 42");
     expect(result.log).not.toMatch(/\b(?:app|caddy)\b/);
     expect(result.backupExists).toBe(false);
-  });
+  }, 35_000);
 
-  it("pins the running image before changes and rolls latest back locally without pulling", () => {
+  it("pins the running image before changes and rolls latest back locally without pulling", async () => {
     if (!existsSync(deployPath)) return;
     const oldImageId = `sha256:${"a".repeat(64)}`;
     const remoteLatestImageId = `sha256:${"b".repeat(64)}`;
-    const result = runDeployStub({
+    const result = await runDeployStub({
       currentImageId: oldImageId,
       failFirstHealth: true,
       oldTag: "latest",
@@ -157,17 +157,17 @@ describe("knowledge publication and deployment contracts", () => {
     expect(result.log.match(/exec n8n-knowledge-mcp node/g)).toHaveLength(2);
     expect(result.log).toContain(`image rm ghcr.io/example/n8n-knowledge-mcp:${rollbackTag}`);
     expect(result.log).not.toMatch(/\b(?:app|caddy)\b/);
-  });
+  }, 35_000);
 
-  it("fails before pull, tag persistence, or compose when the running image ID is unavailable", () => {
+  it("fails before pull, tag persistence, or compose when the running image ID is unavailable", async () => {
     if (!existsSync(deployPath)) return;
-    const result = runDeployStub({ currentImageId: null, failFirstHealth: false });
+    const result = await runDeployStub({ currentImageId: null, failFirstHealth: false });
     expect(result.status).not.toBe(0);
     expect(result.env).toContain("MCP_IMAGE_TAG=old-stable");
     expect(result.log).toContain("inspect --format {{.Image}} n8n-knowledge-mcp");
     expect(result.log).not.toMatch(/^(?:pull|tag|compose)\b/m);
     expect(result.backupExists).toBe(false);
-  });
+  }, 35_000);
 
   it.each([
     ["remote deployment", () => extractBetween(
@@ -180,9 +180,9 @@ describe("knowledge publication and deployment contracts", () => {
       "node <<'NODE'\n",
       "\n          NODE",
     )],
-  ])("keeps invalid JSON response fragments out of %s health stderr", (_label, code) => {
+  ])("keeps invalid JSON response fragments out of %s health stderr", async (_label, code) => {
     const marker = "SENSITIVE_RESPONSE_MARKER";
-    const result = runEmbeddedHealth(code(), marker);
+    const result = await runEmbeddedHealth(code(), marker);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("health response was not valid JSON");
     expect(result.stderr).not.toContain(marker);
@@ -205,18 +205,79 @@ function expectOrdered(contents: string, markers: string[]): void {
   }
 }
 
-function runDeployStub(options: {
-  currentImageId?: string | null;
-  failFirstHealth: boolean;
-  oldTag?: string;
-  remoteLatestImageId?: string;
-}): {
+const DEPLOY_STUB_DEADLINE_MS = 30_000;
+
+type DeployCommandResult = {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+};
+
+type DeployStubResult = {
   status: number | null;
   stderr: string;
   env: string;
   log: string;
   backupExists: boolean;
-} {
+};
+
+async function runDeploymentCommand(
+  bash: string,
+  args: string[],
+  options: { cwd: string; env: NodeJS.ProcessEnv },
+): Promise<DeployCommandResult> {
+  const startedAt = Date.now();
+  return await new Promise<DeployCommandResult>((resolveCommand, rejectCommand) => {
+    const child = spawn(bash, args, {
+      ...options,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    let timedOut = false;
+    let settled = false;
+
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+
+    const diagnostics = (status: number | null, signal: NodeJS.Signals | null) =>
+      `command=${bash} ${args.join(" ")} elapsedMs=${Date.now() - startedAt} `
+      + `status=${status} signal=${signal ?? "none"} stdout=${stdout} stderr=${stderr}`;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      callback();
+    };
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      child.kill();
+    }, DEPLOY_STUB_DEADLINE_MS);
+
+    child.once("error", (error) => {
+      finish(() => rejectCommand(new Error(
+        `Deployment stub failed to start: ${error.message}; ${diagnostics(child.exitCode, child.signalCode)}`,
+      )));
+    });
+    child.once("close", (status, signal) => {
+      if (timedOut) {
+        finish(() => rejectCommand(new Error(
+          `Deployment stub exceeded ${DEPLOY_STUB_DEADLINE_MS}ms; ${diagnostics(status, signal)}`,
+        )));
+      } else {
+        finish(() => resolveCommand({ status, signal, stdout, stderr }));
+      }
+    });
+  });
+}
+
+async function runDeployStub(options: {
+  currentImageId?: string | null;
+  failFirstHealth: boolean;
+  oldTag?: string;
+  remoteLatestImageId?: string;
+}): Promise<DeployStubResult> {
   const root = mkdtempSync(join(tmpdir(), "knowledge-deploy-contract-"));
   const bin = join(root, "bin");
   const envFile = join(root, ".env");
@@ -233,7 +294,7 @@ function runDeployStub(options: {
     writeFileSync(logFile, "", "utf8");
     writeFileSync(
       dockerStub,
-      `#!/usr/bin/env bash
+      `#!/usr/bin/bash
 printf '%s\\n' "$*" >> "$DOCKER_LOG"
 if [[ "$1" == "inspect" ]]; then
   if [[ "$3" == "{{.Image}}" ]]; then
@@ -262,23 +323,34 @@ exit 0
     const bash = process.platform === "win32"
       ? "C:\\Program Files\\Git\\bin\\bash.exe"
       : "bash";
-    const result = spawnSync(bash, [deployPath, "20260714-123", "42"], {
-      cwd: root,
-      encoding: "utf8",
-      env: {
-        ...process.env,
-        COMPOSE_FILE: "compose.yml",
-        CURRENT_IMAGE_ID: options.currentImageId === null
-          ? ""
-          : options.currentImageId ?? `sha256:${"a".repeat(64)}`,
-        DOCKER_LOG: logFile,
-        ENV_FILE: envFile,
-        FAIL_FIRST_HEALTH: options.failFirstHealth ? "1" : "0",
-        HEALTH_STATE: healthState,
-        REMOTE_LATEST_IMAGE_ID: options.remoteLatestImageId ?? `sha256:${"b".repeat(64)}`,
-        PATH: `${bin}${delimiter}${process.env.PATH ?? ""}`,
+    const childPath = process.platform === "win32"
+      ? [
+          bin,
+          "C:\\Program Files\\Git\\usr\\bin",
+          "C:\\Program Files\\Git\\bin",
+          process.env.PATH ?? "",
+        ].join(delimiter)
+      : [bin, process.env.PATH ?? ""].join(delimiter);
+    const result = await runDeploymentCommand(
+      bash,
+      [deployPath, "20260714-123", "42"],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          COMPOSE_FILE: "compose.yml",
+          CURRENT_IMAGE_ID: options.currentImageId === null
+            ? ""
+            : options.currentImageId ?? `sha256:${"a".repeat(64)}`,
+          DOCKER_LOG: logFile,
+          ENV_FILE: envFile,
+          FAIL_FIRST_HEALTH: options.failFirstHealth ? "1" : "0",
+          HEALTH_STATE: healthState,
+          REMOTE_LATEST_IMAGE_ID: options.remoteLatestImageId ?? `sha256:${"b".repeat(64)}`,
+          PATH: childPath,
+        },
       },
-    });
+    );
     return {
       status: result.status,
       stderr: result.stderr,
@@ -301,20 +373,24 @@ function extractBetween(contents: string, startMarker: string, endMarker: string
   return normalizedContents.slice(bodyStart, end);
 }
 
-function runEmbeddedHealth(code: string, marker: string): {
+async function runEmbeddedHealth(code: string, marker: string): Promise<{
   status: number | null;
   stderr: string;
-} {
+}> {
   const healthUrl = `data:application/json,${encodeURIComponent(`${marker}{`)}`;
   const executableCode = code.replace("http://127.0.0.1:3000/health", healthUrl);
   expect(executableCode).not.toBe(code);
-  const result = spawnSync(process.execPath, ["-e", executableCode, "42"], {
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      AUTH_TOKEN: "test-health-token",
-      EXPECTED_TEMPLATES: "42",
+  const result = await runDeploymentCommand(
+    process.execPath,
+    ["-e", executableCode, "42"],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        AUTH_TOKEN: "test-health-token",
+        EXPECTED_TEMPLATES: "42",
+      },
     },
-  });
+  );
   return { status: result.status, stderr: result.stderr };
 }
