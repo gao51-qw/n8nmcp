@@ -31,6 +31,7 @@ describe("compiled server entrypoint", () => {
   });
 
   it("builds and starts the compiled server, then serves anonymous health", async () => {
+    const deadline = Date.now() + 29_000;
     execFileSync(
       process.execPath,
       [resolve("node_modules/typescript/bin/tsc"), "-p", "tsconfig.json"],
@@ -45,14 +46,21 @@ describe("compiled server entrypoint", () => {
     `);
     db.close();
     const port = await reservePort();
+    let stdout = "";
     let stderr = "";
     child = spawn(process.execPath, [resolve("dist/src/server.js")], {
       env: { ...process.env, AUTH_TOKEN: "compiled-smoke", DB_PATH: dbPath, PORT: String(port) },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
     child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
 
-    const response = await waitForHealth(`http://127.0.0.1:${port}/health`, () => stderr);
+    const response = await waitForHealth(
+      `http://127.0.0.1:${port}/health`,
+      child,
+      { stdout: () => stdout, stderr: () => stderr },
+      deadline,
+    );
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ ok: true });
   }, 30_000);
@@ -67,14 +75,62 @@ async function reservePort(): Promise<number> {
   return address.port;
 }
 
-async function waitForHealth(url: string, stderr: () => string): Promise<Response> {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
-    try {
-      return await fetch(url);
-    } catch {
-      if (child?.exitCode !== null) throw new Error(`Compiled server exited early: ${stderr()}`);
-      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
-    }
-  }
-  throw new Error(`Compiled server did not become healthy: ${stderr()}`);
+type ChildOutput = {
+  stdout: () => string;
+  stderr: () => string;
+};
+
+async function waitForHealth(
+  url: string,
+  process: ChildProcess,
+  output: ChildOutput,
+  deadline: number,
+): Promise<Response> {
+  return await new Promise<Response>((resolveHealth, rejectHealth) => {
+    let settled = false;
+
+    const diagnostics = () =>
+      `pid=${process.pid ?? "unknown"} exit=${process.exitCode ?? "running"} `
+      + `signal=${process.signalCode ?? "none"} stdout=${output.stdout()} stderr=${output.stderr()}`;
+
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      process.off("error", onError);
+      process.off("exit", onExit);
+      callback();
+    };
+
+    const onError = (error: Error) => {
+      finish(() => rejectHealth(new Error(`Compiled server spawn failed: ${error.message}; ${diagnostics()}`)));
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) => {
+      finish(() => rejectHealth(new Error(
+        `Compiled server exited before health: code=${code} signal=${signal}; ${diagnostics()}`,
+      )));
+    };
+
+    process.once("error", onError);
+    process.once("exit", onExit);
+
+    const poll = async () => {
+      while (!settled && Date.now() < deadline) {
+        const remaining = deadline - Date.now();
+        try {
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(Math.max(1, Math.min(500, remaining))),
+          });
+          finish(() => resolveHealth(response));
+          return;
+        } catch {
+          await new Promise((resolveWait) => setTimeout(resolveWait, Math.min(50, Math.max(1, remaining))));
+        }
+      }
+      finish(() => rejectHealth(new Error(
+        `Compiled server did not become healthy before deadline: ${diagnostics()}`,
+      )));
+    };
+
+    void poll();
+  });
 }
