@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { readFile, readdir, realpath } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 
 export type NodePackageReference = {
@@ -50,12 +50,13 @@ export async function parseNodePackage(
 async function parseOfficialNodePackage(
   pkg: NodePackageReference,
 ): Promise<NodePackageParseResult> {
+  const packageRoot = await realpath(pkg.dir);
   const known = validateKnownMetadata(
-    await readOfficialMetadata(pkg, "dist/known/nodes.json"),
+    await readOfficialMetadata(pkg, packageRoot, "dist/known/nodes.json"),
     pkg.name,
   );
   const rows = validateTypeMetadata(
-    await readOfficialMetadata(pkg, "dist/types/nodes.json"),
+    await readOfficialMetadata(pkg, packageRoot, "dist/types/nodes.json"),
     pkg.name,
   );
   const descriptions = selectDescriptions(rows);
@@ -74,7 +75,9 @@ async function parseOfficialNodePackage(
     const description = descriptions.get(name);
     if (!description) continue;
     const sourcePath = known[name]!.sourcePath;
-    const sourceExcerpt = (await readFile(join(pkg.dir, sourcePath), "utf8")).slice(0, 50_000);
+    const sourceExcerpt = (
+      await readOfficialPackageFile(pkg.name, packageRoot, sourcePath)
+    ).slice(0, 50_000);
     nodes.push(toParsedNode(pkg, description, sourcePath, sourceExcerpt));
   }
 
@@ -120,16 +123,38 @@ async function parseCommunityNodePackage(
 
 async function readOfficialMetadata(
   pkg: NodePackageReference,
+  packageRoot: string,
   metadataPath: string,
 ): Promise<unknown> {
   try {
-    return JSON.parse(await readFile(join(pkg.dir, metadataPath), "utf8"));
+    return JSON.parse(
+      await readOfficialPackageFile(pkg.name, packageRoot, metadataPath),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`${pkg.name}: failed to read or parse ${metadataPath}: ${message}`, {
       cause: error,
     });
   }
+}
+
+async function readOfficialPackageFile(
+  packageName: string,
+  packageRoot: string,
+  sourcePath: string,
+): Promise<string> {
+  const target = await realpath(resolve(packageRoot, sourcePath));
+  const relativeTarget = relative(packageRoot, target);
+  if (
+    relativeTarget === ".." ||
+    relativeTarget.startsWith(`..${sep}`) ||
+    isAbsolute(relativeTarget)
+  ) {
+    throw new Error(
+      `${packageName}: source path ${sourcePath} resolves outside the unpacked package root`,
+    );
+  }
+  return await readFile(target, "utf8");
 }
 
 function validateKnownMetadata(value: unknown, packageName: string): Record<string, KnownNode> {
@@ -260,7 +285,7 @@ async function loadCommunityNodeDescription(file: string): Promise<NodeDescripti
 
 async function* walk(directory: string): AsyncGenerator<string> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
+    const path = resolve(directory, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
       yield* walk(path);

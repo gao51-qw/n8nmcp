@@ -33,6 +33,9 @@ describe("knowledge publication and deployment contracts", () => {
     expect(pkg.scripts["build:knowledge"]).toContain("npm run build:nodes:official");
     expect(step(workflow, "Build node database")).toContain("npm run build:nodes:official");
     expect(fetchScript).toContain("shouldSkipCommunityPackages(process.argv");
+    expect(fetchScript).toMatch(
+      /assertOfficialPackageCoverage\(CFG\.official as string\[\], index\)/,
+    );
 
     expectOrdered(workflow, [
       "name: Fetch official templates",

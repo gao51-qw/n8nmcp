@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { parseNodePackage, type NodePackageReference } from "./node-package-parser.js";
 
@@ -95,6 +95,36 @@ describe("parseNodePackage", () => {
     expect(error.cause).toBeInstanceOf(Error);
   });
 
+  it("rejects an official source path outside the unpacked package root", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const outsideFile = join(outside, "Outside.node.js");
+    await writeOfficialFixture(root);
+    await writeFile(outsideFile, "outside package root\n");
+    await writeKnownSourcePath(root, relative(root, outsideFile));
+
+    await expect(parseNodePackage(officialPackage(root))).rejects.toThrow(
+      /n8n-nodes-base.*source path.*outside.*package root/i,
+    );
+  });
+
+  it("rejects an official source symlink that escapes the unpacked package root", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    await writeOfficialFixture(root);
+    await writeFile(join(outside, "Outside.node.js"), "outside package root\n");
+    await symlink(
+      outside,
+      join(root, "linked-outside"),
+      process.platform === "win32" ? "junction" : "dir",
+    );
+    await writeKnownSourcePath(root, "linked-outside/Outside.node.js");
+
+    await expect(parseNodePackage(officialPackage(root))).rejects.toThrow(
+      /n8n-nodes-base.*source path.*outside.*package root/i,
+    );
+  });
+
   it("surfaces community dynamic-import failures", async () => {
     const root = await temporaryDirectory();
     await writeFile(
@@ -158,6 +188,15 @@ async function writeOfficialFixture(
   await writeFile(
     join(root, "dist", "nodes", "HttpRequest", "HttpRequest.node.js"),
     'throw new Error("official node JavaScript must not execute");\n',
+  );
+}
+
+async function writeKnownSourcePath(root: string, sourcePath: string): Promise<void> {
+  await writeFile(
+    join(root, "dist", "known", "nodes.json"),
+    JSON.stringify({
+      httpRequest: { className: "HttpRequest", sourcePath },
+    }),
   );
 }
 

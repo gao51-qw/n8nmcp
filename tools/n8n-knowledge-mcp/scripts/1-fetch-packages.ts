@@ -10,7 +10,10 @@ import * as tar from "tar";
 import { createWriteStream } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { shouldSkipCommunityPackages } from "../src/package-fetch-policy.js";
+import {
+  assertOfficialPackageCoverage,
+  shouldSkipCommunityPackages,
+} from "../src/package-fetch-policy.js";
 
 const exec = promisify(execFile);
 const ROOT = resolve(process.cwd());
@@ -147,6 +150,7 @@ async function main() {
       console.warn(`[fetch] ✗ ${ref.name}: ${(e as Error).message}`);
     }
   }
+  assertOfficialPackageCoverage(CFG.official as string[], index);
   const enriched = index.map((r) => ({ ...r, monthly_downloads: downloads[r.name] ?? null }));
   await writeFile(join(TMP, "_index.json"), JSON.stringify(enriched, null, 2));
   console.log(`[fetch] done: ${index.length} packages → ${TMP}/_index.json`);

@@ -2,18 +2,23 @@
 
 Self-built MCP server exposing n8n node knowledge over Streamable HTTP.
 
-Official node knowledge is sourced from the `n8n-io/n8n` GitHub registry. Community registry packages remain optional enrichment.
+Official node knowledge is sourced from published n8n packages. Community registry packages remain optional enrichment.
 
 ## Architecture
 
 ```txt
-n8n GitHub registry + optional community packages
-  -> ts-morph static parse
+published n8n packages + optional community packages
+  -> package metadata and source excerpts
   -> SQLite + FTS5
   -> MCP HTTP server
 ```
 
-- Build time: sparse-clone `n8n-io/n8n`, read `package.json -> n8n.nodes` for `n8n-nodes-base` and `@n8n/n8n-nodes-langchain`, optionally pull vetted community `n8n-nodes-*` packages, AST-extract node descriptions, then build `data/nodes.db`.
+Official n8n packages are parsed from their published `dist/known/nodes.json` and
+`dist/types/nodes.json` metadata without executing node JavaScript. Source excerpts
+are read only after real-path containment inside the unpacked package root. The
+generic community-enrichment path remains optional and may dynamically import
+community node modules; production `build:knowledge` never selects that path.
+
 - Run time: Express + `@modelcontextprotocol/sdk` Streamable HTTP, Bearer auth, knowledge tools backed by `better-sqlite3`.
 
 ## Quick Start
