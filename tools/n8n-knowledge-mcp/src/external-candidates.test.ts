@@ -1,9 +1,10 @@
 import Database from "better-sqlite3";
-import { execFileSync, spawnSync } from "node:child_process";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { pathToFileURL } from "node:url";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 type ExternalNodeFixture = {
   node_type: string;
@@ -23,7 +24,11 @@ const tempDirectories: string[] = [];
 const packageRoot = process.cwd();
 const importCompiled = resolve(packageRoot, "dist/scripts/7-import-external-candidates.js");
 const verifyCompiled = resolve(packageRoot, "dist/scripts/8-verify-external-nodes.js");
+const externalValidationCompiled = resolve(packageRoot, "dist/src/external-node-validation.js");
+const sqliteCompiled = resolve(packageRoot, "node_modules/better-sqlite3/lib/index.js");
 let importedFixtureSnapshot: ImportedFixtureSnapshot | undefined;
+let preparedVerifiers: Array<ReturnType<typeof prepareVerifier>> = [];
+let availableVerifiers: Array<ReturnType<typeof prepareVerifier>> = [];
 
 function createImportFixture(rows: ExternalNodeFixture[]) {
   const root = mkdtempSync(join(tmpdir(), "n8n-external-import-"));
@@ -111,7 +116,103 @@ function runVerifier(root: string) {
   );
 }
 
-beforeAll(() => {
+type DeferredVerifierResult = {
+  status: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+};
+
+function prepareVerifier() {
+  const readyMarker = "__N8N_DEFERRED_VERIFIER_READY__\n";
+  const verifierProgram = `
+const releaseVerifier = new Promise((resolve) => process.stdin.once("data", (root) => resolve(String(root).trim())));
+await Promise.all([
+  import(${JSON.stringify(pathToFileURL(sqliteCompiled).href)}),
+  import(${JSON.stringify(pathToFileURL(externalValidationCompiled).href)}),
+]);
+process.stdout.write(${JSON.stringify(readyMarker)});
+process.chdir(await releaseVerifier);
+await import(${JSON.stringify(pathToFileURL(verifyCompiled).href)});
+`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", verifierProgram], {
+    cwd: packageRoot,
+    env: process.env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+  let stdout = "";
+  let stderr = "";
+  let settled = false;
+  let released = false;
+  let readySettled = false;
+  let stdoutBeforeReady = "";
+  let resolveResult!: (result: DeferredVerifierResult) => void;
+  let resolveReady!: () => void;
+  let rejectReady!: (error: Error) => void;
+  const result = new Promise<DeferredVerifierResult>((resolveResultPromise) => {
+    resolveResult = resolveResultPromise;
+  });
+  const ready = new Promise<void>((resolveReadyPromise, rejectReadyPromise) => {
+    resolveReady = resolveReadyPromise;
+    rejectReady = rejectReadyPromise;
+  });
+  const finish = (status: number | null, signal: NodeJS.Signals | null) => {
+    if (settled) return;
+    settled = true;
+    child.stdin?.destroy();
+    if (!readySettled) {
+      readySettled = true;
+      rejectReady(new Error(`Deferred verifier closed before ready: status=${status} signal=${signal}; ${stderr}`));
+    }
+    resolveResult({ status, signal, stdout, stderr });
+  };
+
+  child.stdout?.on("data", (chunk) => {
+    const text = String(chunk);
+    if (readySettled) {
+      stdout += text;
+      return;
+    }
+    stdoutBeforeReady += text;
+    const markerIndex = stdoutBeforeReady.indexOf(readyMarker);
+    if (markerIndex < 0) return;
+    stdout += stdoutBeforeReady.slice(0, markerIndex)
+      + stdoutBeforeReady.slice(markerIndex + readyMarker.length);
+    stdoutBeforeReady = "";
+    readySettled = true;
+    resolveReady();
+  });
+  child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+  child.stdin?.on("error", (error) => {
+    if (!settled) stderr += `Deferred verifier stdin error: ${error.message}\n`;
+  });
+  child.once("error", (error) => {
+    if (settled) return;
+    stderr += `Deferred verifier spawn error: ${error.message}\n`;
+    if (child.pid === undefined) finish(null, null);
+  });
+  child.once("close", finish);
+
+  return {
+    ready,
+    verify: (root: string) => {
+      if (!released && !settled) {
+        released = true;
+        child.stdin?.end(`${root}\n`);
+      }
+      return result;
+    },
+    close: async () => {
+      if (!settled) {
+        child.stdin?.destroy();
+        if (child.exitCode === null && child.signalCode === null) child.kill();
+      }
+      await result;
+    },
+  };
+}
+
+beforeAll(async () => {
   const fixture = createImportFixture([{ node_type: "n8n-nodes-fixture.previous" }]);
   const initial = runImporter(fixture.root, fixture.externalPath);
   if (initial.status !== 0) {
@@ -121,6 +222,20 @@ beforeAll(() => {
     local: readFileSync(fixture.localPath),
     external: readFileSync(fixture.externalPath),
   };
+  preparedVerifiers = Array.from({ length: 3 }, () => prepareVerifier());
+  try {
+    await Promise.all(preparedVerifiers.map((verifier) => verifier.ready));
+  } catch (error) {
+    await Promise.all(preparedVerifiers.map((verifier) => verifier.close()));
+    throw error;
+  }
+  availableVerifiers = [...preparedVerifiers];
+});
+
+afterAll(async () => {
+  await Promise.all(preparedVerifiers.map((verifier) => verifier.close()));
+  preparedVerifiers = [];
+  availableVerifiers = [];
 });
 
 function createImportedFixture() {
@@ -151,7 +266,15 @@ describe("external candidate opt-in commands", () => {
       testSource.indexOf("\nconst packageRoot"),
       testSource.indexOf("\nfunction createImportFixture"),
     );
+    const verifierHelpersSource = testSource.slice(
+      testSource.indexOf("\nfunction runVerifier"),
+      testSource.indexOf("\nbeforeAll"),
+    );
     expect(runtimeConstantsSource).not.toContain("node_modules/tsx");
+    expect(runtimeConstantsSource).toContain("dist/src/external-node-validation.js");
+    expect(verifierHelpersSource).toContain("function prepareVerifier");
+    expect(verifierHelpersSource).toContain("process.stdin.once");
+    expect(verifierHelpersSource).toContain("externalValidationCompiled");
 
     expect(pkg.scripts["build:db:with-external"]).toContain("7-import-external-candidates.ts");
     expect(pkg.scripts["build:db:with-external"]).toContain("8-verify-external-nodes.ts");
@@ -214,30 +337,36 @@ describe("external candidate opt-in commands", () => {
 
   it.each(["properties_schema", "credentials_required", "operations"] as const)(
     "rejects malformed %s JSON without inserting or promoting the candidate",
-    (field) => {
+    async (field) => {
       const fixture = createImportFixture([{
         node_type: `n8n-nodes-fixture.bad-${field}`,
         [field]: "{not-json",
       }]);
+      const deferredVerifier = availableVerifiers.shift();
+      if (!deferredVerifier) throw new Error("Prepared verifier is unavailable");
+      try {
+        const imported = runImporter(fixture.root, fixture.externalPath);
+        const verifiedPromise = deferredVerifier.verify(fixture.root);
+        expect(imported.status).not.toBe(0);
+        expect(imported.stderr).toContain(`n8n-nodes-fixture.bad-${field}`);
+        expect(imported.stderr).toContain(field);
 
-      const imported = runImporter(fixture.root, fixture.externalPath);
-      expect(imported.status).not.toBe(0);
-      expect(imported.stderr).toContain(`n8n-nodes-fixture.bad-${field}`);
-      expect(imported.stderr).toContain(field);
+        const verified = await verifiedPromise;
+        expect(verified.status, verified.stderr).toBe(0);
 
-      const verified = runVerifier(fixture.root);
-      expect(verified.status, verified.stderr).toBe(0);
-
-      const db = new Database(fixture.localPath, { readonly: true });
-      expect(db.prepare("SELECT COUNT(*) AS count FROM external_node_candidates").get())
-        .toEqual({ count: 0 });
-      expect(db.prepare("SELECT COUNT(*) AS count FROM external_node_candidates_fts").get())
-        .toEqual({ count: 0 });
-      expect(db.prepare("SELECT COUNT(*) AS count FROM verified_external_nodes").get())
-        .toEqual({ count: 0 });
-      expect(db.prepare("SELECT COUNT(*) AS count FROM verified_external_nodes_fts").get())
-        .toEqual({ count: 0 });
-      db.close();
+        const db = new Database(fixture.localPath, { readonly: true });
+        expect(db.prepare("SELECT COUNT(*) AS count FROM external_node_candidates").get())
+          .toEqual({ count: 0 });
+        expect(db.prepare("SELECT COUNT(*) AS count FROM external_node_candidates_fts").get())
+          .toEqual({ count: 0 });
+        expect(db.prepare("SELECT COUNT(*) AS count FROM verified_external_nodes").get())
+          .toEqual({ count: 0 });
+        expect(db.prepare("SELECT COUNT(*) AS count FROM verified_external_nodes_fts").get())
+          .toEqual({ count: 0 });
+        db.close();
+      } finally {
+        await deferredVerifier.close();
+      }
     },
   );
 
