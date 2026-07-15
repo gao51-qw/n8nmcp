@@ -126,8 +126,8 @@ describe("knowledge publication and deployment contracts", () => {
       (result) => `resolved status=${result.status} signal=${result.signal}`,
       (error: unknown) => String(error),
     );
-    const descendantLifetimeMs = 4_000;
-    const treeCloseLimitMs = 3_000;
+    const descendantLifetimeMs = 2_000;
+    const treeCloseLimitMs = 1_500;
     const treeStartedAt = Date.now();
     const treeOutcome = runDeploymentCommand(
       process.execPath,
@@ -135,27 +135,40 @@ describe("knowledge publication and deployment contracts", () => {
         "-e",
         `const { spawn } = require("node:child_process");
 const descendant = spawn(process.execPath, ["-e", "setTimeout(() => {}, ${descendantLifetimeMs})"], {
+  detached: true,
   stdio: "inherit",
 });
 descendant.once("error", (error) => { throw error; });
-setTimeout(() => {}, ${descendantLifetimeMs});`,
+descendant.once("spawn", () => descendant.unref());`,
       ],
       { cwd: process.cwd(), env: process.env },
-      { deadlineMs: 100 },
+      {
+        deadlineMs: 5_000,
+        terminationGraceMs: 300,
+        terminationTargetPid: 2_147_483_647,
+        triggerDeadlineOnExit: true,
+      },
     ).then(
-      (result) => `resolved status=${result.status} signal=${result.signal}`,
-      (error: unknown) => String(error),
+      (result) => ({ error: null, result }),
+      (error: unknown) => ({ error, result: null }),
     );
     const [signalResult, treeResult] = await Promise.all([signalOutcome, treeOutcome]);
     const treeElapsedMs = Date.now() - treeStartedAt;
+    const treeError = treeResult.error instanceof Error ? treeResult.error : null;
     expect({
       signalRejected: /unexpected signal.*SIGTERM/is.test(signalResult),
-      treeRejected: /exceeded 100ms/is.test(treeResult),
+      treeRejected: treeResult.result === null && /exceeded 5000ms/is.test(String(treeError)),
       treeClosedPromptly: treeElapsedMs < treeCloseLimitMs,
-    }, `signal=${signalResult}\ntree=${treeResult}\ntreeElapsedMs=${treeElapsedMs}`).toEqual({
+      treeErrorName: treeError?.name,
+      cleanupSafe: treeError instanceof DeploymentCommandError ? treeError.cleanupSafe : undefined,
+      terminationGrace: /termination grace/is.test(String(treeError)),
+    }, `signal=${signalResult}\ntree=${String(treeError)}\ntreeElapsedMs=${treeElapsedMs}`).toEqual({
       signalRejected: true,
       treeRejected: true,
       treeClosedPromptly: true,
+      treeErrorName: "DeploymentCommandError",
+      cleanupSafe: false,
+      terminationGrace: true,
     });
   });
 
@@ -247,6 +260,14 @@ function expectOrdered(contents: string, markers: string[]): void {
 }
 
 const DEPLOY_STUB_DEADLINE_MS = 30_000;
+const DEPLOY_TERMINATION_GRACE_MS = 4_000;
+
+class DeploymentCommandError extends Error {
+  constructor(message: string, readonly cleanupSafe: boolean) {
+    super(message);
+    this.name = "DeploymentCommandError";
+  }
+}
 
 type DeployCommandResult = {
   status: number | null;
@@ -257,7 +278,15 @@ type DeployCommandResult = {
 
 type DeploymentCommandControl = {
   deadlineMs?: number;
+  terminationGraceMs?: number;
+  terminationTargetPid?: number;
+  triggerDeadlineOnExit?: boolean;
   onSpawn?: (child: ChildProcess) => void;
+};
+
+type ProcessTreeTermination = {
+  completion: Promise<string>;
+  release: () => string;
 };
 
 type DeployStubResult = {
@@ -286,7 +315,11 @@ async function runDeploymentCommand(
     let timedOut = false;
     let settled = false;
     let postSpawnError: Error | null = null;
-    let terminationPromise: Promise<string> | null = null;
+    let termination: ProcessTreeTermination | null = null;
+    let terminationDiagnostics = "not-started";
+    let terminationGraceExpiresAt: number | null = null;
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    let terminationGrace: ReturnType<typeof setTimeout> | undefined;
 
     child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
     child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
@@ -298,25 +331,64 @@ async function runDeploymentCommand(
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
-      clearTimeout(deadline);
+      if (deadline !== undefined) clearTimeout(deadline);
+      if (terminationGrace !== undefined) clearTimeout(terminationGrace);
       callback();
     };
     const deadlineMs = control.deadlineMs ?? DEPLOY_STUB_DEADLINE_MS;
-    const deadline = setTimeout(() => {
+    const terminationGraceMs = control.terminationGraceMs ?? DEPLOY_TERMINATION_GRACE_MS;
+    const beginDeadline = () => {
+      if (settled || timedOut) return;
       timedOut = true;
-      if (child.pid === undefined) {
-        terminationPromise = Promise.resolve("pid=unavailable");
+      if (deadline !== undefined) clearTimeout(deadline);
+      const terminationTargetPid = control.terminationTargetPid ?? child.pid;
+      if (terminationTargetPid === undefined) {
+        termination = {
+          completion: Promise.resolve("pid=unavailable"),
+          release: () => "pid=unavailable release=not-required",
+        };
       } else if (process.platform === "win32") {
-        terminationPromise = terminateWindowsProcessTree(child.pid);
+        termination = terminateWindowsProcessTree(terminationTargetPid);
       } else {
-        terminationPromise = Promise.resolve().then(() => {
-          process.kill(-child.pid!, "SIGKILL");
-          return `processGroup=${-child.pid!} signal=SIGKILL`;
-        });
+        const processGroup = -terminationTargetPid;
+        termination = {
+          completion: Promise.resolve().then(() => {
+            process.kill(processGroup, "SIGKILL");
+            return `processGroup=${processGroup} signal=SIGKILL`;
+          }),
+          release: () => `processGroup=${processGroup} release=not-required`,
+        };
       }
-    }, deadlineMs);
+      terminationDiagnostics = "pending";
+      void termination.completion.then(
+        (value) => {
+          if (!settled) terminationDiagnostics = value;
+        },
+        (error: unknown) => {
+          if (!settled) {
+            terminationDiagnostics = `failed=${error instanceof Error ? error.message : String(error)}`;
+          }
+        },
+      );
+      terminationGraceExpiresAt = Date.now() + terminationGraceMs;
+      terminationGrace = setTimeout(() => {
+        finish(() => {
+          const releaseDiagnostics = termination?.release() ?? "termination=unavailable";
+          child.stdout?.destroy();
+          child.stderr?.destroy();
+          rejectCommand(new DeploymentCommandError(
+            `Deployment stub exceeded ${deadlineMs}ms; termination grace ${terminationGraceMs}ms expired; `
+            + `cleanupSafe=false termination=${terminationDiagnostics} release=${releaseDiagnostics}; `
+            + diagnostics(child.exitCode, child.signalCode),
+            false,
+          ));
+        });
+      }, terminationGraceMs);
+    };
+    deadline = setTimeout(beginDeadline, deadlineMs);
 
     child.once("error", (error) => {
+      if (settled) return;
       if (child.pid === undefined) {
         finish(() => rejectCommand(new Error(
           `Deployment stub failed to start: ${error.message}; ${diagnostics(child.exitCode, child.signalCode)}`,
@@ -326,24 +398,42 @@ async function runDeploymentCommand(
       }
     });
     child.once("spawn", () => {
+      if (settled) return;
       try {
         control.onSpawn?.(child);
       } catch (error) {
         postSpawnError ??= error instanceof Error ? error : new Error(String(error));
       }
     });
-    child.once("close", async (status, signal) => {
+    child.once("exit", () => {
+      if (control.triggerDeadlineOnExit) beginDeadline();
+    });
+    child.once("close", (status, signal) => {
+      if (settled) return;
       if (timedOut) {
-        let terminationDiagnostics: string;
-        try {
-          terminationDiagnostics = await (terminationPromise ?? Promise.resolve("not-started"));
-        } catch (error) {
-          terminationDiagnostics = `failed=${error instanceof Error ? error.message : String(error)}`;
+        if (terminationGraceExpiresAt !== null && Date.now() >= terminationGraceExpiresAt) {
+          finish(() => {
+            const releaseDiagnostics = termination?.release() ?? "termination=unavailable";
+            child.stdout?.destroy();
+            child.stderr?.destroy();
+            rejectCommand(new DeploymentCommandError(
+              `Deployment stub exceeded ${deadlineMs}ms; termination grace ${terminationGraceMs}ms expired; `
+              + `cleanupSafe=false termination=${terminationDiagnostics} release=${releaseDiagnostics}; `
+              + diagnostics(status, signal),
+              false,
+            ));
+          });
+          return;
         }
-        finish(() => rejectCommand(new Error(
-          `Deployment stub exceeded ${deadlineMs}ms; termination=${terminationDiagnostics}; `
-          + diagnostics(status, signal),
-        )));
+        finish(() => {
+          const releaseDiagnostics = termination?.release() ?? "termination=unavailable";
+          rejectCommand(new DeploymentCommandError(
+            `Deployment stub exceeded ${deadlineMs}ms; termination grace confirmed closure; `
+            + `cleanupSafe=true termination=${terminationDiagnostics} release=${releaseDiagnostics}; `
+            + diagnostics(status, signal),
+            true,
+          ));
+        });
       } else if (postSpawnError !== null) {
         const processError = postSpawnError;
         finish(() => rejectCommand(new Error(
@@ -365,31 +455,32 @@ async function runDeploymentCommand(
   });
 }
 
-async function terminateWindowsProcessTree(pid: number): Promise<string> {
+function terminateWindowsProcessTree(pid: number): ProcessTreeTermination {
   const taskkill = resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe");
   const args = ["/PID", String(pid), "/T", "/F"];
-  return await new Promise<string>((resolveTermination, rejectTermination) => {
-    const child = spawn(taskkill, args, {
-      stdio: ["ignore", "pipe", "pipe"],
-      windowsHide: true,
-    });
-    let stdout = "";
-    let stderr = "";
-    let postSpawnError: Error | null = null;
-    let settled = false;
+  const child = spawn(taskkill, args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
+  });
+  let stdout = "";
+  let stderr = "";
+  let postSpawnError: Error | null = null;
+  let settled = false;
+  let released = false;
 
-    child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
-    child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
-    const diagnostics = (status: number | null, signal: NodeJS.Signals | null) =>
-      `command=${taskkill} ${args.join(" ")} status=${status} signal=${signal ?? "none"} `
-      + `stdout=${stdout} stderr=${stderr}`;
+  child.stdout?.on("data", (chunk) => { stdout += String(chunk); });
+  child.stderr?.on("data", (chunk) => { stderr += String(chunk); });
+  const diagnostics = (status: number | null, signal: NodeJS.Signals | null) =>
+    `command=${taskkill} ${args.join(" ")} status=${status} signal=${signal ?? "none"} `
+    + `stdout=${stdout} stderr=${stderr}`;
+  const completion = new Promise<string>((resolveTermination, rejectTermination) => {
     const finish = (callback: () => void) => {
       if (settled) return;
       settled = true;
       callback();
     };
-
     child.once("error", (error) => {
+      if (settled) return;
       if (child.pid === undefined) {
         finish(() => rejectTermination(new Error(
           `Process-tree termination failed to start: ${error.message}; `
@@ -400,6 +491,7 @@ async function terminateWindowsProcessTree(pid: number): Promise<string> {
       }
     });
     child.once("close", (status, signal) => {
+      if (settled) return;
       if (postSpawnError !== null) {
         const terminationError = postSpawnError;
         finish(() => rejectTermination(new Error(
@@ -415,6 +507,23 @@ async function terminateWindowsProcessTree(pid: number): Promise<string> {
       }
     });
   });
+  return {
+    completion,
+    release: () => {
+      if (released) return `already-released ${diagnostics(child.exitCode, child.signalCode)}`;
+      released = true;
+      child.stdout?.destroy();
+      child.stderr?.destroy();
+      let killResult: string;
+      try {
+        killResult = String(child.kill());
+      } catch (error) {
+        killResult = `failed=${error instanceof Error ? error.message : String(error)}`;
+      }
+      child.unref();
+      return `pipes=destroyed kill=${killResult} unref=true ${diagnostics(child.exitCode, child.signalCode)}`;
+    },
+  };
 }
 
 async function runDeployStub(options: {
@@ -429,6 +538,7 @@ async function runDeployStub(options: {
   const logFile = join(root, "docker.log");
   const healthState = join(root, "health-state");
   const dockerStub = join(bin, "docker");
+  let cleanupSafe = true;
   try {
     mkdirSync(bin);
     writeFileSync(
@@ -503,8 +613,14 @@ exit 0
       log: readFileSync(logFile, "utf8"),
       backupExists: existsSync(`${envFile}.bak`),
     };
+  } catch (error) {
+    if (error instanceof DeploymentCommandError && !error.cleanupSafe) {
+      cleanupSafe = false;
+      throw new DeploymentCommandError(`${error.message}; fixtureRetained=${root}`, false);
+    }
+    throw error;
   } finally {
-    rmSync(root, { recursive: true, force: true });
+    if (cleanupSafe) rmSync(root, { recursive: true, force: true });
   }
 }
 
