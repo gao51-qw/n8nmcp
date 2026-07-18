@@ -7,16 +7,23 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+
+type LoginStep = "email" | "code";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user, loading } = useAuth();
+  const [step, setStep] = useState<LoginStep>("email");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [submittedEmail, setSubmittedEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [resendSeconds, setResendSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,24 +35,91 @@ function LoginForm() {
     }
   }, [destination, loading, router, user]);
 
+  useEffect(() => {
+    if (resendSeconds <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setResendSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1_000);
+
+    return () => window.clearInterval(interval);
+  }, [resendSeconds]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
     setSubmitting(true);
 
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
+    const normalizedEmail = email.trim().toLowerCase();
+    const { error: sendError } = await supabase.auth.signInWithOtp({
+      email: normalizedEmail,
+      options: { shouldCreateUser: true },
     });
 
-    if (signInError) {
-      setError(signInError.message);
+    if (sendError) {
+      setError(sendError.message);
+      setSubmitting(false);
+      return;
+    }
+
+    setSubmittedEmail(normalizedEmail);
+    setCode("");
+    setError(null);
+    setStep("code");
+    setResendSeconds(60);
+    setSubmitting(false);
+  }
+
+  async function handleVerify(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!/^\d{6}$/.test(code)) return;
+
+    setError(null);
+    setSubmitting(true);
+
+    const { error: verifyError } = await supabase.auth.verifyOtp({
+      email: submittedEmail,
+      token: code,
+      type: "email",
+    });
+
+    if (verifyError) {
+      setError(verifyError.message);
       setSubmitting(false);
       return;
     }
 
     router.replace(destination);
     router.refresh();
+  }
+
+  async function handleResend() {
+    if (resendSeconds > 0) return;
+
+    setError(null);
+    setSubmitting(true);
+
+    const { error: sendError } = await supabase.auth.signInWithOtp({
+      email: submittedEmail,
+      options: { shouldCreateUser: true },
+    });
+
+    if (sendError) {
+      setError(sendError.message);
+      setSubmitting(false);
+      return;
+    }
+
+    setCode("");
+    setResendSeconds(60);
+    setSubmitting(false);
+  }
+
+  function handleChangeEmail() {
+    setStep("email");
+    setCode("");
+    setError(null);
+    setResendSeconds(0);
   }
 
   return (
@@ -62,44 +136,89 @@ function LoginForm() {
           </p>
         </div>
 
-        <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              name="email"
-              type="email"
-              autoComplete="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              required
-            />
-          </div>
+        {step === "email" ? (
+          <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                required
+              />
+            </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              name="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              required
-            />
-          </div>
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
 
-          {error ? (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          ) : null}
+            <Button className="w-full" type="submit" disabled={submitting || loading}>
+              {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+              {submitting ? "Sending code..." : "Send verification code"}
+            </Button>
+          </form>
+        ) : (
+          <form className="mt-8 space-y-5" onSubmit={handleVerify}>
+            <div className="space-y-2">
+              <h2 className="text-lg font-semibold">Enter verification code</h2>
+              <p className="text-sm text-muted-foreground">We sent a code to {submittedEmail}.</p>
+            </div>
 
-          <Button className="w-full" type="submit" disabled={submitting || loading}>
-            {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
-            {submitting ? "Signing in..." : "Sign in"}
-          </Button>
-        </form>
+            <InputOTP
+              maxLength={6}
+              pattern={REGEXP_ONLY_DIGITS}
+              value={code}
+              onChange={setCode}
+              autoComplete="one-time-code"
+              disabled={submitting}
+            >
+              <InputOTPGroup>
+                {Array.from({ length: 6 }, (_, index) => (
+                  <InputOTPSlot key={index} index={index} />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+
+            <div className="flex items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleChangeEmail}
+                disabled={submitting}
+              >
+                Change email
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleResend}
+                disabled={resendSeconds > 0 || submitting}
+              >
+                {resendSeconds > 0 ? `Resend code in ${resendSeconds}s` : "Resend code"}
+              </Button>
+            </div>
+
+            {error ? (
+              <p role="alert" className="text-sm text-destructive">
+                {error}
+              </p>
+            ) : null}
+
+            <Button
+              className="w-full"
+              type="submit"
+              disabled={!/^\d{6}$/.test(code) || submitting || loading}
+            >
+              {submitting ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
+              {submitting ? "Verifying..." : "Verify code"}
+            </Button>
+          </form>
+        )}
 
         <p className="mt-6 text-center text-sm text-muted-foreground">
           <Link href="/" className="font-medium text-primary hover:underline">
