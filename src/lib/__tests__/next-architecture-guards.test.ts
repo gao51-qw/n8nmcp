@@ -95,11 +95,13 @@ describe("Next.js architecture guard", () => {
   it("bakes browser-visible Supabase settings into production app images", () => {
     const dockerfile = read("Dockerfile");
     const workflow = read(".github/workflows/app-image.yml");
+    const aaPanelCompose = read("deploy/docker-compose.aapanel.yml");
 
     for (const key of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]) {
       expect(dockerfile).toContain(`ARG ${key}`);
       expect(dockerfile).toMatch(new RegExp(`\\b${key}=\\\\?\\$\\{${key}\\}`));
       expect(workflow).toContain(`${key}=\${{ secrets.${key} }}`);
+      expect(aaPanelCompose).toContain(`${key}: \${${key}:?required}`);
     }
   });
 });
