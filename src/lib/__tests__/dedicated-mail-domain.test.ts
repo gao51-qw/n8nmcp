@@ -384,8 +384,8 @@ describe("dedicated mail identity", () => {
 
   it.each([
     ["a missing marker", "confirmation\notp-length\n\n"],
-    ["a repeated marker", "confirmation\notp-length\nmagic-link\nmagic-link\n\n"],
-    ["an unknown marker", "confirmation\notp-length\nmagic-link\nunexpected\n\n"],
+    ["a repeated marker", "confirmation\nmagic-link\nmagic-link\n\n"],
+    ["an unknown marker", "confirmation\nmagic-link\nunexpected\n\n"],
   ])("rejects %s in the Auth template configuration", (_description, output) => {
     const result = verifyAuthTemplateConfiguration(output);
 
