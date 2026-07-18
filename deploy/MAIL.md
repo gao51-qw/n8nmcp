@@ -351,18 +351,43 @@ if sudo test -f overrides/docker-compose.email-otp.yml; then
   restored+=(-f overrides/docker-compose.email-otp.yml)
 fi
 "${restored[@]}" config --quiet
+REMOTE_OTP_ENABLED=0
+if sudo test -f overrides/docker-compose.email-otp.yml \
+  && sudo grep -Eq 'GOTRUE_MAILER_TEMPLATES_(MAGIC_LINK|CONFIRMATION)([[:space:]]*:|=)' overrides/docker-compose.email-otp.yml; then
+  REMOTE_OTP_ENABLED=1
+fi
+TEMPLATE_SERVICE_PRESENT=0
 if "${restored[@]}" config --services | grep -Fxq auth-email-templates; then
+  TEMPLATE_SERVICE_PRESENT=1
+fi
+
+if test "$REMOTE_OTP_ENABLED" = 1; then
+  test "$TEMPLATE_SERVICE_PRESENT" = 1
+  TEMPLATE_VALIDATOR=/opt/n8nmcp-app/deploy/supabase/validate-email-otp-template.sh
+  sudo bash "$TEMPLATE_VALIDATOR" templates/magic-link-otp.html
   "${restored[@]}" up -d --no-deps --force-recreate auth-email-templates
+  SERVED_TEMPLATE="$(mktemp)"
+  trap 'rm -f -- "$SERVED_TEMPLATE"' EXIT
+  EXPECTED_HASH="$(sudo sha256sum templates/magic-link-otp.html | awk '{print $1}')"
   TEMPLATE_READY=0
   for ((attempt = 1; attempt <= 120; attempt++)); do
-    if "${restored[@]}" exec -T auth-email-templates wget -q -O - http://127.0.0.1/magic-link-otp.html \
-      | sudo cmp -s -- templates/magic-link-otp.html -; then
+    if "${restored[@]}" exec -T auth-email-templates wget -q -O - http://127.0.0.1/magic-link-otp.html >"$SERVED_TEMPLATE" \
+      && sudo cmp -s -- templates/magic-link-otp.html "$SERVED_TEMPLATE" \
+      && SERVED_HASH="$(sha256sum "$SERVED_TEMPLATE" | awk '{print $1}')" \
+      && test "$SERVED_HASH" = "$EXPECTED_HASH"; then
       TEMPLATE_READY=1
       break
     fi
     sleep 1
   done
   test "$TEMPLATE_READY" = 1
+  rm -f -- "$SERVED_TEMPLATE"
+  trap - EXIT
+elif test "$TEMPLATE_SERVICE_PRESENT" = 1; then
+  "${restored[@]}" up -d --no-deps --force-recreate auth-email-templates
+  echo "restored state does not enable the managed remote OTP template; OTP safety was not asserted" >&2
+else
+  echo "restored state does not enable the managed remote OTP template; OTP safety was not asserted" >&2
 fi
 "${restored[@]}" up -d --no-deps --force-recreate auth
 AUTH_STATUS=""
@@ -377,10 +402,13 @@ test "$AUTH_STATUS" = healthy
 ```
 
 The block exits non-zero before starting anything if restored Compose validation
-fails. When a restored template service exists, it must serve byte-identical
-content before Auth starts; Auth then has up to 120 seconds to become healthy.
-Any failed gate keeps production activation blocked. Do not roll back the
-database or restart the full Supabase stack for this template-only change.
+fails. If the restored override enables a managed remote OTP template, the
+strict action validator, template-service presence, HTTP fetch, byte comparison,
+and SHA-256 comparison must all pass before Auth starts. A fully absent legacy
+override/template state is restored without claiming OTP safety. Auth then has
+up to 120 seconds to become healthy. Any failed gate keeps production activation
+blocked. Do not roll back the database or restart the full Supabase stack for
+this template-only change.
 
 ## 5. Configure the app runtime
 

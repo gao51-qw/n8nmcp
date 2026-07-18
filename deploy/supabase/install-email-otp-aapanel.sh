@@ -144,7 +144,7 @@ wait_for_template_ready() {
         "$container_id" >"$state_file" 2>/dev/null; then
         read -r running health <"$state_file" || true
         if [[ "$running" == "true" ]] && \
-          { [[ "$health" == "healthy" ]] || [[ "$health_requirement" == "allow-missing-health" && "$health" == "missing" ]]; }; then
+          { [[ "$health" == "healthy" ]] || [[ "$health_requirement" == "require-http-readiness" && "$health" == "missing" ]]; }; then
           if verify_served_template "$expected_template" "${compose_command[@]}"; then
             rm -f -- "$id_file" "$state_file"
             return 0
@@ -335,9 +335,16 @@ stop_template_containers() {
   rm -f -- "$ids_file"
 }
 
+restored_remote_otp_enabled() {
+  [[ -f "$TARGET_OVERRIDE" ]] || return 1
+  grep -Eq 'GOTRUE_MAILER_TEMPLATES_(MAGIC_LINK|CONFIRMATION)([[:space:]]*:|=)' \
+    "$TARGET_OVERRIDE"
+}
+
 rollback() {
   local -a rollback_compose
   local has_template_service=0
+  local remote_otp_enabled=0
 
   printf 'Rolling back the email OTP deployment from %s.\n' "$BACKUP_DIR" >&2
 
@@ -357,10 +364,20 @@ rollback() {
   if "${rollback_compose[@]}" config --services | grep -Fxq auth-email-templates; then
     has_template_service=1
   fi
+  if restored_remote_otp_enabled; then
+    remote_otp_enabled=1
+  fi
 
-  if (( has_template_service )); then
+  if (( remote_otp_enabled )); then
+    (( has_template_service )) || return 1
+    validate_email_otp_template "$TARGET_TEMPLATE" || return 1
     "${rollback_compose[@]}" up -d --no-deps --force-recreate auth-email-templates || return 1
-    wait_for_template_ready "$TARGET_TEMPLATE" 120 allow-missing-health "${rollback_compose[@]}" || return 1
+    wait_for_template_ready "$TARGET_TEMPLATE" 120 require-http-readiness "${rollback_compose[@]}" || return 1
+  elif (( has_template_service )); then
+    "${rollback_compose[@]}" up -d --no-deps --force-recreate auth-email-templates || return 1
+    printf 'Restored state does not enable the managed remote OTP template; OTP safety was not asserted.\n' >&2
+  else
+    printf 'Restored state has no managed remote OTP template; OTP safety was not asserted.\n' >&2
   fi
   "${rollback_compose[@]}" up -d --no-deps --force-recreate auth || return 1
   wait_for_auth_healthy 120 || return 1

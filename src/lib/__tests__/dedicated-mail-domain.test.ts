@@ -263,6 +263,7 @@ describe("dedicated mail identity", () => {
     expectInOrder(rollback, [
       "ensure_auth_stopped",
       "stop_template_containers",
+      "restore_backup",
       '"${rollback_compose[@]}" config --quiet',
       "up -d --no-deps --force-recreate auth-email-templates",
       "wait_for_template_ready",
@@ -272,6 +273,23 @@ describe("dedicated mail identity", () => {
     expect(rollback).toMatch(
       /if ! "\$\{rollback_compose\[@\]\}" config --quiet; then\n\s+return 1/,
     );
+  });
+
+  it("revalidates a restored remote OTP template before restarting Auth", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const rollback = installer.slice(
+      installer.indexOf("rollback() {"),
+      installer.indexOf("on_error() {"),
+    );
+
+    expectInOrder(rollback, [
+      "restored_remote_otp_enabled",
+      'validate_email_otp_template "$TARGET_TEMPLATE"',
+      "up -d --no-deps --force-recreate auth-email-templates",
+      'wait_for_template_ready "$TARGET_TEMPLATE" 120 require-http-readiness',
+      "up -d --no-deps --force-recreate auth",
+    ]);
+    expect(rollback).not.toContain("allow-missing-health");
   });
 
   it("confirms Auth is stopped before normal and rollback template mutation", () => {
@@ -318,6 +336,24 @@ describe("dedicated mail identity", () => {
     expect(runbook).toContain("override.metadata");
     expect(runbook).toContain(
       "Stop Auth first, then stop and remove the template service; recreate only the two affected services",
+    );
+  });
+
+  it("documents strict restored-template gates before manual Auth restart", () => {
+    const runbook = read("deploy/MAIL.md");
+    const manualRollback = runbook.slice(runbook.indexOf("#### Independent OTP template rollback"));
+
+    expectInOrder(manualRollback, [
+      "REMOTE_OTP_ENABLED=0",
+      "validate-email-otp-template.sh",
+      "up -d --no-deps --force-recreate auth-email-templates",
+      "wget -q -O -",
+      "cmp -s",
+      "sha256sum",
+      "up -d --no-deps --force-recreate auth",
+    ]);
+    expect(manualRollback).toContain(
+      "restored state does not enable the managed remote OTP template",
     );
   });
 });
