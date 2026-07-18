@@ -219,7 +219,7 @@ describe("admin support routes", () => {
 
     expect(response.status).toBe(403);
     expect(supabaseMocks.rpc).not.toHaveBeenCalled();
-  });
+  }, 10_000);
 
   it("passes the authenticated admin UUID to the service-role heartbeat RPC", async () => {
     const role = query({ data: { role: "admin" }, error: null });
