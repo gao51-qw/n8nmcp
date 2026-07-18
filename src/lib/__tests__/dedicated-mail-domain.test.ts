@@ -228,6 +228,50 @@ describe("dedicated mail identity", () => {
     ]);
   });
 
+  it("binds every Compose operation to the validated project, root, files, and Auth ID", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const preMutation = installer.slice(0, installer.indexOf("mutation_started=1"));
+
+    expect(installer).toContain('--project-name "$SUPABASE_COMPOSE_PROJECT"');
+    expect(preMutation).toContain('"${EXPECTED_OTP_COMPOSE_COMMAND[@]}" ps -q auth');
+    expect(preMutation).toContain("docker inspect --format '{{.Id}}' \"$AUTH_CONTAINER\"");
+    expect(preMutation).toContain('[[ "$compose_auth_id" == "$named_auth_id" ]]');
+    expect(preMutation).toContain("com.docker.compose.project.working_dir");
+    expect(preMutation).toContain("com.docker.compose.project.config_files");
+    expect(preMutation).toContain("com.docker.compose.service");
+    expect(preMutation).toContain('[[ "$auth_working_dir" == "$SUPABASE_ROOT" ]]');
+    expect(installer).toContain('docker stop "$AUTH_CONTAINER_ID"');
+    expect(installer).toContain(
+      "docker inspect --format '{{.State.Running}}' \"$AUTH_CONTAINER_ID\"",
+    );
+
+    const composeArrays = [
+      ...installer.matchAll(/readonly -a [A-Z_]+COMPOSE_COMMAND=\([\s\S]*?\n\)/g),
+    ];
+    expect(composeArrays.length).toBeGreaterThanOrEqual(3);
+    for (const [composeArray] of composeArrays) {
+      expect(composeArray).toContain('--project-name "$SUPABASE_COMPOSE_PROJECT"');
+    }
+  });
+
+  it("backs up and authenticates the validator used by automatic rollback", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const rollback = installer.slice(
+      installer.indexOf("rollback() {"),
+      installer.indexOf("on_error() {"),
+    );
+
+    expect(installer).toContain('"$BACKUP_DIR/validate-email-otp-template.sh"');
+    expect(installer).toContain('"$BACKUP_DIR/validate-email-otp-template.sh.sha256"');
+    expect(installer).toContain('install -m 0600 -o root -g root -- "$TEMPLATE_VALIDATOR"');
+    expect(installer).toContain('validate_root_file_mode "$BACKUP_VALIDATOR" 600');
+    expect(installer).toContain('validate_root_file_mode "$BACKUP_VALIDATOR_SHA256" 600');
+    expect(installer).toContain('cmp -s -- "$TEMPLATE_VALIDATOR" "$BACKUP_VALIDATOR"');
+    expect(rollback).toContain('source "$BACKUP_VALIDATOR"');
+    expect(rollback).toContain("validate_backup_validator");
+    expect(rollback).not.toContain('source "$TEMPLATE_VALIDATOR"');
+  });
+
   it("verifies both Auth template URLs and the six-digit OTP contract", () => {
     const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
 
@@ -330,6 +374,11 @@ describe("dedicated mail identity", () => {
     expect(runbook).toContain("Existing user");
     expect(runbook).toContain("New user");
     expect(runbook).toContain("shouldCreateUser: true");
+    expect(runbook).not.toContain("user creation disabled");
+    expect(runbook).toMatch(
+      /Existing user:[\s\S]*production UI[\s\S]*shouldCreateUser: true[\s\S]*magic-link template/i,
+    );
+    expect(runbook).toMatch(/New user:[\s\S]*confirmation template/i);
     expect(runbook).toContain("same code again");
     expect(runbook).toContain("attempt <= 120");
     expect(runbook).toContain("template.metadata");
@@ -345,7 +394,8 @@ describe("dedicated mail identity", () => {
 
     expectInOrder(manualRollback, [
       "REMOTE_OTP_ENABLED=0",
-      "validate-email-otp-template.sh",
+      "validate-email-otp-template.sh.sha256",
+      'bash "$BACKUP_VALIDATOR"',
       "up -d --no-deps --force-recreate auth-email-templates",
       "wget -q -O -",
       "cmp -s",
@@ -355,5 +405,34 @@ describe("dedicated mail identity", () => {
     expect(manualRollback).toContain(
       "restored state does not enable the managed remote OTP template",
     );
+    expect(manualRollback).not.toContain(
+      "TEMPLATE_VALIDATOR=/opt/n8nmcp-app/deploy/supabase/validate-email-otp-template.sh",
+    );
+    expect(manualRollback).toContain('sudo test -f "$BACKUP_VALIDATOR"');
+    expect(manualRollback).toContain('sudo test ! -L "$BACKUP_VALIDATOR"');
+  });
+
+  it("binds manual rollback to the same Compose model and exact Auth container", () => {
+    const runbook = read("deploy/MAIL.md");
+    const manualRollback = runbook.slice(runbook.indexOf("#### Independent OTP template rollback"));
+
+    expect(manualRollback).toContain('--project-name "$SUPABASE_PROJECT"');
+    expect(manualRollback).toContain('"${current[@]}" ps -q auth');
+    expect(manualRollback).toContain("sudo docker inspect --format '{{.Id}}' supabase-auth");
+    expect(manualRollback).toContain("com.docker.compose.project.working_dir");
+    expect(manualRollback).toContain("com.docker.compose.project.config_files");
+    expect(manualRollback).toContain('test "$COMPOSE_AUTH_ID" = "$AUTH_CONTAINER_ID"');
+    expect(manualRollback).toContain('sudo docker stop "$AUTH_CONTAINER_ID"');
+    expect(manualRollback).toContain(
+      "sudo docker inspect --format '{{.State.Running}}' \"$AUTH_CONTAINER_ID\"",
+    );
+  });
+
+  it("accurately describes Compose env interpolation without exposing values", () => {
+    const runbook = read("deploy/MAIL.md");
+
+    expect(runbook).toContain("does not explicitly read or print the Supabase `.env` contents");
+    expect(runbook).toContain("Compose automatically uses `.env` for interpolation");
+    expect(runbook).not.toContain("does not read or print the Supabase `.env` values");
   });
 });

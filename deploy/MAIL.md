@@ -201,8 +201,7 @@ GOTRUE_SMTP_SENDER_NAME=n8nworkflow
 ```
 
 Set the corresponding SMTP password through the protected environment file or
-secret manager; it is intentionally absent here. Require implicit TLS for port
-465. Keep production activation blocked while changing Auth. The installer below
+secret manager; it is intentionally absent here. Require implicit TLS for port 465. Keep production activation blocked while changing Auth. The installer below
 enables external email and sign-up only so the controlled existing-user and
 new-user acceptance checks can exercise both Auth template paths.
 
@@ -223,8 +222,10 @@ Auth, the installer waits for the private template service healthcheck, fetches
 the template over HTTP inside that container, and compares both its bytes and
 SHA-256 digest with the versioned source. It rolls back automatically if backup
 validation, Compose validation, template readiness/content, service recreation,
-Auth health, or either configured template URL/OTP-length check fails. It does
-not read or print the Supabase `.env` values.
+Auth health, or either configured template URL/OTP-length check fails. The
+installer does not explicitly read or print the Supabase `.env` contents;
+Compose automatically uses `.env` for interpolation while it builds the
+effective model.
 
 Confirm Auth health without dumping its environment:
 
@@ -247,16 +248,17 @@ one per line.
 Use dedicated external test mailboxes and private browser sessions for these two
 separate gates:
 
-1. **Existing user:** request an OTP for an already-confirmed test account with
-   user creation disabled. This exercises the magic-link template. Confirm the
-   message comes from `server@n8nworkflow.com`, contains exactly a six-digit
+1. **Existing user:** use the production UI to request an OTP for an
+   already-confirmed test account. The UI still sends `shouldCreateUser: true`,
+   but Supabase recognizes the existing account and exercises the magic-link template.
+   Confirm the message comes from `server@n8nworkflow.com`, contains exactly a six-digit
    verification code, and contains no sign-in link, URL, form action, or tracking
    image. Enter it only into the production verification form, end the resulting
    session, then submit the same code again in a fresh private session. The replay
    must be rejected.
-2. **New user:** request an OTP for a never-registered address through the
-   production client path configured with `shouldCreateUser: true`. This
-   exercises the confirmation template. Apply the same code-only/content checks,
+2. **New user:** use the same production UI to request an OTP for a
+   never-registered address. The production client sends `shouldCreateUser: true`
+   and exercises the confirmation template. Apply the same code-only/content checks,
    verify that the first submission creates and confirms only the intended test
    user, then submit the same code again from a fresh private session. The replay
    must be rejected.
@@ -282,9 +284,18 @@ until any restored template service is ready:
 set -euo pipefail
 SUPABASE_ROOT=/opt/n8nmcp-supabase
 BACKUP_DIR=/opt/n8nmcp-supabase/backups/email-otp/YYYYMMDDTHHMMSSZ_FROM_INSTALLER
+BACKUP_VALIDATOR="$BACKUP_DIR/validate-email-otp-template.sh"
+BACKUP_VALIDATOR_SHA256="$BACKUP_DIR/validate-email-otp-template.sh.sha256"
 
 sudo test "$(sudo realpath -e -- "$BACKUP_DIR")" = "$BACKUP_DIR"
 sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR")" = "root:root:700"
+sudo test -f "$BACKUP_VALIDATOR"
+sudo test ! -L "$BACKUP_VALIDATOR"
+sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_VALIDATOR")" = "root:root:600"
+sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_VALIDATOR_SHA256")" = "root:root:600"
+EXPECTED_VALIDATOR_HASH="$(sudo cat "$BACKUP_VALIDATOR_SHA256")"
+[[ "$EXPECTED_VALIDATOR_HASH" =~ ^[a-f0-9]{64}$ ]]
+test "$(sudo sha256sum "$BACKUP_VALIDATOR" | awk '{print $1}')" = "$EXPECTED_VALIDATOR_HASH"
 cd -- "$SUPABASE_ROOT"
 
 # Validate the complete backup state before stopping or changing any service.
@@ -322,12 +333,30 @@ else
   exit 1
 fi
 
-# Mutation starts only after every backup ownership, mode, state, and metadata
-# gate above has passed. Stop Auth before the template service.
+# Mutation starts only after every backup ownership, mode, state, metadata, and
+# validator-integrity gate above has passed. Bind the named container to the
+# current three-file model before stopping Auth or restoring files.
 SUPABASE_PROJECT="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' supabase-auth)"
 [[ "$SUPABASE_PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]]
-sudo docker stop supabase-auth
-test "$(sudo docker inspect --format '{{.State.Running}}' supabase-auth)" = false
+current=(sudo docker compose --project-name "$SUPABASE_PROJECT" -f docker-compose.yml -f overrides/docker-compose.aapanel.yml -f overrides/docker-compose.email-otp.yml)
+"${current[@]}" config --quiet
+COMPOSE_AUTH_ID="$("${current[@]}" ps -q auth)"
+AUTH_CONTAINER_ID="$(sudo docker inspect --format '{{.Id}}' supabase-auth)"
+test -n "$COMPOSE_AUTH_ID"
+test "$COMPOSE_AUTH_ID" = "$AUTH_CONTAINER_ID"
+test "$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$AUTH_CONTAINER_ID")" = "$SUPABASE_PROJECT"
+AUTH_WORKING_DIR="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$AUTH_CONTAINER_ID")"
+test "$(sudo realpath -e -- "$AUTH_WORKING_DIR")" = "$SUPABASE_ROOT"
+test "$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$AUTH_CONTAINER_ID")" = auth
+AUTH_CONFIG_FILES="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$AUTH_CONTAINER_ID")"
+IFS=',' read -r -a ACTUAL_CONFIG_FILES <<<"$AUTH_CONFIG_FILES"
+EXPECTED_CONFIG_FILES=("$SUPABASE_ROOT/docker-compose.yml" "$SUPABASE_ROOT/overrides/docker-compose.aapanel.yml" "$SUPABASE_ROOT/overrides/docker-compose.email-otp.yml")
+test "${#ACTUAL_CONFIG_FILES[@]}" = "${#EXPECTED_CONFIG_FILES[@]}"
+for CONFIG_INDEX in "${!EXPECTED_CONFIG_FILES[@]}"; do
+  test "$(sudo realpath -e -- "${ACTUAL_CONFIG_FILES[$CONFIG_INDEX]}")" = "${EXPECTED_CONFIG_FILES[$CONFIG_INDEX]}"
+done
+sudo docker stop "$AUTH_CONTAINER_ID"
+test "$(sudo docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER_ID")" = false
 mapfile -t TEMPLATE_IDS < <(sudo docker ps -aq \
   --filter "label=com.docker.compose.project=$SUPABASE_PROJECT" \
   --filter "label=com.docker.compose.service=auth-email-templates")
@@ -346,7 +375,7 @@ else
   sudo rm -f -- overrides/docker-compose.email-otp.yml
 fi
 
-restored=(sudo docker compose -f docker-compose.yml -f overrides/docker-compose.aapanel.yml)
+restored=(sudo docker compose --project-name "$SUPABASE_PROJECT" -f docker-compose.yml -f overrides/docker-compose.aapanel.yml)
 if sudo test -f overrides/docker-compose.email-otp.yml; then
   restored+=(-f overrides/docker-compose.email-otp.yml)
 fi
@@ -363,8 +392,9 @@ fi
 
 if test "$REMOTE_OTP_ENABLED" = 1; then
   test "$TEMPLATE_SERVICE_PRESENT" = 1
-  TEMPLATE_VALIDATOR=/opt/n8nmcp-app/deploy/supabase/validate-email-otp-template.sh
-  sudo bash "$TEMPLATE_VALIDATOR" templates/magic-link-otp.html
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/validate-email-otp-template.sh.sha256")" = "root:root:600"
+  test "$(sudo sha256sum "$BACKUP_VALIDATOR" | awk '{print $1}')" = "$EXPECTED_VALIDATOR_HASH"
+  sudo bash "$BACKUP_VALIDATOR" templates/magic-link-otp.html
   "${restored[@]}" up -d --no-deps --force-recreate auth-email-templates
   SERVED_TEMPLATE="$(mktemp)"
   trap 'rm -f -- "$SERVED_TEMPLATE"' EXIT
@@ -390,9 +420,12 @@ else
   echo "restored state does not enable the managed remote OTP template; OTP safety was not asserted" >&2
 fi
 "${restored[@]}" up -d --no-deps --force-recreate auth
+AUTH_CONTAINER_ID="$("${restored[@]}" ps -q auth)"
+test -n "$AUTH_CONTAINER_ID"
+test "$(sudo docker inspect --format '{{.Id}}' supabase-auth)" = "$AUTH_CONTAINER_ID"
 AUTH_STATUS=""
 for ((attempt = 1; attempt <= 120; attempt++)); do
-  AUTH_STATUS="$(sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' supabase-auth 2>/dev/null || true)"
+  AUTH_STATUS="$(sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$AUTH_CONTAINER_ID" 2>/dev/null || true)"
   if test "$AUTH_STATUS" = healthy; then
     break
   fi

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   searchParams: new URLSearchParams("next=/dashboard/support"),
   signInWithOtp: vi.fn(),
   verifyOtp: vi.fn(),
+  authLoading: false,
 }));
 
 vi.mock("next/navigation", () => ({
@@ -18,7 +19,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/auth-provider", () => ({
-  useAuth: () => ({ user: null, loading: false }),
+  useAuth: () => ({ user: null, loading: mocks.authLoading }),
 }));
 
 vi.mock("@/integrations/supabase/client", () => ({
@@ -57,6 +58,7 @@ describe("email OTP login", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.authLoading = false;
     mocks.searchParams = new URLSearchParams("next=/dashboard/support");
     mocks.signInWithOtp.mockResolvedValue({ data: {}, error: null });
     mocks.verifyOtp.mockResolvedValue({ data: {}, error: null });
@@ -100,6 +102,79 @@ describe("email OTP login", () => {
     });
     expect(view.textContent).toContain("Enter verification code");
     expect(view.querySelector('input[type="password"]')).toBeNull();
+  });
+
+  it("blocks duplicate sends and disables email controls while a send is pending", async () => {
+    let resolveSend: ((result: { data: object; error: null }) => void) | undefined;
+    mocks.signInWithOtp.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSend = resolve;
+      }),
+    );
+    const view = await renderPage();
+    const emailInput = view.querySelector('input[type="email"]') as HTMLInputElement;
+    const emailForm = view.querySelector("form");
+
+    await setInputValue(emailInput, "duplicate@example.com");
+    await act(async () => {
+      emailForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+
+    const sendButton = view.querySelector('button[type="submit"]') as HTMLButtonElement;
+    expect(emailInput.disabled).toBe(true);
+    expect(sendButton.disabled).toBe(true);
+
+    await act(async () => {
+      emailForm?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      await Promise.resolve();
+    });
+    expect(mocks.signInWithOtp).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveSend?.({ data: {}, error: null });
+      await Promise.resolve();
+    });
+    expect(view.textContent).toContain("Enter verification code");
+  });
+
+  it("disables email controls and rejects submission while auth is loading", async () => {
+    mocks.authLoading = true;
+    const view = await renderPage();
+    const emailInput = view.querySelector('input[type="email"]') as HTMLInputElement;
+    const sendButton = view.querySelector('button[type="submit"]') as HTMLButtonElement;
+
+    expect(emailInput.disabled).toBe(true);
+    expect(sendButton.disabled).toBe(true);
+    await act(async () => {
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+    expect(mocks.signInWithOtp).not.toHaveBeenCalled();
+  });
+
+  it("keeps email entry ready when the initial send is rejected", async () => {
+    mocks.signInWithOtp.mockResolvedValueOnce({
+      data: {},
+      error: { message: "Email delivery failed" },
+    });
+    const view = await renderPage();
+    await setInputValue(
+      view.querySelector('input[type="email"]') as HTMLInputElement,
+      "retry@example.com",
+    );
+    await act(async () => {
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(view.querySelector('[role="alert"]')?.textContent).toContain("Email delivery failed");
+    expect(view.querySelector('input[type="email"]')).toBeInstanceOf(HTMLInputElement);
+    expect((view.querySelector('input[type="email"]') as HTMLInputElement).disabled).toBe(false);
+    expect((view.querySelector('button[type="submit"]') as HTMLButtonElement).disabled).toBe(false);
+    expect(view.textContent).not.toContain("Enter verification code");
   });
 
   it("verifies a six-digit code and navigates to the safe destination", async () => {
@@ -189,6 +264,41 @@ describe("email OTP login", () => {
     });
     expect(codeInput.value).toBe("");
     expect(view.textContent).toContain("Resend code in 60s");
+  });
+
+  it.each([
+    ["service error", { data: {}, error: { message: "Resend rejected" } }],
+    ["network exception", new Error("Network unavailable")],
+  ])("preserves the code step and expired cooldown after a resend %s", async (_label, failure) => {
+    vi.useFakeTimers();
+    const view = await renderPage();
+    await moveToCodeStep(view);
+    const codeInput = view.querySelector('input[autocomplete="one-time-code"]') as HTMLInputElement;
+    await setInputValue(codeInput, "123456");
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    if (failure instanceof Error) {
+      mocks.signInWithOtp.mockRejectedValueOnce(failure);
+    } else {
+      mocks.signInWithOtp.mockResolvedValueOnce(failure);
+    }
+    const resendButton = Array.from(view.querySelectorAll('button[type="button"]')).find((button) =>
+      button.textContent?.includes("Resend code"),
+    ) as HTMLButtonElement;
+    await act(async () => {
+      resendButton.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      await Promise.resolve();
+    });
+
+    expect(view.textContent).toContain("Enter verification code");
+    expect(codeInput.value).toBe("123456");
+    expect(resendButton.disabled).toBe(false);
+    expect(resendButton.textContent).toContain("Resend code");
+    expect(view.querySelector('[role="alert"]')?.textContent).toMatch(
+      /Resend rejected|Network unavailable/,
+    );
   });
 
   it("changes email and clears the OTP error", async () => {

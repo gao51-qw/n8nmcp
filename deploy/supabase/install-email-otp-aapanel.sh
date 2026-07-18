@@ -53,7 +53,7 @@ wait_for_auth_healthy() {
   local status=""
   local attempt
   for ((attempt = 1; attempt <= attempts; attempt++)); do
-    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
+    status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' "$AUTH_CONTAINER_ID" 2>/dev/null || true)"
     if [[ "$status" == "healthy" ]]; then
       return 0
     fi
@@ -64,31 +64,22 @@ wait_for_auth_healthy() {
 }
 
 ensure_auth_stopped() {
-  local names_file="$BACKUP_DIR/auth-containers.list"
   local state_file="$BACKUP_DIR/auth-running.state"
+  local actual_id=""
   local running=""
 
-  if ! docker container ls -a --format '{{.Names}}' >"$names_file"; then
-    return 1
-  fi
-  if ! grep -Fxq "$AUTH_CONTAINER" "$names_file"; then
-    rm -f -- "$names_file" "$state_file"
+  if [[ -z "${AUTH_CONTAINER_ID:-}" ]]; then
     return 0
   fi
-  if ! docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER" >"$state_file"; then
+  actual_id="$(docker inspect --format '{{.Id}}' "$AUTH_CONTAINER_ID" 2>/dev/null || true)"
+  [[ "$actual_id" == "$AUTH_CONTAINER_ID" ]] || return 1
+  if ! docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER_ID" >"$state_file"; then
     return 1
   fi
   IFS= read -r running <"$state_file" || return 1
   if [[ "$running" == "true" ]]; then
-    docker stop "$AUTH_CONTAINER" >/dev/null || return 1
-    if ! docker container ls -a --format '{{.Names}}' >"$names_file"; then
-      return 1
-    fi
-    if ! grep -Fxq "$AUTH_CONTAINER" "$names_file"; then
-      rm -f -- "$names_file" "$state_file"
-      return 0
-    fi
-    if ! docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER" >"$state_file"; then
+    docker stop "$AUTH_CONTAINER_ID" >/dev/null || return 1
+    if ! docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER_ID" >"$state_file"; then
       return 1
     fi
     IFS= read -r running <"$state_file" || return 1
@@ -96,7 +87,46 @@ ensure_auth_stopped() {
   if [[ "$running" != "false" ]]; then
     return 1
   fi
-  rm -f -- "$names_file" "$state_file"
+  rm -f -- "$state_file"
+}
+
+bind_auth_container() {
+  local expected_config_files="$1"
+  shift
+  local -a compose_command=("$@")
+  local compose_auth_id=""
+  local named_auth_id=""
+  local auth_project=""
+  local auth_working_dir=""
+  local auth_config_files=""
+  local auth_service=""
+  local -a actual_files=()
+  local -a expected_files=()
+  local index
+
+  compose_auth_id="$("${compose_command[@]}" ps -aq auth)" || return 1
+  named_auth_id="$(docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
+  [[ -n "$compose_auth_id" && -n "$named_auth_id" ]] || return 1
+  [[ "$compose_auth_id" == "$named_auth_id" ]] || return 1
+
+  auth_project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$named_auth_id")" || return 1
+  auth_working_dir="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.working_dir"}}' "$named_auth_id")" || return 1
+  auth_config_files="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$named_auth_id")" || return 1
+  auth_service="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$named_auth_id")" || return 1
+
+  [[ "$auth_project" == "$SUPABASE_COMPOSE_PROJECT" ]] || return 1
+  auth_working_dir="$(realpath -e -- "$auth_working_dir")" || return 1
+  [[ "$auth_working_dir" == "$SUPABASE_ROOT" ]] || return 1
+  [[ "$auth_service" == "auth" ]] || return 1
+
+  IFS=',' read -r -a actual_files <<<"$auth_config_files"
+  IFS=',' read -r -a expected_files <<<"$expected_config_files"
+  (( ${#actual_files[@]} == ${#expected_files[@]} )) || return 1
+  for ((index = 0; index < ${#expected_files[@]}; index++)); do
+    [[ "$(realpath -e -- "${actual_files[$index]}")" == "${expected_files[$index]}" ]] || return 1
+  done
+
+  AUTH_CONTAINER_ID="$named_auth_id"
 }
 
 verify_served_template() {
@@ -163,7 +193,7 @@ verify_auth_template_configuration() {
   local actual="$BACKUP_DIR/auth-template-configuration.check"
   if ! docker inspect --format \
     '{{range .Config.Env}}{{if eq . "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=http://auth-email-templates/magic-link-otp.html"}}{{println "magic-link"}}{{end}}{{if eq . "GOTRUE_MAILER_TEMPLATES_CONFIRMATION=http://auth-email-templates/magic-link-otp.html"}}{{println "confirmation"}}{{end}}{{if eq . "GOTRUE_MAILER_OTP_LENGTH=6"}}{{println "otp-length"}}{{end}}{{end}}' \
-    "$AUTH_CONTAINER" >"$actual"; then
+    "$AUTH_CONTAINER_ID" >"$actual"; then
     return 1
   fi
   grep -Fxq "magic-link" "$actual" && \
@@ -196,6 +226,20 @@ validate_backup() {
     validate_root_file_mode "$BACKUP_DIR/override.absent" 600
     [[ ! -e "$BACKUP_DIR/docker-compose.email-otp.yml" && ! -e "$BACKUP_DIR/override.metadata" ]] || die "Override absence backup is ambiguous."
   fi
+
+  validate_backup_validator
+}
+
+validate_backup_validator() {
+  local expected_hash=""
+  local actual_hash=""
+
+  validate_root_file_mode "$BACKUP_VALIDATOR" 600
+  validate_root_file_mode "$BACKUP_VALIDATOR_SHA256" 600
+  IFS= read -r expected_hash <"$BACKUP_VALIDATOR_SHA256" || return 1
+  [[ "$expected_hash" =~ ^[a-f0-9]{64}$ ]] || return 1
+  actual_hash="$(sha256sum "$BACKUP_VALIDATOR" | awk '{print $1}')" || return 1
+  [[ "$actual_hash" == "$expected_hash" ]]
 }
 
 if (( EUID != 0 )); then
@@ -242,26 +286,51 @@ if [[ -e "$TARGET_TEMPLATE" || -L "$TARGET_TEMPLATE" ]]; then
   validate_exact_file "$TARGET_TEMPLATE"
 fi
 
-auth_running="$(docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
-[[ "$auth_running" == "true" ]] || die "The $AUTH_CONTAINER container is not running."
 SUPABASE_COMPOSE_PROJECT="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
 [[ "$SUPABASE_COMPOSE_PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]] || die "Could not validate the Supabase Compose project label."
 
 cd -- "$SUPABASE_ROOT"
 readonly -a BASE_COMPOSE_COMMAND=(
   docker compose
+  --project-name "$SUPABASE_COMPOSE_PROJECT"
   -f docker-compose.yml
   -f overrides/docker-compose.aapanel.yml
 )
+readonly -a EXPECTED_OTP_COMPOSE_COMMAND=(
+  docker compose
+  --project-name "$SUPABASE_COMPOSE_PROJECT"
+  -f docker-compose.yml
+  -f overrides/docker-compose.aapanel.yml
+  -f "$SOURCE_OVERRIDE"
+)
 readonly -a OTP_COMPOSE_COMMAND=(
-  "${BASE_COMPOSE_COMMAND[@]}"
+  docker compose
+  --project-name "$SUPABASE_COMPOSE_PROJECT"
+  -f docker-compose.yml
+  -f overrides/docker-compose.aapanel.yml
   -f overrides/docker-compose.email-otp.yml
 )
 
 "${BASE_COMPOSE_COMMAND[@]}" config --quiet
+"${EXPECTED_OTP_COMPOSE_COMMAND[@]}" config --quiet
 if [[ -f "$TARGET_OVERRIDE" ]]; then
   "${OTP_COMPOSE_COMMAND[@]}" config --quiet
 fi
+
+expected_model_auth_id="$("${EXPECTED_OTP_COMPOSE_COMMAND[@]}" ps -q auth)"
+named_auth_id="$(docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
+[[ -n "$expected_model_auth_id" && "$expected_model_auth_id" == "$named_auth_id" ]] || \
+  die "The named Auth container is not the auth service in the expected three-file Compose model."
+
+if [[ -f "$TARGET_OVERRIDE" ]]; then
+  bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}" || \
+    die "Auth container labels do not match the current three-file Supabase model."
+else
+  bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE" "${BASE_COMPOSE_COMMAND[@]}" || \
+    die "Auth container labels do not match the current two-file Supabase model."
+fi
+auth_running="$(docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER_ID" 2>/dev/null || true)"
+[[ "$auth_running" == "true" ]] || die "The validated $AUTH_CONTAINER container is not running."
 
 ensure_secure_directory "$SUPABASE_ROOT/backups" 0700
 ensure_secure_directory "$SUPABASE_ROOT/backups/email-otp" 0700
@@ -269,6 +338,13 @@ timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
 BACKUP_DIR="$SUPABASE_ROOT/backups/email-otp/$timestamp"
 [[ ! -e "$BACKUP_DIR" && ! -L "$BACKUP_DIR" ]] || die "Backup path already exists: $BACKUP_DIR"
 install -d -m 0700 -o root -g root -- "$BACKUP_DIR"
+readonly BACKUP_VALIDATOR="$BACKUP_DIR/validate-email-otp-template.sh"
+readonly BACKUP_VALIDATOR_SHA256="$BACKUP_DIR/validate-email-otp-template.sh.sha256"
+install -m 0600 -o root -g root -- "$TEMPLATE_VALIDATOR" "$BACKUP_VALIDATOR"
+cmp -s -- "$TEMPLATE_VALIDATOR" "$BACKUP_VALIDATOR" || die "Validator backup verification failed."
+sha256sum "$BACKUP_VALIDATOR" | awk '{print $1}' >"$BACKUP_VALIDATOR_SHA256"
+chmod 0600 -- "$BACKUP_VALIDATOR_SHA256"
+chown root:root -- "$BACKUP_VALIDATOR_SHA256"
 
 had_template=0
 had_override=0
@@ -343,19 +419,31 @@ restored_remote_otp_enabled() {
 
 rollback() {
   local -a rollback_compose
+  local rollback_config_files=""
   local has_template_service=0
   local remote_otp_enabled=0
 
   printf 'Rolling back the email OTP deployment from %s.\n' "$BACKUP_DIR" >&2
 
+  if docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" >/dev/null 2>&1; then
+    if [[ -f "$TARGET_OVERRIDE" ]]; then
+      bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}" || return 1
+    else
+      bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE" "${BASE_COMPOSE_COMMAND[@]}" || return 1
+    fi
+  else
+    AUTH_CONTAINER_ID=""
+  fi
   ensure_auth_stopped || return 1
   stop_template_containers || return 1
   restore_backup || return 1
 
   if (( had_override )); then
     rollback_compose=("${OTP_COMPOSE_COMMAND[@]}")
+    rollback_config_files="$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE"
   else
     rollback_compose=("${BASE_COMPOSE_COMMAND[@]}")
+    rollback_config_files="$BASE_COMPOSE,$AAPANEL_OVERRIDE"
   fi
 
   if ! "${rollback_compose[@]}" config --quiet; then
@@ -370,6 +458,9 @@ rollback() {
 
   if (( remote_otp_enabled )); then
     (( has_template_service )) || return 1
+    validate_backup_validator || return 1
+    printf 'Validating the restored OTP template with the protected backup validator.\n' >&2
+    source "$BACKUP_VALIDATOR"
     validate_email_otp_template "$TARGET_TEMPLATE" || return 1
     "${rollback_compose[@]}" up -d --no-deps --force-recreate auth-email-templates || return 1
     wait_for_template_ready "$TARGET_TEMPLATE" 120 require-http-readiness "${rollback_compose[@]}" || return 1
@@ -380,6 +471,7 @@ rollback() {
     printf 'Restored state has no managed remote OTP template; OTP safety was not asserted.\n' >&2
   fi
   "${rollback_compose[@]}" up -d --no-deps --force-recreate auth || return 1
+  bind_auth_container "$rollback_config_files" "${rollback_compose[@]}" || return 1
   wait_for_auth_healthy 120 || return 1
 
   printf 'Rollback completed and Supabase Auth is healthy.\n' >&2
@@ -424,6 +516,7 @@ install -m 0644 -o root -g root -- "$SOURCE_OVERRIDE" "$TARGET_OVERRIDE"
 "${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth-email-templates
 wait_for_template_ready "$SOURCE_TEMPLATE" 120 require-health "${OTP_COMPOSE_COMMAND[@]}"
 "${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth
+bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}"
 wait_for_auth_healthy 120
 verify_auth_template_configuration
 
@@ -437,7 +530,6 @@ rm -f -- \
   "$BACKUP_DIR/template-container.id" \
   "$BACKUP_DIR/template-container.state" \
   "$BACKUP_DIR/template-containers.ids" \
-  "$BACKUP_DIR/auth-containers.list" \
   "$BACKUP_DIR/auth-running.state"
 printf 'Email OTP template installed successfully.\n'
 printf 'BACKUP_PATH=%s\n' "$BACKUP_DIR"

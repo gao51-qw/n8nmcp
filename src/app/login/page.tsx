@@ -46,6 +46,10 @@ function LoginForm() {
   }, [resendSeconds]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    if (submitting || loading) {
+      event.preventDefault();
+      return;
+    }
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
 
@@ -57,23 +61,29 @@ function LoginForm() {
     setError(null);
     setSubmitting(true);
 
-    const { error: sendError } = await supabase.auth.signInWithOtp({
-      email: normalizedEmail,
-      options: { shouldCreateUser: true },
-    });
+    try {
+      const { error: sendError } = await supabase.auth.signInWithOtp({
+        email: normalizedEmail,
+        options: { shouldCreateUser: true },
+      });
 
-    if (sendError) {
-      setError(sendError.message);
+      if (sendError) {
+        setError(sendError.message);
+        return;
+      }
+
+      setSubmittedEmail(normalizedEmail);
+      setCode("");
+      setError(null);
+      setStep("code");
+      setResendSeconds(60);
+    } catch (sendFailure) {
+      setError(
+        sendFailure instanceof Error ? sendFailure.message : "Unable to send verification code.",
+      );
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    setSubmittedEmail(normalizedEmail);
-    setCode("");
-    setError(null);
-    setStep("code");
-    setResendSeconds(60);
-    setSubmitting(false);
   }
 
   async function handleVerify(event: FormEvent<HTMLFormElement>) {
@@ -100,25 +110,31 @@ function LoginForm() {
   }
 
   async function handleResend() {
-    if (resendSeconds > 0) return;
+    if (resendSeconds > 0 || submitting || loading) return;
 
     setError(null);
     setSubmitting(true);
 
-    const { error: sendError } = await supabase.auth.signInWithOtp({
-      email: submittedEmail,
-      options: { shouldCreateUser: true },
-    });
+    try {
+      const { error: sendError } = await supabase.auth.signInWithOtp({
+        email: submittedEmail,
+        options: { shouldCreateUser: true },
+      });
 
-    if (sendError) {
-      setError(sendError.message);
+      if (sendError) {
+        setError(sendError.message);
+        return;
+      }
+
+      setCode("");
+      setResendSeconds(60);
+    } catch (sendFailure) {
+      setError(
+        sendFailure instanceof Error ? sendFailure.message : "Unable to resend verification code.",
+      );
+    } finally {
       setSubmitting(false);
-      return;
     }
-
-    setCode("");
-    setResendSeconds(60);
-    setSubmitting(false);
   }
 
   function handleChangeEmail() {
@@ -152,6 +168,7 @@ function LoginForm() {
                 autoComplete="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
+                disabled={submitting || loading}
                 required
               />
             </div>
