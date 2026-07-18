@@ -30,6 +30,27 @@ describe("audit tool advertisement", () => {
   });
 });
 
+describe("mutation audit outcome gating", () => {
+  it("records only operations that actually mutated workflow state", async () => {
+    const { shouldRecordMutationAudit } = await import("../mcp.server");
+
+    expect(shouldRecordMutationAudit("fix_workflow_errors", { success: true })).toBe(false);
+    expect(
+      shouldRecordMutationAudit("deploy_and_test_workflow", {
+        success: false,
+        results: { activation: { success: false } },
+      }),
+    ).toBe(true);
+    expect(
+      shouldRecordMutationAudit("deploy_and_test_workflow", {
+        success: true,
+        results: { activation: { success: true }, test: { success: true } },
+      }),
+    ).toBe(true);
+    expect(shouldRecordMutationAudit("update_partial_workflow", { success: false })).toBe(false);
+  });
+});
+
 // --- Part 2: dispatchTool audit hook + read/rollback routing ----------------
 
 const mocks = vi.hoisted(() => ({
@@ -45,6 +66,24 @@ const mocks = vi.hoisted(() => ({
     connections: {},
   })),
   safeFetchPublicUrl: vi.fn(),
+  loadTrustedWorkflowPreview: vi.fn(async () => ({
+    id: "preview-1",
+    user_id: "u1",
+    tool_name: "preview_workflow_diff",
+    status: "ok",
+    created_at: new Date().toISOString(),
+    workflow_id: "wf-1",
+    metadata: {
+      workflowId: "wf-1",
+      operations: [
+        {
+          type: "updateNode",
+          nodeId: "manual",
+          changes: { parameters: { note: "reviewed" } },
+        },
+      ],
+    },
+  })),
   confirmationTokens: new Map<string, string>(),
 }));
 
@@ -118,6 +157,11 @@ vi.mock("../audit.server", () => ({
 
 vi.mock("../ssrf-guard.server", () => ({
   safeFetchPublicUrl: mocks.safeFetchPublicUrl,
+}));
+
+vi.mock("../workflow-agent/trusted-preview.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../workflow-agent/trusted-preview.server")>()),
+  loadTrustedWorkflowPreview: mocks.loadTrustedWorkflowPreview,
 }));
 
 const inst = { id: "inst-1", name: "n8n", base_url: "https://n8n.example.com", api_key: "k" };
@@ -196,6 +240,7 @@ describe("dispatchTool audit hook", () => {
     const args = {
       workflowId: "wf-1",
       operations,
+      sourcePreviewCallId: "preview-1",
       policy: { environment: "production" },
       template: { id: "tpl-1", name: "Invoice enrichment", confidence: 0.9 },
     };

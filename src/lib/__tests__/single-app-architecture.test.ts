@@ -66,4 +66,11 @@ describe("single application architecture", () => {
     expect(guide).toContain("npm ci");
     expect(guide).not.toMatch(/Turborepo|pnpm|apps\/api|apps\/dashboard|packages\/types/);
   });
+
+  it("keeps reproducible workspace state out of root linting", () => {
+    const eslintConfig = readFileSync(resolve(root, "eslint.config.js"), "utf8");
+    for (const path of [".superpowers/sdd/**", ".tmp/**", ".worktrees/**", "test-results/**"]) {
+      expect(eslintConfig, path).toContain(path);
+    }
+  });
 });

@@ -15,6 +15,36 @@ afterEach(async () => {
 });
 
 describe("parseNodePackage", () => {
+  it("dispatches official GitHub packages to static source parsing", async () => {
+    const root = await temporaryDirectory();
+    await mkdir(join(root, "nodes", "HttpRequest"), { recursive: true });
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "n8n-nodes-base",
+        n8n: { nodes: ["dist/nodes/HttpRequest/HttpRequest.node.js"] },
+      }),
+    );
+    await writeFile(
+      join(root, "nodes", "HttpRequest", "HttpRequest.node.ts"),
+      `throw new Error('must never execute');
+       export class HttpRequest {
+         description = { displayName: 'HTTP Request', name: 'httpRequest', group: ['output'], version: 1 };
+       }`,
+    );
+
+    const result = await parseNodePackage({
+      name: "n8n-nodes-base",
+      version: "github:test",
+      dir: root,
+      source: "official-github",
+    });
+
+    expect(result.expectedNodeCount).toBe(1);
+    expect(result.failures).toEqual([]);
+    expect(result.nodes.map((node) => node.node_type)).toEqual(["httpRequest"]);
+  });
+
   it("parses complete official metadata without executing node JavaScript", async () => {
     const root = await temporaryDirectory();
     await writeOfficialFixture(root);

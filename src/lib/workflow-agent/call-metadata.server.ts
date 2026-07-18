@@ -36,6 +36,21 @@ const WORKFLOW_ARGUMENT_TOOLS = new Set([
 
 export type WorkflowAgentCallMetadata = Record<string, Json>;
 
+export function toolBusinessOutcome(output: unknown): {
+  success: boolean | null;
+  errorMessage?: string;
+} {
+  const result = asRecord(output);
+  if (result.success === false) {
+    return {
+      success: false,
+      errorMessage: stringValue(result.message) ?? "Tool reported a business failure",
+    };
+  }
+  if (result.success === true) return { success: true };
+  return { success: null };
+}
+
 export function buildWorkflowAgentCallMetadata(
   name: string,
   args: Record<string, unknown>,
@@ -70,13 +85,36 @@ export function buildWorkflowAgentCallMetadata(
     metadata = {
       workflowId: stringValue(result.workflow_id ?? result.workflowId),
       auditLogId: stringValue(args.auditLogId),
-      success: result.success === true,
+      businessSuccess: result.success === true,
     };
-  } else if (name === "deploy_and_test_workflow" || name === "fix_workflow_errors") {
+  } else if (name === "fix_workflow_errors") {
     metadata = {
       workflowId: stringValue(args.workflowId ?? result.workflowId ?? result.workflow_id),
-      success: result.success === true,
+      businessSuccess: result.success === true,
+      mutationApplied: false,
+      operations: Array.isArray(result.operations) ? result.operations : [],
+      recommendations: Array.isArray(result.recommendations) ? result.recommendations : [],
       validation: result.validation,
+      nextAction: stringValue(result.nextAction),
+    };
+  } else if (name === "deploy_and_test_workflow") {
+    const results = asRecord(result.results);
+    const test = asRecord(results.test);
+    const activation = asRecord(results.activation);
+    metadata = {
+      workflowId: stringValue(args.workflowId ?? result.workflowId ?? result.workflow_id),
+      workflowFingerprint: stringValue(result.workflowFingerprint),
+      businessSuccess: result.success === true,
+      mutationApplied: activation.success === true,
+      validation: result.validation ?? results.validation,
+      smokeTest: {
+        success: test.success === true,
+        error: stringValue(test.error),
+      },
+      activation: {
+        success: activation.success === true,
+        error: stringValue(activation.error),
+      },
     };
   } else {
     return {};
@@ -87,7 +125,12 @@ export function buildWorkflowAgentCallMetadata(
 }
 
 export function deriveAgentPlan(
-  events: Array<{ tool_name: string | null; status: string; created_at: string }>,
+  events: Array<{
+    tool_name: string | null;
+    status: string;
+    created_at: string;
+    metadata?: unknown;
+  }>,
 ): Array<{ tool: string; status: "complete" | "blocked" | "pending" }> {
   return [...events]
     .filter((event): event is typeof event & { tool_name: string } =>
@@ -97,11 +140,13 @@ export function deriveAgentPlan(
     .map((event) => ({
       tool: event.tool_name,
       status:
-        event.status === "ok"
-          ? "complete"
-          : event.status === "error" || event.status === "rate_limited"
-            ? "blocked"
-            : "pending",
+        asRecord(event.metadata).businessSuccess === false
+          ? "blocked"
+          : event.status === "ok"
+            ? "complete"
+            : event.status === "error" || event.status === "rate_limited"
+              ? "blocked"
+              : "pending",
     }));
 }
 

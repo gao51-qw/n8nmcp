@@ -73,6 +73,7 @@ describe("dashboard workflow agent actions", () => {
         expectedVersionId: "v1",
         expectedFingerprint: "fingerprint-1",
         sourcePreviewCallId: "preview-1",
+        sourcePreviewOperationIndexes: [1],
       }),
       expect.objectContaining({ id: "instance-1" }),
       expect.objectContaining({ user_id: "user-1", confirmationVerified: true }),

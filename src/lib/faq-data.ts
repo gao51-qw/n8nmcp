@@ -3,12 +3,7 @@
 // Tags stay as English slugs — they're treated as universal keywords.
 
 export type FaqCategoryKey =
-  | "general"
-  | "clients"
-  | "security"
-  | "pricing"
-  | "selfHosting"
-  | "openSource";
+  "general" | "clients" | "security" | "pricing" | "selfHosting" | "openSource";
 
 export const FAQ_CATEGORY_KEYS: FaqCategoryKey[] = [
   "general",
@@ -26,12 +21,16 @@ export type FaqMeta = {
 };
 
 export const FAQ_META: FaqMeta[] = [
-  { id: "vs-mcp-node",      category: "general",     tags: ["gateway", "n8n", "mcp"] },
-  { id: "supported-clients", category: "clients",     tags: ["claude", "chatgpt", "cursor", "vscode"] },
-  { id: "api-key-safety",    category: "security",    tags: ["encryption", "api-key", "aes-256"] },
-  { id: "paid-plan-needed",  category: "pricing",     tags: ["free", "quota"] },
-  { id: "private-network",   category: "selfHosting", tags: ["tunnel", "cloudflare", "tailscale", "private-network"] },
-  { id: "source-available",  category: "openSource",  tags: ["oss", "license", "spec"] },
+  { id: "vs-mcp-node", category: "general", tags: ["gateway", "n8n", "mcp"] },
+  { id: "supported-clients", category: "clients", tags: ["claude", "chatgpt", "cursor", "vscode"] },
+  { id: "api-key-safety", category: "security", tags: ["encryption", "api-key", "aes-256"] },
+  { id: "paid-plan-needed", category: "pricing", tags: ["free", "quota"] },
+  {
+    id: "private-network",
+    category: "selfHosting",
+    tags: ["tunnel", "cloudflare", "tailscale", "private-network"],
+  },
+  { id: "source-available", category: "openSource", tags: ["oss", "license", "spec"] },
 ];
 
 export type LocalizedFaqItem = FaqMeta & {

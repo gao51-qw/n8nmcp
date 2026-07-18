@@ -15,6 +15,12 @@ function pickInt(row: unknown): number {
   return Number((row as { c?: number } | undefined)?.c ?? 0);
 }
 
+function tableExists(db: Database.Database, tableName: string): boolean {
+  return !!db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+}
+
 function safeCount(db: Database.Database, sql: string): number {
   try {
     return pickInt(db.prepare(sql).get());
@@ -64,6 +70,45 @@ async function main() {
     categoryRows.map((row) => [row.category, Number(row.count)]),
   );
 
+  const hasExternalCandidates = tableExists(db, "external_node_candidates");
+  const externalCandidateNodes = hasExternalCandidates
+    ? safeCount(db, "SELECT COUNT(*) c FROM external_node_candidates")
+    : 0;
+  const externalCommunityCandidates = hasExternalCandidates
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM external_node_candidates WHERE candidate_kind = 'community'",
+      )
+    : 0;
+  const externalVerifiedCommunityCandidates = hasExternalCandidates
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM external_node_candidates WHERE candidate_kind = 'community' AND is_verified = 1",
+      )
+    : 0;
+  const externalToolVariantCandidates = hasExternalCandidates
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM external_node_candidates WHERE candidate_kind = 'tool_variant'",
+      )
+    : 0;
+  const hasVerifiedExternalNodes = tableExists(db, "verified_external_nodes");
+  const verifiedExternalNodes = hasVerifiedExternalNodes
+    ? safeCount(db, "SELECT COUNT(*) c FROM verified_external_nodes")
+    : 0;
+  const verifiedExternalCommunityNodes = hasVerifiedExternalNodes
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM verified_external_nodes WHERE candidate_kind = 'community'",
+      )
+    : 0;
+  const verifiedExternalToolVariantNodes = hasVerifiedExternalNodes
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM verified_external_nodes WHERE candidate_kind = 'tool_variant'",
+      )
+    : 0;
+
   db.close();
 
   const stats = {
@@ -75,6 +120,13 @@ async function main() {
     triggers,
     templates,
     categories,
+    externalCandidateNodes,
+    externalCommunityCandidates,
+    externalVerifiedCommunityCandidates,
+    externalToolVariantCandidates,
+    verifiedExternalNodes,
+    verifiedExternalCommunityNodes,
+    verifiedExternalToolVariantNodes,
     generatedAt: new Date().toISOString(),
   };
 
@@ -85,7 +137,7 @@ async function main() {
   await writeFile(REPO_OUT, json);
 
   console.log(
-    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools} templates=${templates}`,
+    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools} templates=${templates} external=${externalCandidateNodes} verifiedExternal=${verifiedExternalNodes}`,
   );
   console.log(`[stats] wrote ${LOCAL_OUT}`);
   console.log(`[stats] wrote ${REPO_OUT}`);

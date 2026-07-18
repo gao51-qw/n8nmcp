@@ -58,6 +58,47 @@ describe("mcp route elicitation transport", () => {
   });
 
   describe("capability parsing and session handling", () => {
+    it("records structured business failures as failed tool calls", async () => {
+      mcpServerMocks.dispatchTool.mockResolvedValue({
+        output: {
+          success: false,
+          message: "Validation failed",
+          results: { validation: { passed: false, errors: ["Missing URL"] } },
+        },
+        upstream: false,
+        category: "local",
+        needsInstance: false,
+      });
+
+      const response = await mcpPost(
+        new Request("https://example.com/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "business-failure",
+            method: "tools/call",
+            params: {
+              name: "deploy_and_test_workflow",
+              arguments: { workflowId: "wf-1", testData: { id: 1 } },
+            },
+          }),
+        }),
+      );
+      const payload = await response.json();
+
+      expect(mcpServerMocks.recordCall).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: "error",
+          error_message: "Validation failed",
+          metadata: expect.objectContaining({ businessSuccess: false }),
+        }),
+      );
+      expect(payload).toMatchObject({
+        result: expect.objectContaining({ isError: true }),
+      });
+    });
+
     it("returns a structured elicitation required error when confirm is not provided", async () => {
       mcpServerMocks.dispatchTool.mockImplementation(async () => {
         const { ElicitationRequiredError } = await import("@/lib/mcp.server");

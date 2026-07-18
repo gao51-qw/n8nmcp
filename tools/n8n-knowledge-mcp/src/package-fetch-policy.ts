@@ -7,7 +7,7 @@ export function shouldSkipCommunityPackages(
 
 export type FetchedPackageIdentity = {
   name: string;
-  source: "official" | "community";
+  source: "official" | "official-github" | "community";
 };
 
 export function assertOfficialPackageCoverage(
@@ -15,7 +15,9 @@ export function assertOfficialPackageCoverage(
   fetched: readonly FetchedPackageIdentity[],
 ): void {
   const fetchedOfficial = new Set(
-    fetched.filter((item) => item.source === "official").map((item) => item.name),
+    fetched
+      .filter((item) => item.source === "official" || item.source === "official-github")
+      .map((item) => item.name),
   );
   const missing = configuredOfficial.filter((name) => !fetchedOfficial.has(name));
   if (missing.length > 0) {

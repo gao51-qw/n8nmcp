@@ -1,5 +1,4 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import type { Json, Tables } from "@/integrations/supabase/types";
 import {
   checkDailyQuota,
   checkShortWindowQuota,
@@ -13,13 +12,13 @@ import {
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
 import { createConfirmationService } from "@/lib/workflow-agent/confirmation.server";
+import {
+  assertTrustedWorkflowPreview,
+  loadTrustedWorkflowPreview,
+  type TrustedPreviewRow,
+} from "@/lib/workflow-agent/trusted-preview.server";
 
-const PREVIEW_TTL_MS = 30 * 60_000;
-
-type PreviewRow = Pick<
-  Tables<"mcp_call_logs">,
-  "id" | "user_id" | "tool_name" | "status" | "created_at" | "workflow_id" | "metadata"
->;
+type PreviewRow = TrustedPreviewRow;
 
 type N8nInstance = NonNullable<Awaited<ReturnType<typeof getDefaultInstance>>>;
 type Dispatch = typeof dispatchTool;
@@ -75,14 +74,7 @@ export class DashboardAgentActionError extends Error {
 const defaultDependencies: DashboardAgentActionDependencies = {
   now: () => new Date(),
   async loadPreview(userId, previewCallId) {
-    const { data, error } = await supabaseAdmin
-      .from("mcp_call_logs")
-      .select("id,user_id,tool_name,status,created_at,workflow_id,metadata")
-      .eq("id", previewCallId)
-      .eq("user_id", userId)
-      .maybeSingle();
-    if (error) throw new Error(`Failed to load workflow preview: ${error.message}`);
-    return data;
+    return loadTrustedWorkflowPreview(userId, previewCallId);
   },
   getInstance: getDefaultInstance,
   dispatch: dispatchTool,
@@ -125,7 +117,7 @@ export async function executeDashboardAgentAction(
 
   if (input.action === "apply") {
     const preview = await dependencies.loadPreview(userId, input.previewCallId);
-    const trusted = trustedPreview(preview, input, dependencies.now());
+    const trusted = trustedPreview(preview, userId, input, dependencies.now());
     await dependencies.confirmation.requireOrConsume({
       userId,
       action: "Apply workflow preview",
@@ -146,6 +138,7 @@ export async function executeDashboardAgentAction(
         expectedVersionId: trusted.baseVersionId,
         expectedFingerprint: trusted.baseFingerprint,
         sourcePreviewCallId: input.previewCallId,
+        sourcePreviewOperationIndexes: trusted.selectedIndexes,
         confirm: true,
       },
       context,
@@ -175,53 +168,48 @@ export async function executeDashboardAgentAction(
 
 function trustedPreview(
   preview: PreviewRow | null,
+  userId: string,
   input: Extract<DashboardAgentAction, { action: "apply" }>,
   now: Date,
 ) {
-  if (!preview || preview.tool_name !== "preview_workflow_diff" || preview.status !== "ok") {
-    throw new DashboardAgentActionError(404, "preview_not_found", "Workflow preview not found");
-  }
+  const selectedIndexes = [...input.selectedOperationIndexes];
+  const sortedIndexes = [...selectedIndexes].sort((a, b) => a - b);
+  const metadata = asRecord(preview?.metadata);
+  const workflowId = stringValue(metadata.workflowId ?? preview?.workflow_id);
 
-  const createdAt = new Date(preview.created_at).getTime();
-  const age = now.getTime() - createdAt;
-  if (!Number.isFinite(createdAt) || age < -60_000 || age > PREVIEW_TTL_MS) {
-    throw new DashboardAgentActionError(409, "stale_preview", "Workflow preview is stale");
-  }
-
-  const metadata = asRecord(preview.metadata);
-  const workflowId = stringValue(metadata.workflowId ?? preview.workflow_id);
-  if (!workflowId || (preview.workflow_id && preview.workflow_id !== workflowId)) {
+  try {
+    if (!workflowId)
+      throw new Error("Workflow preview scope does not match the requested workflow");
+    const trusted = assertTrustedWorkflowPreview({
+      preview: preview as TrustedPreviewRow | null,
+      userId,
+      workflowId,
+      operations: [],
+      operationIndexes: sortedIndexes,
+      now,
+    });
+    return { ...trusted, selectedIndexes: sortedIndexes };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Workflow preview is invalid";
+    if (message.includes("not found")) {
+      throw new DashboardAgentActionError(404, "preview_not_found", "Workflow preview not found");
+    }
+    if (message.includes("operation")) {
+      throw new DashboardAgentActionError(
+        422,
+        "invalid_operation_selection",
+        "Selected workflow operations are invalid",
+      );
+    }
+    if (message.includes("stale")) {
+      throw new DashboardAgentActionError(409, "stale_preview", "Workflow preview is stale");
+    }
     throw new DashboardAgentActionError(
       409,
       "preview_mismatch",
       "Workflow preview scope is invalid",
     );
   }
-
-  const allOperations = Array.isArray(metadata.operations) ? metadata.operations : [];
-  const selectedIndexes = [...input.selectedOperationIndexes];
-  if (
-    selectedIndexes.length === 0 ||
-    new Set(selectedIndexes).size !== selectedIndexes.length ||
-    selectedIndexes.some(
-      (index) => !Number.isInteger(index) || index < 0 || index >= allOperations.length,
-    )
-  ) {
-    throw new DashboardAgentActionError(
-      422,
-      "invalid_operation_selection",
-      "Selected workflow operations are invalid",
-    );
-  }
-
-  const sortedIndexes = [...selectedIndexes].sort((a, b) => a - b);
-  return {
-    workflowId,
-    selectedIndexes: sortedIndexes,
-    operations: sortedIndexes.map((index) => allOperations[index]),
-    baseVersionId: stringValue(metadata.baseVersionId) ?? undefined,
-    baseFingerprint: stringValue(metadata.baseFingerprint) ?? undefined,
-  };
 }
 
 async function dispatchAndRecord(
@@ -279,7 +267,7 @@ async function dispatchAndRecord(
   }
 }
 
-function asRecord(value: Json | null): Record<string, unknown> {
+function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : {};

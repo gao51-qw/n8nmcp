@@ -1,28 +1,62 @@
-# VPS docker-compose — main app + n8n-knowledge-mcp behind host nginx.
-# Place this file (and .env) on the VPS, e.g. /opt/n8nworkflow/.
-# Pull-and-restart:
-#   docker compose pull && docker compose up -d
-#
-# Required env (in /opt/n8nworkflow/.env):
-#   GHCR_OWNER=your-github-username-or-org
-#   APP_IMAGE_TAG=latest
-#   MCP_IMAGE_TAG=latest
-#   MCP_AUTH_TOKEN=<openssl rand -hex 32>
-# Plus a separate .env.app file with all backend secrets used by the main app.
+# VPS production stack: Caddy terminates HTTPS and proxies to the app and MCP containers.
+# Place docker-compose.yml, Caddyfile, .env, and .env.app together on the VPS
+# (for example /opt/n8nworkflow), then run:
+#   docker compose pull
+#   docker compose up -d
 
 services:
+  caddy:
+    image: caddy:2.8-alpine
+    container_name: n8nworkflow-caddy
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+      mcp:
+        condition: service_started
+    environment:
+      MCP_DOMAIN: ${MCP_DOMAIN:-mcp.n8nworkflow.com}
+      DOCS_DOMAIN: ${DOCS_DOMAIN:-docs.n8nworkflow.com}
+      BLOG_DOMAIN: ${BLOG_DOMAIN:-blog.n8nworkflow.com}
+      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:-dashboard.n8nworkflow.com}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
   app:
     image: ghcr.io/${GHCR_OWNER}/n8nworkflow-app:${APP_IMAGE_TAG:-latest}
     container_name: n8nworkflow-app
     restart: unless-stopped
+    depends_on:
+      mcp:
+        condition: service_healthy
     env_file:
       - .env.app
     environment:
       NODE_ENV: production
       PORT: "3001"
-      HOST: "0.0.0.0"
-    ports:
-      - "127.0.0.1:3001:3001"
+      HOSTNAME: "0.0.0.0"
+      UPSTREAM_N8N_MCP_URL: http://mcp:3000/mcp
+      UPSTREAM_N8N_MCP_TOKEN: ${MCP_AUTH_TOKEN:?required}
+    expose:
+      - "3001"
+    # Container hardening: no privilege escalation, drop all Linux capabilities
+    # (the Node server needs none). The image already runs as the non-root `node`
+    # user. Keeps an app-level RCE from trivially escalating.
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/"]
       interval: 30s
@@ -34,23 +68,21 @@ services:
     container_name: n8n-knowledge-mcp
     restart: unless-stopped
     environment:
-      AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+      AUTH_TOKEN: ${MCP_AUTH_TOKEN:?required}
       PORT: "3000"
       TRUST_PROXY: "1"
-    ports:
-      - "127.0.0.1:3000:3000"
+    expose:
+      - "3000"
+    security_opt:
+      - "no-new-privileges:true"
+    cap_drop:
+      - ALL
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 60s
       timeout: 5s
       retries: 3
 
-  # Optional: auto-pull updated images every 5 min.
-  watchtower:
-    image: containrrr/watchtower:latest
-    container_name: watchtower
-    restart: unless-stopped
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - ${HOME}/.docker/config.json:/config.json:ro
-    command: --cleanup --interval 300 n8nworkflow-app n8n-knowledge-mcp
+volumes:
+  caddy_data:
+  caddy_config:

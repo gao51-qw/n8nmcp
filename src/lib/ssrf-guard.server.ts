@@ -24,25 +24,25 @@ function isPrivateIPv4(ip: string): boolean {
   const n = ipv4ToInt(ip);
   if (n === null) return false;
   // 0.0.0.0/8
-  if ((n >>> 24) === 0) return true;
+  if (n >>> 24 === 0) return true;
   // 10.0.0.0/8
-  if ((n >>> 24) === 10) return true;
+  if (n >>> 24 === 10) return true;
   // 127.0.0.0/8
-  if ((n >>> 24) === 127) return true;
+  if (n >>> 24 === 127) return true;
   // 169.254.0.0/16 (link-local incl. cloud metadata)
-  if ((n >>> 16) === ((169 << 8) | 254)) return true;
+  if (n >>> 16 === ((169 << 8) | 254)) return true;
   // 172.16.0.0/12
-  if ((n >>> 24) === 172 && ((n >>> 20) & 0xf) >= 1 && ((n >>> 20) & 0xf) <= 1) {
+  if (n >>> 24 === 172 && ((n >>> 20) & 0xf) >= 1 && ((n >>> 20) & 0xf) <= 1) {
     // 172.16-31
   }
-  if ((n >>> 24) === 172) {
+  if (n >>> 24 === 172) {
     const second = (n >>> 16) & 0xff;
     if (second >= 16 && second <= 31) return true;
   }
   // 192.168.0.0/16
-  if ((n >>> 16) === ((192 << 8) | 168)) return true;
+  if (n >>> 16 === ((192 << 8) | 168)) return true;
   // 100.64.0.0/10 (CGNAT)
-  if ((n >>> 24) === 100 && ((n >>> 16) & 0xff) >= 64 && ((n >>> 16) & 0xff) <= 127) return true;
+  if (n >>> 24 === 100 && ((n >>> 16) & 0xff) >= 64 && ((n >>> 16) & 0xff) <= 127) return true;
   return false;
 }
 
@@ -59,6 +59,9 @@ function isPrivateIPv6(ip: string): boolean {
 }
 
 export type DohAnswer = { name: string; type: number; data: string };
+export type PublicFetchInit = RequestInit & {
+  headers?: HeadersInit;
+};
 
 async function dohResolve(hostname: string): Promise<string[]> {
   const out: string[] = [];
@@ -123,4 +126,22 @@ export async function assertPublicUrl(rawUrl: string): Promise<void> {
       if (isPrivateIPv4(ip)) throw new Error("Target resolves to a private/internal address");
     }
   }
+}
+
+export async function safeFetchPublicUrl(
+  rawUrl: string,
+  init?: PublicFetchInit,
+): Promise<Response> {
+  await assertPublicUrl(rawUrl);
+
+  const res = await fetch(rawUrl, {
+    ...init,
+    redirect: "manual",
+  });
+
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error("Redirects are not allowed for protected outbound requests");
+  }
+
+  return res;
 }

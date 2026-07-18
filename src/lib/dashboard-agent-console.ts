@@ -306,13 +306,14 @@ function mapToolCall(row: McpCallLogRow): ToolCallEvent {
     id: row.id,
     label: TOOL_LABELS[tool] ?? humanizeToolName(tool),
     tool,
-    status: mapToolStatus(row.status),
+    status: mapToolStatus(row.status, row.metadata),
     durationMs: row.latency_ms ?? 0,
     timestamp: formatTime(row.created_at),
   };
 }
 
-function mapToolStatus(status: string): ToolCallStatus {
+function mapToolStatus(status: string, metadata?: unknown): ToolCallStatus {
+  if (asRecord(metadata).businessSuccess === false) return "blocked";
   if (status === "ok") return "complete";
   if (status === "rate_limited" || status === "error") return "blocked";
   return "pending";
@@ -486,8 +487,12 @@ function summarizeDeployment(
   calls: McpCallLogRow[],
 ): WorkflowAgentConsoleData["deployment"] {
   const audit = rows.find((row) => row.tool_name === "deploy_and_test_workflow");
+  const call = calls.find((row) => row.tool_name === "deploy_and_test_workflow");
   const params = asRecord(audit?.tool_params);
-  const results = asRecord(params.results);
+  const callMetadata = asRecord(call?.metadata);
+  const auditResults = asRecord(params.results);
+  const results =
+    Object.keys(auditResults).length > 0 ? auditResults : asRecord(callMetadata.results);
   const validation = asRecord(results.validation);
   const test = asRecord(results.test);
 
@@ -512,12 +517,15 @@ function summarizeDeployment(
     };
   }
 
-  const call = calls.find((row) => row.tool_name === "deploy_and_test_workflow");
   if (call?.status === "error") {
     return {
       status: "failed",
       summary: call.error_message ?? "Deploy/test failed.",
     };
+  }
+
+  if (callMetadata.businessSuccess === false) {
+    return { status: "failed", summary: "Deploy/test reported a business failure." };
   }
 
   return { status: "not-run", summary: "No deploy or test run recorded yet." };

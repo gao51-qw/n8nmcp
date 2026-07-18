@@ -83,6 +83,69 @@ describe("workflow agent call metadata", () => {
     expect(metadata).toEqual({ _truncated: true });
   });
 
+  it("projects repair operations and recommendations without copying raw execution bodies", () => {
+    const metadata = buildWorkflowAgentCallMetadata(
+      "fix_workflow_errors",
+      { workflowId: "wf-1", rawExecution: { authorization: "Bearer secret" } },
+      {
+        success: true,
+        operations: [
+          {
+            type: "updateNode",
+            nodeId: "HTTP",
+            changes: { parameters: { options: { timeout: 30000 } } },
+          },
+        ],
+        recommendations: [{ category: "credentials", message: "Check credential reference" }],
+        validation: { ok: true, errors: [], warnings: [] },
+        nextAction: "preview_workflow_diff",
+        upstreamBody: { cookie: "secret-cookie" },
+      },
+    );
+
+    expect(metadata).toMatchObject({
+      workflowId: "wf-1",
+      businessSuccess: true,
+      mutationApplied: false,
+      operations: [{ type: "updateNode", nodeId: "HTTP" }],
+      recommendations: [{ category: "credentials" }],
+      validation: { ok: true },
+      nextAction: "preview_workflow_diff",
+    });
+    expect(JSON.stringify(metadata)).not.toContain("rawExecution");
+    expect(JSON.stringify(metadata)).not.toContain("upstreamBody");
+    expect(JSON.stringify(metadata)).not.toContain("secret-cookie");
+  });
+
+  it("records deployment fingerprint and authoritative smoke-test outcome", () => {
+    const metadata = buildWorkflowAgentCallMetadata(
+      "deploy_and_test_workflow",
+      { workflowId: "wf-1", testData: { password: "must-not-log" } },
+      {
+        success: true,
+        workflowFingerprint: "f".repeat(64),
+        results: {
+          validation: { passed: true, errors: [], warnings: [] },
+          test: { success: true, output: { authorization: "secret" } },
+          activation: { success: true, error: null },
+        },
+      },
+    );
+
+    expect(metadata).toMatchObject({
+      workflowId: "wf-1",
+      workflowFingerprint: "f".repeat(64),
+      businessSuccess: true,
+      mutationApplied: true,
+      validation: { passed: true },
+      smokeTest: { success: true },
+      activation: { success: true },
+    });
+    expect(JSON.stringify(metadata)).not.toContain("must-not-log");
+    expect(JSON.stringify(metadata)).not.toContain("authorization");
+    expect(JSON.stringify(metadata)).not.toContain("secret");
+  });
+
   it("derives an ordered plan from actual agent tool calls", () => {
     const plan = deriveAgentPlan([
       { tool_name: "preview_workflow_diff", status: "ok", created_at: "2026-07-10T00:00:02Z" },

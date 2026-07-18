@@ -36,7 +36,10 @@ export function CacheSection() {
           <span className="text-sm font-medium">{c.privacyLabel}</span>
           <div className="flex flex-wrap items-center justify-center gap-2">
             {c.badges.map((b) => (
-              <span key={b} className="rounded-full border border-border bg-background/60 px-3 py-1 text-xs text-muted-foreground">
+              <span
+                key={b}
+                className="rounded-full border border-border bg-background/60 px-3 py-1 text-xs text-muted-foreground"
+              >
                 {b}
               </span>
             ))}

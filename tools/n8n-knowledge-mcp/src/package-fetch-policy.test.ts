@@ -37,4 +37,16 @@ describe("package fetch policy", () => {
       ),
     ).not.toThrow();
   });
+
+  it("counts official GitHub checkouts as configured official coverage", () => {
+    expect(() =>
+      assertOfficialPackageCoverage(
+        ["n8n-nodes-base", "@n8n/n8n-nodes-langchain"],
+        [
+          { name: "n8n-nodes-base", source: "official-github" },
+          { name: "@n8n/n8n-nodes-langchain", source: "official-github" },
+        ],
+      ),
+    ).not.toThrow();
+  });
 });

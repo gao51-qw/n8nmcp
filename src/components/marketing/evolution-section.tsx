@@ -14,7 +14,10 @@ export function EvolutionSection() {
 
       <div className="mt-12 space-y-6">
         {e.pairs.map((p) => (
-          <div key={p.pain.title} className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch md:gap-6">
+          <div
+            key={p.pain.title}
+            className="grid gap-4 md:grid-cols-[1fr_auto_1fr] md:items-stretch md:gap-6"
+          >
             <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
               <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-destructive">
                 <X className="h-3.5 w-3.5" /> {e.withoutLabel}
@@ -25,7 +28,10 @@ export function EvolutionSection() {
             <div className="hidden items-center justify-center md:flex">
               <ArrowRight className="h-5 w-5 text-muted-foreground" />
             </div>
-            <div className="rounded-xl border border-primary/40 bg-card p-6" style={{ boxShadow: "var(--shadow-glow)" }}>
+            <div
+              className="rounded-xl border border-primary/40 bg-card p-6"
+              style={{ boxShadow: "var(--shadow-glow)" }}
+            >
               <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-primary">
                 <Check className="h-3.5 w-3.5" /> {e.withLabel}
               </div>

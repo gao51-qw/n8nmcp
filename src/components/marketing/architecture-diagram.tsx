@@ -1,12 +1,40 @@
-import { Bot, Server, Cloud, Network, Lock, ArrowRight, ShieldCheck, ShieldAlert, Database } from "lucide-react";
+import {
+  Bot,
+  Server,
+  Cloud,
+  Network,
+  Lock,
+  ArrowRight,
+  ShieldCheck,
+  ShieldAlert,
+  Database,
+} from "lucide-react";
 import { useT } from "@/i18n/context";
 
-function Node({ icon: Icon, title, subtitle, highlight }: { icon: typeof Bot; title: string; subtitle?: string; highlight?: boolean; }) {
+function Node({
+  icon: Icon,
+  title,
+  subtitle,
+  highlight,
+}: {
+  icon: typeof Bot;
+  title: string;
+  subtitle?: string;
+  highlight?: boolean;
+}) {
   return (
-    <div className={`flex w-full flex-col items-center gap-2 rounded-xl border p-4 text-center ${highlight ? "border-primary bg-card" : "border-border bg-card/50"}`}
-      style={highlight ? { boxShadow: "var(--shadow-glow)" } : undefined}>
-      <span className={`grid h-9 w-9 place-items-center rounded-lg ${highlight ? "text-primary-foreground" : "text-primary"}`}
-        style={highlight ? { background: "var(--gradient-primary)" } : { background: "color-mix(in oklab, var(--primary) 12%, transparent)" }}>
+    <div
+      className={`flex w-full flex-col items-center gap-2 rounded-xl border p-4 text-center ${highlight ? "border-primary bg-card" : "border-border bg-card/50"}`}
+      style={highlight ? { boxShadow: "var(--shadow-glow)" } : undefined}
+    >
+      <span
+        className={`grid h-9 w-9 place-items-center rounded-lg ${highlight ? "text-primary-foreground" : "text-primary"}`}
+        style={
+          highlight
+            ? { background: "var(--gradient-primary)" }
+            : { background: "color-mix(in oklab, var(--primary) 12%, transparent)" }
+        }
+      >
         <Icon className="h-4 w-4" />
       </span>
       <div className="text-sm font-semibold leading-tight">{title}</div>
@@ -49,7 +77,9 @@ export function ArchitectureDiagram() {
         </div>
 
         <div className="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[11px] uppercase tracking-wider text-muted-foreground/70">
-          <span className="flex items-center gap-1.5"><Lock className="h-3 w-3" /> {a.badges.ssrf}</span>
+          <span className="flex items-center gap-1.5">
+            <Lock className="h-3 w-3" /> {a.badges.ssrf}
+          </span>
           <span className="hidden text-muted-foreground/30 md:inline">·</span>
           <span>{a.badges.aes}</span>
           <span className="hidden text-muted-foreground/30 md:inline">·</span>
@@ -79,24 +109,34 @@ function SecurityDataFlow() {
         {s.pillars.map((p, i) => {
           const Icon = PILLAR_ICONS[i];
           return (
-            <div key={p.title} className="flex flex-col rounded-2xl border border-border bg-card/50 p-6">
+            <div
+              key={p.title}
+              className="flex flex-col rounded-2xl border border-border bg-card/50 p-6"
+            >
               <div className="flex items-center gap-3">
-                <span className="grid h-9 w-9 place-items-center rounded-lg text-primary"
-                  style={{ background: "color-mix(in oklab, var(--primary) 12%, transparent)" }}>
+                <span
+                  className="grid h-9 w-9 place-items-center rounded-lg text-primary"
+                  style={{ background: "color-mix(in oklab, var(--primary) 12%, transparent)" }}
+                >
                   <Icon className="h-4 w-4" />
                 </span>
                 <div className="text-sm font-semibold">{p.title}</div>
               </div>
-              <div className="mt-3 text-[11px] uppercase tracking-wider text-muted-foreground/70">{p.scope}</div>
+              <div className="mt-3 text-[11px] uppercase tracking-wider text-muted-foreground/70">
+                {p.scope}
+              </div>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                 {p.bullets.map((b) => (
                   <li key={b} className="flex items-start gap-2">
-                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" /><span>{b}</span>
+                    <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                    <span>{b}</span>
                   </li>
                 ))}
               </ul>
-              <div className="mt-4 rounded-lg border border-border/60 p-3 text-xs text-foreground/80"
-                style={{ background: "color-mix(in oklab, var(--primary) 4%, transparent)" }}>
+              <div
+                className="mt-4 rounded-lg border border-border/60 p-3 text-xs text-foreground/80"
+                style={{ background: "color-mix(in oklab, var(--primary) 4%, transparent)" }}
+              >
                 {p.boundary}
               </div>
             </div>

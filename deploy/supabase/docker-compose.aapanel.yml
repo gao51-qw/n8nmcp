@@ -1,0 +1,18 @@
+services:
+  kong:
+    ports: !override
+      - "127.0.0.1:${KONG_HTTP_PORT:-8100}:8000/tcp"
+      - "127.0.0.1:${KONG_HTTPS_PORT:-8143}:8443/tcp"
+    networks:
+      - default
+      - backend
+
+  supavisor:
+    ports: !override
+      - "127.0.0.1:${POSTGRES_PORT:-55432}:5432/tcp"
+      - "127.0.0.1:${POOLER_PROXY_PORT_TRANSACTION:-56543}:6543/tcp"
+
+networks:
+  backend:
+    external: true
+    name: n8nmcp-backend

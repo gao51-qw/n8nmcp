@@ -22,7 +22,7 @@ const REQUIRED_FOCUSABLE = [
   "select",
   "textarea",
   "summary",
-  'label[for]',
+  "label[for]",
   '[role="button"]',
   '[role="link"]',
   '[role="tab"]',
@@ -41,7 +41,7 @@ const REQUIRED_SUPPRESSED = [
   '[aria-busy="true"]',
   '[data-loading="true"]',
   '[data-state="loading"]',
-  '[data-pending]',
+  "[data-pending]",
 ];
 
 let css = "";
@@ -124,9 +124,7 @@ describe("focus-visible behaviour in jsdom", () => {
     // explicitly call .focus() — modern jsdom supports the pseudo-class).
     const style = document.createElement("style");
     // Strip @layer wrappers for jsdom compatibility, keep raw rules.
-    style.textContent = css
-      .replace(/@layer\s+\w+\s*\{/g, "")
-      .replace(/@apply[^;]+;/g, "");
+    style.textContent = css.replace(/@layer\s+\w+\s*\{/g, "").replace(/@apply[^;]+;/g, "");
     // Naive trailing-brace trim: append enough closers to balance.
     document.head.appendChild(style);
   });

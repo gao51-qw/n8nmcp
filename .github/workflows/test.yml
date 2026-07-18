@@ -19,39 +19,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
         with:
-          bun-version: latest
-
-      - name: Cache bun dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.bun/install/cache
-            node_modules
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lockb', 'bun.lock', 'package.json') }}
-          restore-keys: |
-            ${{ runner.os }}-bun-
+          node-version: 22
+          cache: npm
 
       - name: Cache vitest
         uses: actions/cache@v4
         with:
           path: |
             node_modules/.vitest
-            node_modules/.vite
-          key: ${{ runner.os }}-vitest-${{ hashFiles('vitest.config.ts', 'vite.config.ts', 'bun.lockb', 'bun.lock') }}
+          key: ${{ runner.os }}-vitest-${{ hashFiles('vitest.config.ts', 'package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-vitest-
 
       - name: Install dependencies
-        run: bun install --frozen-lockfile
+        run: npm ci
 
       - name: Run unit tests
-        run: bun run test
+        run: npm test
 
       - name: Run docs head i18n integrity tests
         run: |
-          bunx vitest run src/i18n/__tests__/docs-head.test.ts \
+          npx vitest run src/i18n/__tests__/docs-head.test.ts \
             --reporter=verbose \
             --reporter=junit \
             --outputFile.junit=reports/docs-head-junit.xml \

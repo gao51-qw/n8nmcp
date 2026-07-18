@@ -8,12 +8,18 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+n8n-mcp-main
+.next
+next-env.d.ts
 dist
 dist-ssr
 .output
 .vinxi
 .tanstack/**
 .nitro
+.env
+.env.*
+!.env.example
 *.local
 
 # Wrangler / Cloudflare

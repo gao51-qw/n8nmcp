@@ -22,6 +22,12 @@ describe("knowledge MCP health endpoint", () => {
         triggers: 1,
         webhooks: 1,
         templates: 12,
+        external_candidates: 3,
+        external_community_candidates: 2,
+        external_tool_variant_candidates: 1,
+        verified_external_nodes: 1,
+        verified_external_community_nodes: 1,
+        verified_external_tool_variant_nodes: 0,
       }),
       buildServer: () => {
         throw new Error("MCP server should not be constructed for /health");
@@ -39,6 +45,7 @@ describe("knowledge MCP health endpoint", () => {
     expect(anonymousBody).not.toHaveProperty("triggers");
     expect(anonymousBody).not.toHaveProperty("webhooks");
     expect(anonymousBody).not.toHaveProperty("templates");
+    expect(anonymousBody).not.toHaveProperty("external_candidates");
 
     const authenticatedResponse = await fetch(`${baseUrl}/health`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -53,6 +60,7 @@ describe("knowledge MCP health endpoint", () => {
       triggers: 1,
       webhooks: 1,
       templates: 12,
+      external_candidates: 3,
       version: "0.1.0",
     });
   });

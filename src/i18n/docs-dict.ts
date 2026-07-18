@@ -6,16 +6,8 @@ import es from "./locales/docs/es";
 import de from "./locales/docs/de";
 import type { Locale } from "./config";
 import { LOCALES } from "./config";
-import {
-  OG_LOCALE,
-  buildAlternateLinks,
-  localizedUrl,
-  resolveLocale,
-} from "@/lib/seo-i18n";
-import {
-  buildBreadcrumbJsonLd,
-  buildDocsTechArticleJsonLd,
-} from "@/lib/seo-jsonld";
+import { OG_LOCALE, buildAlternateLinks, localizedUrl, resolveLocale } from "@/lib/seo-i18n";
+import { buildBreadcrumbJsonLd, buildDocsTechArticleJsonLd } from "@/lib/seo-jsonld";
 
 /** Per-route docs page metadata keys (must have title/description/h1). */
 type DocsPageKey =
@@ -55,11 +47,14 @@ export function buildDocsRouteHead(args: {
   const t = DOCS_DICTIONARIES[locale] ?? en;
   const page = t[args.pageKey];
   const { title, description } = page;
-  const url = localizedUrl(args.logicalPath, locale);
+  const url = localizedUrl(args.logicalPath, locale, "docs");
   const docsRoot = t.nav.items.overview;
   const isIndex = args.logicalPath.replace(/\/+$/, "") === "/docs";
   const breadcrumb = isIndex
-    ? [{ name: "Home", path: "/" }, { name: docsRoot, path: "/docs" }]
+    ? [
+        { name: "Home", path: "/" },
+        { name: docsRoot, path: "/docs" },
+      ]
     : [
         { name: "Home", path: "/" },
         { name: docsRoot, path: "/docs" },
@@ -82,7 +77,7 @@ export function buildDocsRouteHead(args: {
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
     ],
-    links: buildAlternateLinks(args.logicalPath, locale),
+    links: buildAlternateLinks(args.logicalPath, locale, "docs"),
     scripts: [
       {
         type: "application/ld+json",
@@ -91,11 +86,12 @@ export function buildDocsRouteHead(args: {
           description,
           path: args.logicalPath,
           inLanguage: HREFLANG_INLANGUAGE[locale],
+          surface: "docs",
         }),
       },
       {
         type: "application/ld+json",
-        children: buildBreadcrumbJsonLd(breadcrumb),
+        children: buildBreadcrumbJsonLd(breadcrumb, "docs"),
       },
     ],
   };
@@ -131,7 +127,7 @@ export function buildDocsHead(args: {
   const locale = resolveLocale(args.rawLocale);
   const t = DOCS_DICTIONARIES[locale] ?? en;
   const { title, description } = args.pick(t);
-  const url = localizedUrl(args.logicalPath, locale);
+  const url = localizedUrl(args.logicalPath, locale, "docs");
   return {
     meta: [
       { title },
@@ -148,7 +144,7 @@ export function buildDocsHead(args: {
       { name: "twitter:title", content: title },
       { name: "twitter:description", content: description },
     ],
-    links: buildAlternateLinks(args.logicalPath, locale),
+    links: buildAlternateLinks(args.logicalPath, locale, "docs"),
     ...(args.scripts ? { scripts: args.scripts } : {}),
   };
 }

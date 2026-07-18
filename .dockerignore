@@ -1,4 +1,8 @@
 node_modules
+.next
+.env
+.env.*
+!.env.example
 .output
 .tmp
 .git
@@ -8,7 +12,6 @@ tools
 **/.cache
 **/coverage
 **/*.log
-.lovable
 .vscode
 .idea
 .DS_Store

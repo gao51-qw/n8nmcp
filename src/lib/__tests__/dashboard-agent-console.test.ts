@@ -272,4 +272,35 @@ describe("buildWorkflowAgentConsoleData", () => {
     expect(data.validation).toEqual([]);
     expect(data.auditLog).toEqual([]);
   });
+
+  it("treats a structured business failure as blocked even if transport status is ok", () => {
+    const data = buildWorkflowAgentConsoleData({
+      now: new Date("2026-07-09T10:00:05.000Z"),
+      workflowId: "wf-1",
+      callLogs: [
+        {
+          id: "deploy-failed",
+          tool_name: "deploy_and_test_workflow",
+          status: "ok",
+          latency_ms: 50,
+          created_at: "2026-07-09T10:00:04.000Z",
+          workflow_id: "wf-1",
+          metadata: {
+            businessSuccess: false,
+            results: {
+              validation: { passed: false, errors: ["Missing URL"] },
+              test: { success: false, skipped: true, error: "Validation failed" },
+            },
+          },
+        },
+      ],
+      auditRows: [],
+    });
+
+    expect(data.toolCalls[0]).toMatchObject({ status: "blocked" });
+    expect(data.deployment).toMatchObject({
+      status: "blocked",
+      summary: expect.stringContaining("Missing URL"),
+    });
+  });
 });

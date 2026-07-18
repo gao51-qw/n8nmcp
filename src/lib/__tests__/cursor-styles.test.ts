@@ -36,23 +36,72 @@ const CASES: Case[] = [
   { name: "input[type=radio]", html: `<input type="radio" />`, expected: "pointer" },
   { name: "input[type=submit]", html: `<input type="submit" />`, expected: "pointer" },
   { name: "select", html: `<select><option>a</option></select>`, expected: "pointer" },
-  { name: "summary", html: `<details open><summary>x</summary></details>`, expected: "pointer", target: "summary" },
+  {
+    name: "summary",
+    html: `<details open><summary>x</summary></details>`,
+    expected: "pointer",
+    target: "summary",
+  },
   { name: "label[for]", html: `<label for="x">x</label>`, expected: "pointer" },
   { name: "[tabindex=0]", html: `<div tabindex="0">x</div>`, expected: "pointer" },
 
   // Disabled / aria-disabled — should get not-allowed
-  { name: "button:disabled", html: `<button type="button" disabled>x</button>`, expected: "not-allowed" },
+  {
+    name: "button:disabled",
+    html: `<button type="button" disabled>x</button>`,
+    expected: "not-allowed",
+  },
   { name: "input:disabled", html: `<input type="text" disabled />`, expected: "not-allowed" },
-  { name: "[role=button][aria-disabled=true]", html: `<div role="button" aria-disabled="true">x</div>`, expected: "not-allowed", blocked: true },
-  { name: "a[aria-disabled=true]", html: `<a href="/x" aria-disabled="true">x</a>`, expected: "not-allowed", blocked: true },
+  {
+    name: "[role=button][aria-disabled=true]",
+    html: `<div role="button" aria-disabled="true">x</div>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
+  {
+    name: "a[aria-disabled=true]",
+    html: `<a href="/x" aria-disabled="true">x</a>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
 
   // Loading state — same not-allowed treatment, plus pointer-events: none
-  { name: "button[aria-busy=true]", html: `<button type="button" aria-busy="true">x</button>`, expected: "not-allowed", blocked: true },
-  { name: "button[data-loading=true]", html: `<button type="button" data-loading="true">x</button>`, expected: "not-allowed", blocked: true },
-  { name: "button[data-state=loading]", html: `<button type="button" data-state="loading">x</button>`, expected: "not-allowed", blocked: true },
-  { name: "button[data-pending]", html: `<button type="button" data-pending>x</button>`, expected: "not-allowed", blocked: true },
-  { name: "[role=button][aria-busy=true]", html: `<div role="button" aria-busy="true">x</div>`, expected: "not-allowed", blocked: true },
-  { name: "a[href][data-loading=true]", html: `<a href="/x" data-loading="true">x</a>`, expected: "not-allowed", blocked: true },
+  {
+    name: "button[aria-busy=true]",
+    html: `<button type="button" aria-busy="true">x</button>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
+  {
+    name: "button[data-loading=true]",
+    html: `<button type="button" data-loading="true">x</button>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
+  {
+    name: "button[data-state=loading]",
+    html: `<button type="button" data-state="loading">x</button>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
+  {
+    name: "button[data-pending]",
+    html: `<button type="button" data-pending>x</button>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
+  {
+    name: "[role=button][aria-busy=true]",
+    html: `<div role="button" aria-busy="true">x</div>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
+  {
+    name: "a[href][data-loading=true]",
+    html: `<a href="/x" data-loading="true">x</a>`,
+    expected: "not-allowed",
+    blocked: true,
+  },
 
   // Decorative / layout — should NOT receive pointer
   { name: "plain div", html: `<div>x</div>`, expected: "auto" },

@@ -11,6 +11,7 @@ describe("verified knowledge image contract", () => {
   );
   const statsEmitter = readFileSync(resolve(process.cwd(), "scripts/6-emit-stats.ts"), "utf8");
   const nodeParser = readFileSync(resolve(process.cwd(), "scripts/2-parse-nodes.ts"), "utf8");
+  const dbBuilder = readFileSync(resolve(process.cwd(), "scripts/4-build-db.ts"), "utf8");
   const pkg = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf8"));
 
   it("builds nodes once and gates production verification and Docker on official success", () => {
@@ -63,6 +64,7 @@ describe("verified knowledge image contract", () => {
   });
 
   it("copies every verified artifact and only compiles application code in Docker", () => {
+    expect(dockerfile).toContain("COPY vitest.global-setup.ts ./");
     expect(dockerfile).toContain("COPY data/nodes.db ./data/nodes.db");
     expect(dockerfile).toContain("COPY data/stats.json ./data/stats.json");
     expect(dockerfile).toContain(
@@ -88,6 +90,12 @@ describe("verified knowledge image contract", () => {
     expect(dockerfile).toContain("HEALTHCHECK");
     expect(dockerfile).toContain('CMD ["node", "dist/src/server.js"]');
     expect(pkg.scripts.start).toBe("node dist/src/server.js");
+  });
+
+  it("finalizes the published SQLite database for a read-only runtime", () => {
+    expect(dbBuilder).toContain('db.pragma("journal_mode = DELETE")');
+    expect(dbBuilder.indexOf('db.pragma("journal_mode = DELETE")'))
+      .toBeLessThan(dbBuilder.lastIndexOf("db.close()"));
   });
 
   it("excludes rebuild inputs and SQLite sidecars without excluding verified artifacts", () => {

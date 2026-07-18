@@ -12,6 +12,7 @@ RUN corepack enable && npm install --no-audit --no-fund
 FROM deps AS build
 WORKDIR /app
 COPY tsconfig.json ./
+COPY vitest.global-setup.ts ./
 COPY scripts ./scripts
 COPY src ./src
 RUN npm run build

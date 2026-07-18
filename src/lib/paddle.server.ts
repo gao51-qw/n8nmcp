@@ -33,10 +33,6 @@ export function tierFromPriceId(priceId: string | null | undefined): Tier {
   return "free";
 }
 
-export function appPublicUrl(): string {
-  return process.env.APP_PUBLIC_URL ?? "http://localhost:3001";
-}
-
 /** Public client-side token for Paddle.js checkout. Safe to expose. */
 export function paddleClientToken(): string | null {
   return process.env.PADDLE_CLIENT_TOKEN ?? null;

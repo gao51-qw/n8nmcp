@@ -79,6 +79,26 @@ describe("Workflow CRUD Tools", () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
     });
 
+    it("does not expose an n8n create response body", async () => {
+      const canary = "task-3-mcp-upstream-secret";
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 503,
+        text: async () => JSON.stringify({ message: `upstream failed: ${canary}`, token: canary }),
+      } as Response);
+
+      const error = await runTool(mockN8nInstance, "create_workflow", {
+        name: "Canary-safe draft",
+        nodes: validNodes,
+        connections: {},
+      }).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(Error);
+      expect(String(error)).toBe("Error: n8n request failed with status 503");
+      expect(String(error)).not.toContain(canary);
+      expect(mockFetch).toHaveBeenCalledOnce();
+    });
+
     it("should throw error if name is missing", async () => {
       await expect(
         runTool(mockN8nInstance, "create_workflow", {

@@ -28,7 +28,6 @@ import {
 } from "./audit.server";
 import {
   NodeKnowledgeService,
-  TemplateService,
   WorkflowDiffService,
   WorkflowOperationPolicyService,
   WorkflowValidationService,
@@ -42,6 +41,15 @@ import {
   ConfirmationRequiredError,
   createConfirmationService,
 } from "./workflow-agent/confirmation.server";
+import {
+  assertTrustedWorkflowPreview,
+  loadTrustedWorkflowPreview,
+} from "./workflow-agent/trusted-preview.server";
+import { WorkflowCreationPipeline } from "./workflow-agent/creation-pipeline.server";
+import {
+  createKnowledgeClient,
+  type KnowledgeClient,
+} from "./workflow-agent/knowledge-client.server";
 
 export type AuthedKey = {
   user_id: string;
@@ -66,6 +74,8 @@ type ElicitationRequest = {
 };
 
 export type ToolContext = {
+  user_id?: string;
+  request_id?: string;
   clientCapabilities?: ClientCapabilities;
   requestElicitation?: (request: ElicitationRequest) => Promise<Record<string, unknown>>;
   policy?: WorkflowPolicyContext;
@@ -89,11 +99,39 @@ const TEST_CONFIRMATION_TOKEN_TTL_MS = 5 * 60_000;
 const testOnlyConfirmationChallenges = new Map<string, { token: string; expiresAt: number }>();
 const confirmationService = createConfirmationService();
 const nodeKnowledgeService = new NodeKnowledgeService();
-const templateService = new TemplateService();
 const workflowValidationService = new WorkflowValidationService();
 const workflowDiffService = new WorkflowDiffService();
 const workflowOperationPolicyService = new WorkflowOperationPolicyService();
+let productionKnowledgeClient: KnowledgeClient | undefined;
+const deferredProductionKnowledgeClient: KnowledgeClient = {
+  searchTemplates: (...args) =>
+    (productionKnowledgeClient ??= createKnowledgeClient()).searchTemplates(...args),
+  getTemplate: (...args) =>
+    (productionKnowledgeClient ??= createKnowledgeClient()).getTemplate(...args),
+  searchNodes: (...args) =>
+    (productionKnowledgeClient ??= createKnowledgeClient()).searchNodes(...args),
+  getNode: (...args) => (productionKnowledgeClient ??= createKnowledgeClient()).getNode(...args),
+  validateNode: (...args) =>
+    (productionKnowledgeClient ??= createKnowledgeClient()).validateNode(...args),
+  validateWorkflow: (...args) =>
+    (productionKnowledgeClient ??= createKnowledgeClient()).validateWorkflow(...args),
+};
 const PARTIAL_UPDATE_AUDIT_BEFORE = Symbol("partialUpdateAuditBefore");
+const ORCHESTRATED_TOOL_NAMES = new Set([
+  "create_scheduled_workflow",
+  "create_webhook_workflow",
+  "create_ai_chatbot_workflow",
+  "create_email_workflow",
+  "deploy_and_test_workflow",
+  "fix_workflow_errors",
+]);
+
+export const KNOWLEDGE_TOOL_MAP = Object.freeze({
+  search_nodes: "search_nodes",
+  get_node: "get_node_essentials",
+  search_templates: "search_templates",
+  get_template: "get_workflow_template",
+} as const);
 
 export function shortWindowAllow(userId: string): boolean {
   const now = Date.now();
@@ -263,14 +301,14 @@ async function n8n(inst: Inst, path: string, init?: RequestInit) {
     signal: AbortSignal.timeout(20_000),
   });
   const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`n8n request failed with status ${res.status}`);
+  }
   let body: unknown = text;
   try {
     body = JSON.parse(text);
   } catch {
-    // Non-JSON n8n errors are surfaced as raw response text.
-  }
-  if (!res.ok) {
-    throw new Error(`n8n ${res.status}: ${typeof body === "string" ? body : JSON.stringify(body)}`);
+    // Successful non-JSON responses are returned as text.
   }
   return body;
 }
@@ -297,53 +335,53 @@ export async function runTool(
   // Orchestrated tools. Note: this must list the orchestrated tool names
   // explicitly — a `create_*` prefix match would swallow the basic
   // `create_workflow` CRUD tool, which is handled in the switch below.
-  const ORCHESTRATED_TOOLS = new Set([
-    "create_scheduled_workflow",
-    "create_webhook_workflow",
-    "create_ai_chatbot_workflow",
-    "create_email_workflow",
-    "deploy_and_test_workflow",
-    "fix_workflow_errors",
-  ]);
-  if (ORCHESTRATED_TOOLS.has(name)) {
+  if (ORCHESTRATED_TOOL_NAMES.has(name)) {
+    const parsedArgs = parseOrchestratedToolArgs(name, args);
     const { OrchestratedToolsService } = await import("./orchestrated-tools.service");
-    const service = new OrchestratedToolsService(inst);
-    return service.callTool(name, args, context);
+    const creationPipeline = name.startsWith("create_")
+      ? new WorkflowCreationPipeline({
+          knowledge: deferredProductionKnowledgeClient,
+          localValidation: workflowValidationService,
+          createDraft: async (workflow) =>
+            (await n8n(inst, "/api/v1/workflows", {
+              method: "POST",
+              body: JSON.stringify(workflow),
+            })) as WorkflowLike,
+        })
+      : undefined;
+    const service = new OrchestratedToolsService(inst, { creationPipeline });
+    return service.callTool(name, parsedArgs, context);
   }
 
   switch (name) {
-    case "search_nodes":
-      return nodeKnowledgeService.searchNodes(
-        requireNonEmptyString(args.query, "query"),
-        optionalFiniteNumber(args.limit, 20),
-      );
-    case "get_node":
-      return nodeKnowledgeService.getNode(requireNonEmptyString(args.nodeType, "nodeType"));
     case "validate_node":
       return nodeKnowledgeService.validateNode(
         requireNonEmptyString(args.nodeType, "nodeType"),
         asObj(args.parameters),
+        args.credentials && typeof args.credentials === "object" && !Array.isArray(args.credentials)
+          ? (args.credentials as Record<string, unknown>)
+          : undefined,
       );
-    case "search_templates":
-      return templateService.searchTemplates(
-        requireNonEmptyString(args.query, "query"),
-        optionalFiniteNumber(args.limit, 10),
-      );
-    case "get_template":
-      return templateService.getTemplate(requireStringOrNumberArg(args.id, "id"));
-    case "preview_workflow_diff":
-      return previewWorkflowDiff(inst, args);
-    case "update_partial_workflow":
+    case "preview_workflow_diff": {
+      const previewArgs = parsePreviewWorkflowDiffArgs(args);
+      return previewWorkflowDiff(inst, previewArgs);
+    }
+    case "update_partial_workflow": {
+      const updateArgs = parseUpdatePartialWorkflowArgs(args);
       await requireConfirmation(
-        args,
+        updateArgs,
         "Update partial workflow",
         {
           requireToken: true,
-          scope: { workflowId: args.workflowId, operations: args.operations },
+          scope: {
+            workflowId: updateArgs.workflowId,
+            operations: updateArgs.operations,
+          },
         },
         context,
       );
-      return updatePartialWorkflow(inst, args, context);
+      return updatePartialWorkflow(inst, updateArgs, context);
+    }
     case "list_workflows": {
       const qs = new URLSearchParams();
       if (typeof args.active === "boolean") qs.set("active", String(args.active));
@@ -1125,13 +1163,7 @@ const AUDIT_READ_TOOLS = new Set<string>([
   "get_audit_statistics",
   "detect_suspicious_activity",
 ]);
-const AGENT_READ_TOOLS = new Set<string>([
-  "search_nodes",
-  "get_node",
-  "validate_node",
-  "search_templates",
-  "get_template",
-]);
+const AGENT_READ_TOOLS = new Set<string>(["validate_node"]);
 const AGENT_INSTANCE_TOOLS = new Set<string>(["preview_workflow_diff", "update_partial_workflow"]);
 
 type MutationDescriptor = {
@@ -1157,15 +1189,316 @@ function requireNonEmptyString(value: unknown, field: string): string {
   }
   return value;
 }
-function requireStringOrNumberArg(value: unknown, field: string): string | number {
-  if (typeof value === "string" && value.trim().length > 0) return value;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  throw new Error(`${field} (string or number) is required`);
-}
-function optionalFiniteNumber(value: unknown, fallback: number): number {
-  return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+
+function optionalNumberArray(value: unknown, field: string): number[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error(`${field} must be an array`);
+  if (!value.every((item) => Number.isInteger(item) && item >= 0)) {
+    throw new Error(`${field} must contain only non-negative integers`);
+  }
+  return value as number[];
 }
 
+function requireObject(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${field} (object) is required`);
+  }
+  return value as Record<string, unknown>;
+}
+
+function optionalObject(value: unknown, field: string): Record<string, unknown> | undefined {
+  return value === undefined ? undefined : requireObject(value, field);
+}
+
+function requireEnumString<T extends string>(
+  value: unknown,
+  field: string,
+  allowed: readonly T[],
+): T {
+  const parsed = requireNonEmptyString(value, field);
+  if (!allowed.includes(parsed as T)) {
+    throw new Error(`${field} must be one of: ${allowed.join(", ")}`);
+  }
+  return parsed as T;
+}
+
+function optionalBoolean(value: unknown, field: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new Error(`${field} must be a boolean`);
+  return value;
+}
+
+function optionalString(value: unknown, field: string): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw new Error(`${field} must be a string`);
+  return value;
+}
+
+function optionalNumber(value: unknown, field: string): number | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    throw new Error(`${field} must be a finite number`);
+  }
+  return value;
+}
+
+function parseSmtpCredentialReference(value: unknown): {
+  smtp: { id: string; name: string };
+} {
+  const credentials = requireObject(value, "interfaceConfig.humanEmailCredentials");
+  const credentialKeys = Object.keys(credentials);
+  if (credentialKeys.length !== 1 || credentialKeys[0] !== "smtp") {
+    throw new Error("interfaceConfig.humanEmailCredentials must contain only smtp");
+  }
+  const smtp = requireObject(credentials.smtp, "interfaceConfig.humanEmailCredentials.smtp");
+  const smtpKeys = Object.keys(smtp);
+  if (smtpKeys.some((key) => key !== "id" && key !== "name")) {
+    throw new Error("interfaceConfig.humanEmailCredentials.smtp supports only id and name");
+  }
+  return {
+    smtp: {
+      id: requireNonEmptyString(smtp.id, "interfaceConfig.humanEmailCredentials.smtp.id"),
+      name: requireNonEmptyString(smtp.name, "interfaceConfig.humanEmailCredentials.smtp.name"),
+    },
+  };
+}
+
+function parseAIChatbotArgs(args: Record<string, unknown>): Record<string, unknown> {
+  const interfaceName = requireEnumString(args.interface ?? args.platform, "interface", [
+    "webhook",
+    "slack",
+  ]);
+  const aiProvider =
+    args.aiProvider === undefined
+      ? "openai"
+      : requireEnumString(args.aiProvider, "aiProvider", ["openai"]);
+  const rawAIConfig = requireObject(args.aiConfig, "aiConfig");
+  if (rawAIConfig.apiKey !== undefined) {
+    throw new Error("aiConfig.apiKey is not supported; use an n8n credential reference");
+  }
+  const model = requireNonEmptyString(rawAIConfig.model, "aiConfig.model");
+
+  const rawFeatures = optionalObject(args.features, "features") ?? {};
+  const legacyEscalation = optionalObject(args.escalationRules, "escalationRules");
+  const legacyNotification = optionalObject(args.humanNotification, "humanNotification");
+  if (legacyNotification?.method !== undefined && legacyNotification.method !== "email") {
+    throw new Error("humanNotification.method must be email");
+  }
+  if (legacyEscalation?.sentimentThreshold !== undefined) {
+    optionalNumber(legacyEscalation.sentimentThreshold, "escalationRules.sentimentThreshold");
+  }
+
+  const explicitHumanHandoff = optionalBoolean(rawFeatures.humanHandoff, "features.humanHandoff");
+  const explicitSentiment = optionalBoolean(
+    rawFeatures.sentimentAnalysis,
+    "features.sentimentAnalysis",
+  );
+  const humanHandoff = explicitHumanHandoff ?? legacyNotification !== undefined;
+  const sentimentAnalysis = explicitSentiment ?? legacyEscalation?.sentimentThreshold !== undefined;
+
+  const rawInterfaceConfig = optionalObject(args.interfaceConfig, "interfaceConfig") ?? {};
+  const humanEmail = optionalString(
+    rawInterfaceConfig.humanEmail ?? legacyNotification?.recipient,
+    "interfaceConfig.humanEmail",
+  );
+  const rawHumanEmailCredentials =
+    rawInterfaceConfig.humanEmailCredentials ?? legacyNotification?.credentials;
+  const humanEmailCredentials =
+    rawHumanEmailCredentials === undefined
+      ? undefined
+      : parseSmtpCredentialReference(rawHumanEmailCredentials);
+
+  if (humanHandoff) {
+    requireNonEmptyString(humanEmail, "interfaceConfig.humanEmail");
+    if (!humanEmailCredentials || Object.keys(humanEmailCredentials).length === 0) {
+      throw new Error("interfaceConfig.humanEmailCredentials must contain credential references");
+    }
+  }
+
+  const credentialRequired = aiProvider === "openai" || sentimentAnalysis;
+  const credentialId =
+    rawAIConfig.credentialId === undefined
+      ? undefined
+      : requireNonEmptyString(rawAIConfig.credentialId, "aiConfig.credentialId");
+  const credentialName =
+    rawAIConfig.credentialName === undefined
+      ? undefined
+      : requireNonEmptyString(rawAIConfig.credentialName, "aiConfig.credentialName");
+  if (credentialRequired && (!credentialId || !credentialName)) {
+    throw new Error(
+      "aiConfig credentialId and credentialName are required for OpenAI-backed nodes",
+    );
+  }
+
+  const systemPromptValue = rawAIConfig.systemPrompt ?? args.systemPrompt;
+  const systemPrompt =
+    systemPromptValue === undefined
+      ? undefined
+      : requireNonEmptyString(systemPromptValue, "aiConfig.systemPrompt");
+  const temperature = optionalNumber(rawAIConfig.temperature, "aiConfig.temperature");
+  if (temperature !== undefined && (temperature < 0 || temperature > 2)) {
+    throw new Error("aiConfig.temperature must be between 0 and 2");
+  }
+  const maxTokens = optionalNumber(rawAIConfig.maxTokens, "aiConfig.maxTokens");
+  if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens < 1)) {
+    throw new Error("aiConfig.maxTokens must be a positive integer");
+  }
+  const path = optionalString(rawInterfaceConfig.path, "interfaceConfig.path");
+  const activate = optionalBoolean(args.activate, "activate");
+
+  return {
+    name: requireNonEmptyString(args.name, "name"),
+    interface: interfaceName,
+    aiProvider,
+    aiConfig: {
+      model,
+      ...(credentialId !== undefined ? { credentialId } : {}),
+      ...(credentialName !== undefined ? { credentialName } : {}),
+      ...(systemPrompt !== undefined ? { systemPrompt } : {}),
+      ...(temperature !== undefined ? { temperature } : {}),
+      ...(maxTokens !== undefined ? { maxTokens } : {}),
+    },
+    interfaceConfig: {
+      ...(path !== undefined ? { path } : {}),
+      ...(humanEmail !== undefined ? { humanEmail } : {}),
+      ...(humanEmailCredentials !== undefined ? { humanEmailCredentials } : {}),
+    },
+    features: {
+      ...(humanHandoff ? { humanHandoff: true } : {}),
+      ...(sentimentAnalysis ? { sentimentAnalysis: true } : {}),
+    },
+    ...(activate !== undefined ? { activate } : {}),
+  };
+}
+
+function validateConfirmationFields(args: Record<string, unknown>): void {
+  optionalBoolean(args.confirm, "confirm");
+  if (args.confirmationToken !== undefined) {
+    requireNonEmptyString(args.confirmationToken, "confirmationToken");
+  }
+}
+
+function parsePreviewWorkflowDiffArgs(args: Record<string, unknown>): Record<string, unknown> {
+  optionalObject(args.policy, "policy");
+  return {
+    ...args,
+    workflowId: requireNonEmptyString(args.workflowId, "workflowId"),
+    operations: requireOperations(args.operations),
+  };
+}
+
+function parseUpdatePartialWorkflowArgs(args: Record<string, unknown>): Record<string, unknown> {
+  optionalObject(args.policy, "policy");
+  validateConfirmationFields(args);
+  return {
+    ...args,
+    workflowId: requireNonEmptyString(args.workflowId, "workflowId"),
+    operations: requireOperations(args.operations),
+    sourcePreviewCallId: requireNonEmptyString(args.sourcePreviewCallId, "sourcePreviewCallId"),
+    sourcePreviewOperationIndexes: optionalNumberArray(
+      args.sourcePreviewOperationIndexes,
+      "sourcePreviewOperationIndexes",
+    ),
+  };
+}
+
+function parseProcessingSteps(value: unknown): Array<Record<string, unknown>> | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error("processing must be an array");
+  return value.map((candidate, index) => {
+    const step = requireObject(candidate, `processing[${index}]`);
+    return {
+      ...step,
+      action: requireEnumString(step.action, `processing[${index}].action`, [
+        "transform",
+        "validate",
+      ]),
+      config: requireObject(step.config, `processing[${index}].config`),
+    };
+  });
+}
+
+function parseValidationRules(value: unknown): Array<Record<string, unknown>> | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) throw new Error("validationRules must be an array");
+  return value.map((candidate, index) => {
+    const rule = requireObject(candidate, `validationRules[${index}]`);
+    return {
+      ...rule,
+      field: requireNonEmptyString(rule.field, `validationRules[${index}].field`),
+      condition: requireEnumString(rule.condition, `validationRules[${index}].condition`, [
+        "exists",
+        "equals",
+        "contains",
+        "matches",
+      ]),
+      expectedValue: optionalString(rule.expectedValue, `validationRules[${index}].expectedValue`),
+    };
+  });
+}
+
+function parseOrchestratedToolArgs(
+  name: string,
+  args: Record<string, unknown>,
+): Record<string, unknown> {
+  switch (name) {
+    case "create_scheduled_workflow":
+      optionalBoolean(args.activate, "activate");
+      return {
+        ...args,
+        name: requireNonEmptyString(args.name, "name"),
+        schedule: requireNonEmptyString(args.schedule, "schedule"),
+        action: requireEnumString(args.action, "action", [
+          "send_email",
+          "http_request",
+          "slack_message",
+        ]),
+        actionConfig: requireObject(args.actionConfig, "actionConfig"),
+      };
+    case "create_webhook_workflow":
+      optionalBoolean(args.activate, "activate");
+      optionalObject(args.responseTemplate, "responseTemplate");
+      return {
+        ...args,
+        name: requireNonEmptyString(args.name, "name"),
+        path: optionalString(args.path, "path"),
+        method:
+          args.method === undefined
+            ? undefined
+            : requireEnumString(args.method, "method", ["GET", "POST", "PUT", "DELETE", "PATCH"]),
+        processing: parseProcessingSteps(args.processing),
+      };
+    case "create_ai_chatbot_workflow":
+      return parseAIChatbotArgs(args);
+    case "create_email_workflow":
+      optionalBoolean(args.activate, "activate");
+      optionalObject(args.triggerConfig, "triggerConfig");
+      if (args.conditions !== undefined && !Array.isArray(args.conditions)) {
+        throw new Error("conditions must be an array");
+      }
+      return {
+        ...args,
+        name: requireNonEmptyString(args.name, "name"),
+        trigger: requireEnumString(args.trigger, "trigger", ["webhook", "schedule", "manual"]),
+        emailTemplate: requireObject(args.emailTemplate, "emailTemplate"),
+      };
+    case "deploy_and_test_workflow":
+      validateConfirmationFields(args);
+      optionalBoolean(args.rollbackOnFailure, "rollbackOnFailure");
+      return {
+        ...args,
+        workflowId: requireNonEmptyString(args.workflowId, "workflowId"),
+        testData: requireObject(args.testData, "testData"),
+        validationRules: parseValidationRules(args.validationRules),
+      };
+    case "fix_workflow_errors":
+      return {
+        workflowId: requireNonEmptyString(args.workflowId, "workflowId"),
+      };
+    default:
+      return args;
+  }
+}
 // Workflow-creating orchestrated/blueprint tools all return { workflow: <created> }.
 const createFromWorkflowField: MutationDescriptor = {
   op: () => "create",
@@ -1240,12 +1573,6 @@ const MUTATION_DESCRIPTORS: Record<string, MutationDescriptor> = {
   create_webhook_workflow: createFromWorkflowField,
   create_email_workflow: createFromWorkflowField,
   create_ai_chatbot_workflow: createFromWorkflowField,
-  fix_workflow_errors: {
-    op: () => "update",
-    captureBefore: true,
-    idFrom: (a) => strId(a.workflowId),
-    after: (o) => asObj(o).workflow ?? o,
-  },
   deploy_and_test_workflow: {
     op: () => "update",
     captureBefore: true,
@@ -1279,7 +1606,12 @@ async function recordMutationAudit(
     const outRecord = asObj(out);
     const auditBefore =
       before ?? (outRecord as Record<PropertyKey, unknown>)[PARTIAL_UPDATE_AUDIT_BEFORE] ?? null;
-    const after = desc.after(out);
+    const reportedAfter = desc.after(out);
+    const deploymentActivated =
+      name === "deploy_and_test_workflow"
+        ? asObj(asObj(outRecord.results).activation).success === true
+        : null;
+    const after = deploymentActivated === false ? auditBefore : reportedAfter;
     const workflowId = desc.idFrom(args, out) ?? strId(args.id) ?? strId(args.workflowId);
     if (!workflowId) return;
     await recordWorkflowAudit({
@@ -1302,17 +1634,49 @@ async function recordMutationAudit(
   }
 }
 
+export function shouldRecordMutationAudit(name: string, output: unknown): boolean {
+  const result = asObj(output);
+  if (name === "deploy_and_test_workflow") {
+    return Object.keys(asObj(result.results)).length > 0;
+  }
+  if (name === "fix_workflow_errors" || result.success === false) return false;
+  return true;
+}
+
 function auditToolParams(
   name: string,
   args: Record<string, unknown>,
   out: unknown,
 ): Record<string, unknown> {
-  if (name !== "update_partial_workflow") return args;
   const output = asObj(out);
+  if (name === "deploy_and_test_workflow") {
+    const results = asObj(output.results);
+    const test = asObj(results.test);
+    const activation = asObj(results.activation);
+    return {
+      workflowId: strId(args.workflowId),
+      workflowFingerprint: strId(output.workflowFingerprint),
+      businessSuccess: output.success === true,
+      validation: results.validation,
+      smokeTest: {
+        success: test.success === true,
+        error: typeof test.error === "string" ? test.error : null,
+      },
+      activation: {
+        success: activation.success === true,
+        error: typeof activation.error === "string" ? activation.error : null,
+      },
+    };
+  }
   return {
     ...args,
     ...(output.diff !== undefined ? { diff: output.diff } : {}),
     ...(output.validation !== undefined ? { validation: output.validation } : {}),
+    ...(output.results !== undefined ? { results: output.results } : {}),
+    ...(output.resolvedPolicy !== undefined ? { resolvedPolicy: output.resolvedPolicy } : {}),
+    ...(name === "fix_workflow_errors" && output.applied !== undefined
+      ? { applied: output.applied }
+      : {}),
   };
 }
 
@@ -1447,7 +1811,27 @@ async function updatePartialWorkflow(
   context?: ToolContext,
 ): Promise<unknown> {
   const workflowId = requireNonEmptyString(args.workflowId, "workflowId");
-  const operations = requireOperations(args.operations);
+  const requestedOperations = requireOperations(args.operations);
+  const sourcePreviewCallId = requireNonEmptyString(
+    args.sourcePreviewCallId,
+    "sourcePreviewCallId",
+  );
+  const userId = context?.user_id;
+  if (!userId) throw new Error("Authentication required for partial workflow updates");
+  const operationIndexes = optionalNumberArray(
+    args.sourcePreviewOperationIndexes,
+    "sourcePreviewOperationIndexes",
+  );
+  const preview = await loadTrustedWorkflowPreview(userId, sourcePreviewCallId);
+  const trustedPreview = assertTrustedWorkflowPreview({
+    preview,
+    userId,
+    workflowId,
+    operations: requestedOperations,
+    operationIndexes,
+    sessionId: context?.request_id,
+  });
+  const operations = requireOperations(trustedPreview.operations);
   const policy = optionalPolicy(args.policy, args.confirm, context?.policy);
   workflowOperationPolicyService.assertToolAllowed("update_partial_workflow", policy);
   workflowOperationPolicyService.assertOperationsAllowed(operations, policy);
@@ -1457,8 +1841,8 @@ async function updatePartialWorkflow(
   );
   const currentVersionId = strId(current.versionId);
   const currentFingerprint = workflowFingerprint(current);
-  const expectedVersionId = strId(args.expectedVersionId);
-  const expectedFingerprint = strId(args.expectedFingerprint);
+  const expectedVersionId = trustedPreview.baseVersionId;
+  const expectedFingerprint = trustedPreview.baseFingerprint;
   if (
     (expectedVersionId && expectedVersionId !== currentVersionId) ||
     (expectedFingerprint && expectedFingerprint !== currentFingerprint)
@@ -1525,6 +1909,17 @@ export async function dispatchTool(
   inst: Inst | null,
   caller?: CallerCtx & ToolContext,
 ): Promise<DispatchResult> {
+  const upstreamKnowledgeTool = KNOWLEDGE_TOOL_MAP[name as keyof typeof KNOWLEDGE_TOOL_MAP];
+  if (upstreamKnowledgeTool) {
+    if (!isUpstreamConfigured()) {
+      throw new Error(
+        `Knowledge tool ${name} is unavailable because the upstream knowledge MCP is not configured`,
+      );
+    }
+    const output = await callUpstreamTool(upstreamKnowledgeTool, args, null, caller);
+    return { output, upstream: true, category: "knowledge", needsInstance: false };
+  }
+
   // Audit read tools resolve from the audit log and need only the caller's id.
   if (AUDIT_READ_TOOLS.has(name)) {
     const output = await handleAuditReadTool(name, args, caller?.user_id);
@@ -1572,7 +1967,7 @@ export async function dispatchTool(
     }
 
     const output = await runTool(inst, name, args, caller);
-    if (desc && caller?.user_id) {
+    if (desc && caller?.user_id && shouldRecordMutationAudit(name, output)) {
       await recordMutationAudit(name, desc, args, output, before, inst, caller);
     }
     return { output, upstream: false, category: "local", needsInstance: false };
@@ -1587,6 +1982,9 @@ export async function dispatchTool(
         needsInstance: true,
       };
     }
+    const dispatchArgs = ORCHESTRATED_TOOL_NAMES.has(name)
+      ? parseOrchestratedToolArgs(name, args)
+      : args;
     if (name === "update_workflow") {
       const structuralFields = [
         "nodes",
@@ -1607,12 +2005,12 @@ export async function dispatchTool(
     const desc = MUTATION_DESCRIPTORS[name];
     let before: unknown = null;
     if (desc?.captureBefore && caller?.user_id) {
-      const beforeId = strId(args.id) ?? strId(args.workflowId);
+      const beforeId = strId(dispatchArgs.id) ?? strId(dispatchArgs.workflowId);
       if (beforeId) before = await fetchSnapshotSafe(inst, beforeId);
     }
-    const out = await runTool(inst, name, args, caller);
+    const out = await runTool(inst, name, dispatchArgs, caller);
     if (desc && caller?.user_id) {
-      await recordMutationAudit(name, desc, args, out, before, inst, caller);
+      await recordMutationAudit(name, desc, dispatchArgs, out, before, inst, caller);
     }
     return { output: out, upstream: false, category: "local", needsInstance: false };
   }

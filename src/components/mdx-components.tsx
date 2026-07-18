@@ -32,12 +32,13 @@ export const mdxComponents = {
   ol: (p: ComponentProps<"ol">) => (
     <ol className={cn("my-4 list-decimal space-y-1 pl-6", p.className)} {...p} />
   ),
-  li: (p: ComponentProps<"li">) => (
-    <li className={cn("leading-relaxed", p.className)} {...p} />
-  ),
+  li: (p: ComponentProps<"li">) => <li className={cn("leading-relaxed", p.className)} {...p} />,
   blockquote: (p: ComponentProps<"blockquote">) => (
     <blockquote
-      className={cn("my-4 border-l-2 border-primary/40 pl-4 italic text-muted-foreground", p.className)}
+      className={cn(
+        "my-4 border-l-2 border-primary/40 pl-4 italic text-muted-foreground",
+        p.className,
+      )}
       {...p}
     />
   ),
@@ -71,7 +72,10 @@ export const mdxComponents = {
   ),
   th: (p: ComponentProps<"th">) => (
     <th
-      className={cn("border border-border bg-muted/40 px-3 py-1.5 text-left font-semibold", p.className)}
+      className={cn(
+        "border border-border bg-muted/40 px-3 py-1.5 text-left font-semibold",
+        p.className,
+      )}
       {...p}
     />
   ),
@@ -82,6 +86,10 @@ export const mdxComponents = {
     <strong className={cn("font-semibold text-foreground", p.className)} {...p} />
   ),
   img: (p: ComponentProps<"img">) => (
-    <img className={cn("my-6 rounded-lg border border-border", p.className)} loading="lazy" {...p} />
+    <img
+      className={cn("my-6 rounded-lg border border-border", p.className)}
+      loading="lazy"
+      {...p}
+    />
   ),
 };

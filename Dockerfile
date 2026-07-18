@@ -1,17 +1,29 @@
-# Main app (TanStack Start) — Node runtime, for VPS deployment.
+# Main app (Next.js) - Node runtime, for VPS deployment.
 # Build with:  docker build -t ghcr.io/OWNER/n8nworkflow-app:latest .
-# Output dir: dist/ (vite.config.vps.ts default, NOT .output)
 FROM node:22-alpine AS build
 WORKDIR /app
+
+ARG NEXT_PUBLIC_MCP_SITE_URL
+ARG NEXT_PUBLIC_MCP_ENDPOINT_URL
+ARG NEXT_PUBLIC_DOCS_URL
+ARG NEXT_PUBLIC_BLOG_URL
+ARG NEXT_PUBLIC_DASHBOARD_URL
+ARG NEXT_PUBLIC_SECURITY_EMAIL
+ENV NEXT_PUBLIC_MCP_SITE_URL=${NEXT_PUBLIC_MCP_SITE_URL} \
+    NEXT_PUBLIC_MCP_ENDPOINT_URL=${NEXT_PUBLIC_MCP_ENDPOINT_URL} \
+    NEXT_PUBLIC_DOCS_URL=${NEXT_PUBLIC_DOCS_URL} \
+    NEXT_PUBLIC_BLOG_URL=${NEXT_PUBLIC_BLOG_URL} \
+    NEXT_PUBLIC_DASHBOARD_URL=${NEXT_PUBLIC_DASHBOARD_URL} \
+    NEXT_PUBLIC_SECURITY_EMAIL=${NEXT_PUBLIC_SECURITY_EMAIL}
 
 # Install deps
 COPY package.json package-lock.json* ./
 RUN --mount=type=cache,target=/root/.npm \
     (npm ci || npm install)
 
-# Copy source and build using the VPS vite config (Node target)
+# Copy source and build the Next.js standalone server.
 COPY . .
-RUN npx vite build --config vite.config.vps.ts
+RUN npm run build
 
 # ---------- runtime ----------
 FROM node:22-alpine AS run
@@ -31,11 +43,15 @@ ENV APP_GIT_SHA=${APP_GIT_SHA} \
 
 ENV NODE_ENV=production \
     PORT=3001 \
-    HOST=0.0.0.0
+    HOSTNAME=0.0.0.0
 
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/package.json ./package.json
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/package.json ./package.json
+
+# Drop root: the node:22-alpine image ships a non-root `node` user (uid 1000).
+# Any RCE in the app then lands as an unprivileged user, not root.
+USER node
 
 EXPOSE 3001
-# TanStack Start node-server entry (vite.config.vps.ts outputs to dist/)
-CMD ["node", "dist/server/server.js"]
+CMD ["node", "server.js"]

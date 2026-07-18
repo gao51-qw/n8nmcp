@@ -1,0 +1,39 @@
+(security_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+		Cross-Origin-Opener-Policy "same-origin"
+	}
+}
+
+(next_app) {
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+
+	import security_headers
+
+	reverse_proxy app:3001 {
+		flush_interval -1
+	}
+}
+
+{$MCP_DOMAIN:mcp.n8nworkflow.com} {
+	import next_app
+}
+
+{$DOCS_DOMAIN:docs.n8nworkflow.com} {
+	import next_app
+}
+
+{$BLOG_DOMAIN:blog.n8nworkflow.com} {
+	import next_app
+}
+
+{$DASHBOARD_DOMAIN:dashboard.n8nworkflow.com} {
+	import next_app
+}

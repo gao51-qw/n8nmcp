@@ -19,6 +19,7 @@ import { CORS, jsonResp, rpcError, rpcResult, sseStream } from "@/lib/mcp-transp
 import type { JsonRpcReq } from "@/lib/mcp-types";
 import {
   buildWorkflowAgentCallMetadata,
+  toolBusinessOutcome,
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
 
@@ -319,11 +320,17 @@ async function handleRpc(
           return rpcError(req.id, -32002, "No n8n instance configured for this user");
         }
 
+        const outcome = toolBusinessOutcome(result.output);
+        const businessErrorMessage =
+          outcome.success === false
+            ? sanitizedToolErrorMessage(outcome.errorMessage ?? "Tool reported a business failure")
+            : null;
         await recordCall({
           user_id: ctx.user_id,
           instance_id: inst?.id ?? null,
           tool_name: name,
-          status: "ok",
+          status: outcome.success === false ? "error" : "ok",
+          error_message: businessErrorMessage,
           latency_ms: Date.now() - started,
           upstream: result.upstream,
           category: result.category,
@@ -340,11 +347,17 @@ async function handleRpc(
           ua: source.ua,
           request_id: source.request_id,
           latency_ms: Date.now() - started,
-          status: "ok",
+          status: outcome.success === false ? "error" : "ok",
           upstream: result.upstream,
           category: result.category,
         });
 
+        if (outcome.success === false) {
+          return rpcResult(req.id, {
+            content: [{ type: "text", text: JSON.stringify(result.output, null, 2) }],
+            isError: true,
+          });
+        }
         if (result.upstream && result.output && typeof result.output === "object") {
           return rpcResult(req.id, result.output);
         }

@@ -6,8 +6,8 @@ BASE="${PREVIEW_BASE_DOMAIN:-preview.n8nworkflow.com}"
 
 printf '%-6s %-28s %-8s %-12s %s\n' PR CONTAINER PORT STATUS URL
 docker ps -a \
-  --filter 'label=lovable.preview.pr' \
-  --format '{{.Label "lovable.preview.pr"}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}' \
+  --filter 'label=n8nmcp.preview.pr' \
+  --format '{{.Label "n8nmcp.preview.pr"}}\t{{.Names}}\t{{.Ports}}\t{{.Status}}' \
   | sort -n \
   | while IFS=$'\t' read -r pr name ports status; do
       port=$(( 40000 + pr ))

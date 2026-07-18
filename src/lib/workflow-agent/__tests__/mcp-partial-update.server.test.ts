@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { runTool } from "@/lib/mcp.server";
+import { dispatchTool, runTool } from "@/lib/mcp.server";
+
+const trustedPreviewMocks = vi.hoisted(() => ({
+  loadTrustedWorkflowPreview: vi.fn(),
+}));
+
+vi.mock("../trusted-preview.server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../trusted-preview.server")>()),
+  loadTrustedWorkflowPreview: trustedPreviewMocks.loadTrustedWorkflowPreview,
+}));
 
 vi.mock("@/lib/ssrf-guard.server", () => ({
   safeFetchPublicUrl: (url: string, init?: RequestInit) => fetch(url, init),
@@ -38,18 +47,10 @@ function respond(body: unknown) {
   mockFetch.mockResolvedValueOnce({ ok: true, text: async () => JSON.stringify(body) } as Response);
 }
 
-async function issueToken(args: Record<string, unknown>) {
-  try {
-    await runTool(instance, "update_partial_workflow", args);
-  } catch (error) {
-    return String((error as Error).message).match(/confirmationToken": "([^"]+)"/)?.[1] ?? "";
-  }
-  return "";
-}
-
 describe("trusted partial workflow versions", () => {
   beforeEach(() => {
     mockFetch.mockReset();
+    trustedPreviewMocks.loadTrustedWorkflowPreview.mockReset();
   });
 
   it("returns the base version and fingerprint with a preview", async () => {
@@ -65,20 +66,31 @@ describe("trusted partial workflow versions", () => {
   });
 
   it("rejects an update when the preview version is stale", async () => {
+    const operations = [{ type: "cleanStaleConnections" }];
     const args = {
       workflowId: "wf-1",
-      operations: [{ type: "cleanStaleConnections" }],
-      expectedVersionId: "version-old",
+      operations,
+      sourcePreviewCallId: "preview-1",
     };
-    const confirmationToken = await issueToken(args);
-    expect(confirmationToken).toMatch(/^mcp_confirm_/);
+    trustedPreviewMocks.loadTrustedWorkflowPreview.mockResolvedValueOnce({
+      id: "preview-1",
+      user_id: "user-1",
+      tool_name: "preview_workflow_diff",
+      status: "ok",
+      created_at: new Date().toISOString(),
+      workflow_id: "wf-1",
+      metadata: {
+        workflowId: "wf-1",
+        operations,
+        baseVersionId: "version-old",
+      },
+    });
     respond(workflow);
 
     await expect(
-      runTool(instance, "update_partial_workflow", {
-        ...args,
-        confirm: true,
-        confirmationToken,
+      dispatchTool("update_partial_workflow", args, instance, {
+        user_id: "user-1",
+        confirmationVerified: true,
       }),
     ).rejects.toThrow(/stale/i);
     expect(mockFetch).toHaveBeenCalledTimes(1);

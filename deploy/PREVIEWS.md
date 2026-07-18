@@ -49,12 +49,12 @@ sudo certbot certonly --manual --preferred-challenges=dns \
 
 Add these in repo Settings → Secrets:
 
-| Secret | Value |
-|---|---|
-| `VPS_HOST` | VPS hostname or IP |
-| `VPS_USER` | ssh user (must be in `docker` group) |
-| `VPS_SSH_KEY` | private key authorized on VPS |
-| `PREVIEW_BASE_DOMAIN` | `preview.n8nworkflow.com` |
+| Secret                | Value                                |
+| --------------------- | ------------------------------------ |
+| `VPS_HOST`            | VPS hostname or IP                   |
+| `VPS_USER`            | ssh user (must be in `docker` group) |
+| `VPS_SSH_KEY`         | private key authorized on VPS        |
+| `PREVIEW_BASE_DOMAIN` | `preview.n8nworkflow.com`            |
 
 ## Operating
 
@@ -72,7 +72,7 @@ Manually nuke a stuck preview:
 
 ## Caveats
 
-- Previews **share the production database / Lovable Cloud** via `.env.app`.
+- Previews use the database configured in their dedicated `.env.preview` file.
   Don't run destructive migrations from a preview.
 - Per-PR containers have `com.centurylinklabs.watchtower.enable=false` so
   watchtower never replaces them.
