@@ -5,6 +5,24 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n");
 
+const composeService = (source: string, service: string) => {
+  const scopedSource = `${source}\n  __test_end__:\n`;
+  const match = scopedSource.match(
+    new RegExp(`^  ${service}:\\n[\\s\\S]*?(?=^  [a-zA-Z0-9_-]+:)`, "m"),
+  );
+  expect(match, `missing Compose service: ${service}`).not.toBeNull();
+  return match![0];
+};
+
+const expectInOrder = (source: string, fragments: string[]) => {
+  let previous = -1;
+  for (const fragment of fragments) {
+    const current = source.indexOf(fragment, previous + 1);
+    expect(current, `missing or out-of-order fragment: ${fragment}`).toBeGreaterThan(previous);
+    previous = current;
+  }
+};
+
 describe("dedicated mail identity", () => {
   afterEach(() => {
     vi.unstubAllEnvs();
@@ -154,23 +172,116 @@ describe("dedicated mail identity", () => {
   it("versions an OTP-only Supabase Auth mail template", () => {
     const otpTemplate = read("deploy/supabase/templates/magic-link-otp.html");
 
+    const variables = [...otpTemplate.matchAll(/{{\s*\.([A-Za-z0-9_]+)\s*}}/g)].map(
+      ([, variable]) => variable,
+    );
+
     expect(otpTemplate).toContain("{{ .Token }}");
-    expect(otpTemplate).not.toContain(".ConfirmationURL");
-    expect(otpTemplate).not.toMatch(/href\s*=/i);
+    expect(variables).toEqual(["Token"]);
+    expect(otpTemplate).not.toMatch(
+      /\.ConfirmationURL|href\s*=|src\s*=|action\s*=|https?:\/\/|<img\b|tracking|pixel/i,
+    );
   });
 
-  it("serves the OTP template to Supabase Auth on its private network", () => {
+  it("serves the OTP template privately and waits for readiness", () => {
     const otpCompose = read("deploy/supabase/docker-compose.email-otp.yml");
+    const templateService = composeService(otpCompose, "auth-email-templates");
 
-    expect(otpCompose).toContain("GOTRUE_MAILER_TEMPLATES_MAGIC_LINK");
-    expect(otpCompose).toContain("http://auth-email-templates/magic-link-otp.html");
+    expect(templateService).toContain("image: caddy:2.8-alpine");
+    expect(templateService).toContain("healthcheck:");
+    expect(templateService).toContain("http://127.0.0.1/magic-link-otp.html");
+    expect(templateService).toContain(":/usr/share/caddy/magic-link-otp.html:ro");
+    expect(templateService).toMatch(/networks:\n\s+- default/);
+    expect(templateService).not.toMatch(/^\s+ports:/m);
   });
 
-  it("installs the OTP mail override with validation and rollback", () => {
+  it("extends Auth without replacing its image and configures both OTP paths", () => {
+    const otpCompose = read("deploy/supabase/docker-compose.email-otp.yml");
+    const authService = composeService(otpCompose, "auth");
+
+    expect(authService).not.toMatch(/^\s+(?:image|build):/m);
+    expect(authService).toContain("condition: service_healthy");
+    expect(authService).toContain(
+      "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://auth-email-templates/magic-link-otp.html",
+    );
+    expect(authService).toContain(
+      "GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://auth-email-templates/magic-link-otp.html",
+    );
+    expect(authService).toContain("GOTRUE_MAILER_SUBJECTS_MAGIC_LINK:");
+    expect(authService).toContain("GOTRUE_MAILER_SUBJECTS_CONFIRMATION:");
+    expect(authService).toContain('GOTRUE_MAILER_OTP_LENGTH: "6"');
+  });
+
+  it("validates the served template before recreating Auth", () => {
     const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
 
     expect(installer).toContain('"${OTP_COMPOSE_COMMAND[@]}" config --quiet');
-    expect(installer).toContain("docker inspect");
-    expect(installer).toContain("rollback");
+    expect(installer).toContain("validate_source_template");
+    expect(installer).toContain("sha256sum");
+    expectInOrder(installer, [
+      '"${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth-email-templates',
+      'wait_for_template_ready "$SOURCE_TEMPLATE" 120 require-health',
+      '"${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth',
+      "wait_for_auth_healthy 120",
+      "verify_auth_template_configuration",
+    ]);
+  });
+
+  it("verifies both Auth template URLs and the six-digit OTP contract", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+
+    expect(installer).toContain(
+      "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=http://auth-email-templates/magic-link-otp.html",
+    );
+    expect(installer).toContain(
+      "GOTRUE_MAILER_TEMPLATES_CONFIRMATION=http://auth-email-templates/magic-link-otp.html",
+    );
+    expect(installer).toContain("GOTRUE_MAILER_OTP_LENGTH=6");
+  });
+
+  it("rolls back only once from the top level and preserves absence metadata", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+
+    expect(installer).toContain("if (( BASH_SUBSHELL > 0 )); then");
+    expect(installer).toContain("rollback_started=0");
+    expect(installer).toContain("if (( rollback_started )); then");
+    expect(installer).toContain("validate_backup");
+    expect(installer).toContain("template.absent");
+    expect(installer).toContain("override.absent");
+    expect(installer).toContain("template.metadata");
+    expect(installer).toContain("override.metadata");
+  });
+
+  it("fails closed and restores template readiness before Auth during rollback", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const rollback = installer.slice(
+      installer.indexOf("rollback() {"),
+      installer.indexOf("on_error() {"),
+    );
+
+    expectInOrder(rollback, [
+      'docker stop "$AUTH_CONTAINER"',
+      "stop auth-email-templates",
+      '"${rollback_compose[@]}" config --quiet',
+      "up -d --no-deps --force-recreate auth-email-templates",
+      "wait_for_template_ready",
+      "up -d --no-deps --force-recreate auth",
+      "wait_for_auth_healthy 120",
+    ]);
+    expect(rollback).toMatch(
+      /if ! "\$\{rollback_compose\[@\]\}" config --quiet; then\n\s+return 1/,
+    );
+  });
+
+  it("documents separate existing/new-user acceptance and polled rollback health", () => {
+    const runbook = read("deploy/MAIL.md");
+
+    expect(runbook).toContain("Existing user");
+    expect(runbook).toContain("New user");
+    expect(runbook).toContain("shouldCreateUser: true");
+    expect(runbook).toContain("same code again");
+    expect(runbook).toContain("attempt <= 120");
+    expect(runbook).toContain("template.metadata");
+    expect(runbook).toContain("override.metadata");
   });
 });

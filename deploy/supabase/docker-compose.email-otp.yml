@@ -6,13 +6,22 @@ services:
       - ./templates/magic-link-otp.html:/usr/share/caddy/magic-link-otp.html:ro
     networks:
       - default
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/magic-link-otp.html"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 2s
 
   auth:
     depends_on:
       auth-email-templates:
-        condition: service_started
+        condition: service_healthy
     environment:
       GOTRUE_DISABLE_SIGNUP: "false"
       GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_OTP_LENGTH: "6"
       GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://auth-email-templates/magic-link-otp.html
       GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: Your n8n-mcp verification code
+      GOTRUE_MAILER_TEMPLATES_CONFIRMATION: http://auth-email-templates/magic-link-otp.html
+      GOTRUE_MAILER_SUBJECTS_CONFIRMATION: Your n8n-mcp verification code

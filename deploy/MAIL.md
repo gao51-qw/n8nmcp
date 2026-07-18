@@ -202,8 +202,9 @@ GOTRUE_SMTP_SENDER_NAME=n8nworkflow
 
 Set the corresponding SMTP password through the protected environment file or
 secret manager; it is intentionally absent here. Require implicit TLS for port
-465. Restart only the Supabase Auth service, inspect its logs for SMTP or TLS
-errors, and leave sign-up mail disabled until the acceptance gate passes.
+465. Keep production activation blocked while changing Auth. The installer below
+enables external email and sign-up only so the controlled existing-user and
+new-user acceptance checks can exercise both Auth template paths.
 
 ### Install the versioned OTP-only Auth template
 
@@ -217,10 +218,13 @@ Run this exact command:
 sudo bash /opt/n8nmcp-app/deploy/supabase/install-email-otp-aapanel.sh /opt/n8nmcp-supabase
 ```
 
-Keep the reported `BACKUP_PATH` in the restricted change log. The installer
-rolls back automatically if Compose validation, service recreation, Auth
-health, or the configured template URL check fails. It does not read or print
-the Supabase `.env` values.
+Keep the reported `BACKUP_PATH` in the restricted change log. Before recreating
+Auth, the installer waits for the private template service healthcheck, fetches
+the template over HTTP inside that container, and compares both its bytes and
+SHA-256 digest with the versioned source. It rolls back automatically if backup
+validation, Compose validation, template readiness/content, service recreation,
+Auth health, or either configured template URL/OTP-length check fails. It does
+not read or print the Supabase `.env` values.
 
 Confirm Auth health without dumping its environment:
 
@@ -228,25 +232,38 @@ Confirm Auth health without dumping its environment:
 sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' supabase-auth
 ```
 
-The only acceptable result is `healthy`. Confirm the exact template setting
-without printing any other environment values:
+The only acceptable result is `healthy`. Confirm both exact template settings
+and the six-digit OTP length without printing any other environment values:
 
 ```bash
-sudo docker inspect --format '{{range .Config.Env}}{{if eq . "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=http://auth-email-templates/magic-link-otp.html"}}{{println "configured"}}{{end}}{{end}}' supabase-auth
+sudo docker inspect --format '{{range .Config.Env}}{{if eq . "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=http://auth-email-templates/magic-link-otp.html"}}{{println "magic-link"}}{{end}}{{if eq . "GOTRUE_MAILER_TEMPLATES_CONFIRMATION=http://auth-email-templates/magic-link-otp.html"}}{{println "confirmation"}}{{end}}{{if eq . "GOTRUE_MAILER_OTP_LENGTH=6"}}{{println "otp-length"}}{{end}}{{end}}' supabase-auth
 ```
 
-The only acceptable result is `configured`.
+The output must contain exactly `magic-link`, `confirmation`, and `otp-length`,
+one per line.
 
 #### Controlled real-mail acceptance test
 
-Use a dedicated external test mailbox and a private browser session. Request
-one Supabase email sign-in or sign-up code through the production UI. Confirm
-that the message comes from `server@n8nworkflow.com`, contains the visible
-six-digit code, and contains no sign-in link, URL, or tracking image. Enter the
-code only into the production verification form and confirm the intended
-session is created. End that session, open a fresh private session, and submit
-the same code again: the replay must be rejected. Also request a new code and
-confirm it expires according to the configured Auth policy.
+Use dedicated external test mailboxes and private browser sessions for these two
+separate gates:
+
+1. **Existing user:** request an OTP for an already-confirmed test account with
+   user creation disabled. This exercises the magic-link template. Confirm the
+   message comes from `server@n8nworkflow.com`, contains exactly a six-digit
+   verification code, and contains no sign-in link, URL, form action, or tracking
+   image. Enter it only into the production verification form, end the resulting
+   session, then submit the same code again in a fresh private session. The replay
+   must be rejected.
+2. **New user:** request an OTP for a never-registered address through the
+   production client path configured with `shouldCreateUser: true`. This
+   exercises the confirmation template. Apply the same code-only/content checks,
+   verify that the first submission creates and confirms only the intended test
+   user, then submit the same code again from a fresh private session. The replay
+   must be rejected.
+
+For both gates, request another code and confirm it expires according to the
+configured Auth policy. A pass for one user state does not substitute for the
+other.
 
 Record only the test time, recipient domain, provider message ID, and pass/fail
 result. The operator must never paste a real OTP into logs, shell commands,
@@ -270,26 +287,63 @@ sudo test "$(sudo realpath -e -- "$BACKUP_DIR")" = "$BACKUP_DIR"
 sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR")" = "root:root:700"
 cd -- "$SUPABASE_ROOT"
 
-current=(sudo docker compose -f docker-compose.yml -f overrides/docker-compose.aapanel.yml -f overrides/docker-compose.email-otp.yml)
-"${current[@]}" stop auth-email-templates || true
-"${current[@]}" rm -sf auth-email-templates || true
-
+# Validate the complete backup state before stopping or changing any service.
+TEMPLATE_WAS_PRESENT=0
 if sudo test -f "$BACKUP_DIR/magic-link-otp.html"; then
-  sudo install -m 0644 -o root -g root -- "$BACKUP_DIR/magic-link-otp.html" templates/magic-link-otp.html
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/magic-link-otp.html")" = "root:root:600"
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/template.metadata")" = "root:root:600"
+  sudo test ! -e "$BACKUP_DIR/template.absent"
+  read -r TEMPLATE_MODE TEMPLATE_UID TEMPLATE_GID < <(sudo cat "$BACKUP_DIR/template.metadata")
+  [[ "$TEMPLATE_MODE $TEMPLATE_UID $TEMPLATE_GID" =~ ^[0-7]{3,4}[[:space:]][0-9]+[[:space:]][0-9]+$ ]]
+  TEMPLATE_WAS_PRESENT=1
 elif sudo test -f "$BACKUP_DIR/template.absent"; then
-  sudo rm -f -- templates/magic-link-otp.html
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/template.absent")" = "root:root:600"
+  sudo test ! -e "$BACKUP_DIR/magic-link-otp.html"
+  sudo test ! -e "$BACKUP_DIR/template.metadata"
 else
   echo "Template backup state is incomplete" >&2
   exit 1
 fi
 
+OVERRIDE_WAS_PRESENT=0
 if sudo test -f "$BACKUP_DIR/docker-compose.email-otp.yml"; then
-  sudo install -m 0644 -o root -g root -- "$BACKUP_DIR/docker-compose.email-otp.yml" overrides/docker-compose.email-otp.yml
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/docker-compose.email-otp.yml")" = "root:root:600"
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/override.metadata")" = "root:root:600"
+  sudo test ! -e "$BACKUP_DIR/override.absent"
+  read -r OVERRIDE_MODE OVERRIDE_UID OVERRIDE_GID < <(sudo cat "$BACKUP_DIR/override.metadata")
+  [[ "$OVERRIDE_MODE $OVERRIDE_UID $OVERRIDE_GID" =~ ^[0-7]{3,4}[[:space:]][0-9]+[[:space:]][0-9]+$ ]]
+  OVERRIDE_WAS_PRESENT=1
 elif sudo test -f "$BACKUP_DIR/override.absent"; then
-  sudo rm -f -- overrides/docker-compose.email-otp.yml
+  sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR/override.absent")" = "root:root:600"
+  sudo test ! -e "$BACKUP_DIR/docker-compose.email-otp.yml"
+  sudo test ! -e "$BACKUP_DIR/override.metadata"
 else
   echo "Override backup state is incomplete" >&2
   exit 1
+fi
+
+# Mutation starts only after every backup ownership, mode, state, and metadata
+# gate above has passed. Stop Auth before the template service.
+SUPABASE_PROJECT="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' supabase-auth)"
+[[ "$SUPABASE_PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]]
+sudo docker stop supabase-auth
+mapfile -t TEMPLATE_IDS < <(sudo docker ps -aq \
+  --filter "label=com.docker.compose.project=$SUPABASE_PROJECT" \
+  --filter "label=com.docker.compose.service=auth-email-templates")
+for TEMPLATE_ID in "${TEMPLATE_IDS[@]}"; do
+  sudo docker stop "$TEMPLATE_ID" >/dev/null || true
+  sudo docker rm "$TEMPLATE_ID" >/dev/null
+done
+
+if test "$TEMPLATE_WAS_PRESENT" = 1; then
+  sudo install -m "$TEMPLATE_MODE" -o "$TEMPLATE_UID" -g "$TEMPLATE_GID" -- "$BACKUP_DIR/magic-link-otp.html" templates/magic-link-otp.html
+else
+  sudo rm -f -- templates/magic-link-otp.html
+fi
+if test "$OVERRIDE_WAS_PRESENT" = 1; then
+  sudo install -m "$OVERRIDE_MODE" -o "$OVERRIDE_UID" -g "$OVERRIDE_GID" -- "$BACKUP_DIR/docker-compose.email-otp.yml" overrides/docker-compose.email-otp.yml
+else
+  sudo rm -f -- overrides/docker-compose.email-otp.yml
 fi
 
 restored=(sudo docker compose -f docker-compose.yml -f overrides/docker-compose.aapanel.yml)
@@ -297,16 +351,35 @@ if sudo test -f overrides/docker-compose.email-otp.yml; then
   restored+=(-f overrides/docker-compose.email-otp.yml)
 fi
 "${restored[@]}" config --quiet
-services=(auth)
 if "${restored[@]}" config --services | grep -Fxq auth-email-templates; then
-  services=(auth-email-templates auth)
+  "${restored[@]}" up -d --no-deps --force-recreate auth-email-templates
+  TEMPLATE_READY=0
+  for ((attempt = 1; attempt <= 120; attempt++)); do
+    if "${restored[@]}" exec -T auth-email-templates wget -q -O - http://127.0.0.1/magic-link-otp.html \
+      | sudo cmp -s -- templates/magic-link-otp.html -; then
+      TEMPLATE_READY=1
+      break
+    fi
+    sleep 1
+  done
+  test "$TEMPLATE_READY" = 1
 fi
-"${restored[@]}" up -d --no-deps --force-recreate "${services[@]}"
-sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' supabase-auth
+"${restored[@]}" up -d --no-deps --force-recreate auth
+AUTH_STATUS=""
+for ((attempt = 1; attempt <= 120; attempt++)); do
+  AUTH_STATUS="$(sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' supabase-auth 2>/dev/null || true)"
+  if test "$AUTH_STATUS" = healthy; then
+    break
+  fi
+  sleep 1
+done
+test "$AUTH_STATUS" = healthy
 ```
 
-The last command must report `healthy`; otherwise keep production activation
-blocked and investigate the restored Auth configuration. Do not roll back the
+The block exits non-zero before starting anything if restored Compose validation
+fails. When a restored template service exists, it must serve byte-identical
+content before Auth starts; Auth then has up to 120 seconds to become healthy.
+Any failed gate keeps production activation blocked. Do not roll back the
 database or restart the full Supabase stack for this template-only change.
 
 ## 5. Configure the app runtime
