@@ -26,9 +26,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY package.json ./
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY data/nodes.db ./data/nodes.db
-COPY data/stats.json ./data/stats.json
-COPY data/knowledge-quality-report.json ./data/knowledge-quality-report.json
+COPY --chown=app:nogroup data/nodes.db ./data/nodes.db
+COPY --chown=app:nogroup data/stats.json ./data/stats.json
+COPY --chown=app:nogroup data/knowledge-quality-report.json ./data/knowledge-quality-report.json
 USER app
 ENV PORT=3000 DB_PATH=/app/data/nodes.db
 EXPOSE 3000
