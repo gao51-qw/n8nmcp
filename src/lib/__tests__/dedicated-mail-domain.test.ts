@@ -1,9 +1,54 @@
-import { readFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8").replace(/\r\n/g, "\n");
+const gitBash = "C:\\Program Files\\Git\\bin\\bash.exe";
+const bash = process.platform === "win32" && existsSync(gitBash) ? gitBash : "bash";
+const shellPath = (path: string) =>
+  process.platform === "win32"
+    ? path
+        .replace(/^([A-Za-z]):/, (_match, drive: string) => `/${drive.toLowerCase()}`)
+        .replace(/\\/g, "/")
+    : path;
+
+const verifyAuthTemplateConfiguration = (dockerInspectOutput: string) => {
+  const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+  const functionSource = installer.match(
+    /^verify_auth_template_configuration\(\) \{[\s\S]*?^\}\n/m,
+  )?.[0];
+  if (!functionSource) {
+    throw new Error("missing verify_auth_template_configuration in installer");
+  }
+
+  const backupDir = mkdtempSync(join(tmpdir(), "n8nmcp-auth-template-config-"));
+  try {
+    return spawnSync(
+      bash,
+      [
+        "-c",
+        `set -Eeuo pipefail
+docker() { printf '%s' "$AUTH_TEMPLATE_DOCKER_OUTPUT"; }
+${functionSource}
+verify_auth_template_configuration`,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          AUTH_CONTAINER_ID: "auth-under-test",
+          AUTH_TEMPLATE_DOCKER_OUTPUT: dockerInspectOutput,
+          BACKUP_DIR: shellPath(backupDir),
+        },
+      },
+    );
+  } finally {
+    rmSync(backupDir, { recursive: true, force: true });
+  }
+};
 
 const composeService = (source: string, service: string) => {
   const scopedSource = `${source}\n  __test_end__:\n`;
@@ -329,6 +374,22 @@ describe("dedicated mail identity", () => {
       "GOTRUE_MAILER_TEMPLATES_CONFIRMATION=http://auth-email-templates/magic-link-otp.html",
     );
     expect(installer).toContain("GOTRUE_MAILER_OTP_LENGTH=6");
+  });
+
+  it("accepts the three Auth markers despite Docker's trailing blank line", () => {
+    const result = verifyAuthTemplateConfiguration("confirmation\notp-length\nmagic-link\n\n");
+
+    expect(result.status, result.stderr).toBe(0);
+  });
+
+  it.each([
+    ["a missing marker", "confirmation\notp-length\n\n"],
+    ["a repeated marker", "confirmation\notp-length\nmagic-link\nmagic-link\n\n"],
+    ["an unknown marker", "confirmation\notp-length\nmagic-link\nunexpected\n\n"],
+  ])("rejects %s in the Auth template configuration", (_description, output) => {
+    const result = verifyAuthTemplateConfiguration(output);
+
+    expect(result.status).not.toBe(0);
   });
 
   it("rolls back only once from the top level and preserves absence metadata", () => {

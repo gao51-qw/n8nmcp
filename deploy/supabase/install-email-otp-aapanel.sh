@@ -191,15 +191,29 @@ wait_for_template_ready() {
 
 verify_auth_template_configuration() {
   local actual="$BACKUP_DIR/auth-template-configuration.check"
+  local marker
+  local magic_link_count=0
+  local confirmation_count=0
+  local otp_length_count=0
+  local -a markers=()
   if ! docker inspect --format \
     '{{range .Config.Env}}{{if eq . "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=http://auth-email-templates/magic-link-otp.html"}}{{println "magic-link"}}{{end}}{{if eq . "GOTRUE_MAILER_TEMPLATES_CONFIRMATION=http://auth-email-templates/magic-link-otp.html"}}{{println "confirmation"}}{{end}}{{if eq . "GOTRUE_MAILER_OTP_LENGTH=6"}}{{println "otp-length"}}{{end}}{{end}}' \
     "$AUTH_CONTAINER_ID" >"$actual"; then
     return 1
   fi
-  grep -Fxq "magic-link" "$actual" && \
-    grep -Fxq "confirmation" "$actual" && \
-    grep -Fxq "otp-length" "$actual" && \
-    [[ "$(wc -l <"$actual")" == "3" ]]
+  while IFS= read -r marker || [[ -n "$marker" ]]; do
+    [[ "$marker" =~ [^[:space:]] ]] && markers+=("$marker")
+  done <"$actual"
+  [[ "${#markers[@]}" == "3" ]] || return 1
+  for marker in "${markers[@]}"; do
+    case "$marker" in
+      magic-link) ((++magic_link_count)) ;;
+      confirmation) ((++confirmation_count)) ;;
+      otp-length) ((++otp_length_count)) ;;
+      *) return 1 ;;
+    esac
+  done
+  (( magic_link_count == 1 && confirmation_count == 1 && otp_length_count == 1 ))
 }
 
 validate_prior_auth_state_backup() {
