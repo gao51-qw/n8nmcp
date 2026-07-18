@@ -69,6 +69,11 @@ export function proxy(request: NextRequest) {
   }
 
   if (surface === "dashboard") {
+    if (pathname === "/login") {
+      const response = NextResponse.next();
+      response.headers.set("X-Robots-Tag", NOINDEX);
+      return response;
+    }
     if (!pathname.startsWith("/dashboard")) {
       return rewriteWithNoIndex(request, `/dashboard${pathname === "/" ? "" : pathname}`);
     }
