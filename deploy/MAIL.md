@@ -274,9 +274,9 @@ unexpected sender, or provider/auth warning blocks activation.
 
 Template rollback is independent of database, BillionMail, DNS, and app-image
 rollback. Use the exact `BACKUP_PATH` emitted by the installer; never guess a
-backup directory. Stop and remove only the current template service, restore
-the prior files (or their recorded absence), validate the restored Compose
-model, and recreate only the services present in that restored model:
+backup directory. Stop Auth first, then stop and remove the template service; recreate only the two affected services. Restore the prior files (or their
+recorded absence), validate the restored Compose model, and keep Auth stopped
+until any restored template service is ready:
 
 ```bash
 set -euo pipefail
@@ -327,12 +327,12 @@ fi
 SUPABASE_PROJECT="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' supabase-auth)"
 [[ "$SUPABASE_PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]]
 sudo docker stop supabase-auth
+test "$(sudo docker inspect --format '{{.State.Running}}' supabase-auth)" = false
 mapfile -t TEMPLATE_IDS < <(sudo docker ps -aq \
   --filter "label=com.docker.compose.project=$SUPABASE_PROJECT" \
   --filter "label=com.docker.compose.service=auth-email-templates")
 for TEMPLATE_ID in "${TEMPLATE_IDS[@]}"; do
-  sudo docker stop "$TEMPLATE_ID" >/dev/null || true
-  sudo docker rm "$TEMPLATE_ID" >/dev/null
+  sudo docker rm -f "$TEMPLATE_ID" >/dev/null
 done
 
 if test "$TEMPLATE_WAS_PRESENT" = 1; then

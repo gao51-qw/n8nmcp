@@ -48,17 +48,6 @@ validate_root_file_mode() {
   [[ "$(stat -c '%U:%G:%a' -- "$path")" == "root:root:$mode" ]] || die "Backup file permissions are invalid: $path"
 }
 
-validate_source_template() {
-  local path="$1"
-  local variables
-  variables="$(grep -Eo '{{[[:space:]]*\.[A-Za-z0-9_]+[[:space:]]*}}' "$path" || true)"
-  [[ "$variables" == "{{ .Token }}" ]] || die "Template must contain exactly one Token variable and no other template variables."
-  [[ "$(grep -Foc '{{ .Token }}' "$path")" == "1" ]] || die "Template must contain exactly one canonical Token variable."
-  if grep -Eiq '(\.ConfirmationURL|href[[:space:]]*=|src[[:space:]]*=|action[[:space:]]*=|https?://|<img\b|tracking|pixel)' "$path"; then
-    die "Template contains a forbidden URL, action, source, link, or tracking construct."
-  fi
-}
-
 wait_for_auth_healthy() {
   local attempts="${1:-120}"
   local status=""
@@ -72,6 +61,42 @@ wait_for_auth_healthy() {
   done
   printf 'Auth did not become healthy (last status: %s).\n' "${status:-unavailable}" >&2
   return 1
+}
+
+ensure_auth_stopped() {
+  local names_file="$BACKUP_DIR/auth-containers.list"
+  local state_file="$BACKUP_DIR/auth-running.state"
+  local running=""
+
+  if ! docker container ls -a --format '{{.Names}}' >"$names_file"; then
+    return 1
+  fi
+  if ! grep -Fxq "$AUTH_CONTAINER" "$names_file"; then
+    rm -f -- "$names_file" "$state_file"
+    return 0
+  fi
+  if ! docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER" >"$state_file"; then
+    return 1
+  fi
+  IFS= read -r running <"$state_file" || return 1
+  if [[ "$running" == "true" ]]; then
+    docker stop "$AUTH_CONTAINER" >/dev/null || return 1
+    if ! docker container ls -a --format '{{.Names}}' >"$names_file"; then
+      return 1
+    fi
+    if ! grep -Fxq "$AUTH_CONTAINER" "$names_file"; then
+      rm -f -- "$names_file" "$state_file"
+      return 0
+    fi
+    if ! docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER" >"$state_file"; then
+      return 1
+    fi
+    IFS= read -r running <"$state_file" || return 1
+  fi
+  if [[ "$running" != "false" ]]; then
+    return 1
+  fi
+  rm -f -- "$names_file" "$state_file"
 }
 
 verify_served_template() {
@@ -195,14 +220,17 @@ validate_secure_directory "$SUPABASE_ROOT"
 readonly SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly SOURCE_TEMPLATE="$SCRIPT_DIR/templates/magic-link-otp.html"
 readonly SOURCE_OVERRIDE="$SCRIPT_DIR/docker-compose.email-otp.yml"
+readonly TEMPLATE_VALIDATOR="$SCRIPT_DIR/validate-email-otp-template.sh"
 readonly BASE_COMPOSE="$SUPABASE_ROOT/docker-compose.yml"
 readonly AAPANEL_OVERRIDE="$SUPABASE_ROOT/overrides/docker-compose.aapanel.yml"
 readonly TARGET_OVERRIDE="$SUPABASE_ROOT/overrides/docker-compose.email-otp.yml"
 readonly TARGET_TEMPLATE="$SUPABASE_ROOT/templates/magic-link-otp.html"
 
 validate_exact_file "$SOURCE_TEMPLATE"
-validate_source_template "$SOURCE_TEMPLATE"
 validate_exact_file "$SOURCE_OVERRIDE"
+validate_exact_file "$TEMPLATE_VALIDATOR"
+source "$TEMPLATE_VALIDATOR"
+validate_email_otp_template "$SOURCE_TEMPLATE"
 validate_exact_file "$BASE_COMPOSE"
 validate_exact_file "$SUPABASE_ROOT/.env"
 validate_exact_file "$AAPANEL_OVERRIDE"
@@ -297,13 +325,12 @@ restore_backup() {
 
 stop_template_containers() {
   local ids_file="$BACKUP_DIR/template-containers.ids"
-  docker ps -q \
+  docker ps -aq \
     --filter "label=com.docker.compose.project=$SUPABASE_COMPOSE_PROJECT" \
     --filter "label=com.docker.compose.service=auth-email-templates" >"$ids_file" || return 1
   while IFS= read -r container_id; do
     [[ -n "$container_id" ]] || continue
-    docker stop "$container_id" >/dev/null || return 1
-    docker rm "$container_id" >/dev/null || return 1
+    docker rm -f "$container_id" >/dev/null || return 1
   done <"$ids_file"
   rm -f -- "$ids_file"
 }
@@ -314,8 +341,7 @@ rollback() {
 
   printf 'Rolling back the email OTP deployment from %s.\n' "$BACKUP_DIR" >&2
 
-  docker stop "$AUTH_CONTAINER" >/dev/null || true
-  "${OTP_COMPOSE_COMMAND[@]}" stop auth-email-templates >/dev/null 2>&1 || true
+  ensure_auth_stopped || return 1
   stop_template_containers || return 1
   restore_backup || return 1
 
@@ -371,6 +397,7 @@ trap 'on_error 130 "$LINENO"' INT
 trap 'on_error 143 "$LINENO"' TERM
 
 mutation_started=1
+ensure_auth_stopped
 ensure_secure_directory "$SUPABASE_ROOT/templates" 0755
 ensure_secure_directory "$SUPABASE_ROOT/overrides" 0755
 install -m 0644 -o root -g root -- "$SOURCE_TEMPLATE" "$TARGET_TEMPLATE"
@@ -392,6 +419,8 @@ rm -f -- \
   "$BACKUP_DIR/auth-template-configuration.check" \
   "$BACKUP_DIR/template-container.id" \
   "$BACKUP_DIR/template-container.state" \
-  "$BACKUP_DIR/template-containers.ids"
+  "$BACKUP_DIR/template-containers.ids" \
+  "$BACKUP_DIR/auth-containers.list" \
+  "$BACKUP_DIR/auth-running.state"
 printf 'Email OTP template installed successfully.\n'
 printf 'BACKUP_PATH=%s\n' "$BACKUP_DIR"

@@ -216,7 +216,8 @@ describe("dedicated mail identity", () => {
     const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
 
     expect(installer).toContain('"${OTP_COMPOSE_COMMAND[@]}" config --quiet');
-    expect(installer).toContain("validate_source_template");
+    expect(installer).toContain("validate_email_otp_template");
+    expect(installer).toContain('source "$TEMPLATE_VALIDATOR"');
     expect(installer).toContain("sha256sum");
     expectInOrder(installer, [
       '"${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth-email-templates',
@@ -260,8 +261,8 @@ describe("dedicated mail identity", () => {
     );
 
     expectInOrder(rollback, [
-      'docker stop "$AUTH_CONTAINER"',
-      "stop auth-email-templates",
+      "ensure_auth_stopped",
+      "stop_template_containers",
       '"${rollback_compose[@]}" config --quiet',
       "up -d --no-deps --force-recreate auth-email-templates",
       "wait_for_template_ready",
@@ -271,6 +272,38 @@ describe("dedicated mail identity", () => {
     expect(rollback).toMatch(
       /if ! "\$\{rollback_compose\[@\]\}" config --quiet; then\n\s+return 1/,
     );
+  });
+
+  it("confirms Auth is stopped before normal and rollback template mutation", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const deployment = installer.slice(
+      installer.indexOf("mutation_started=1"),
+      installer.indexOf("mutation_started=0", installer.indexOf("mutation_started=1")),
+    );
+    const rollback = installer.slice(
+      installer.indexOf("rollback() {"),
+      installer.indexOf("on_error() {"),
+    );
+
+    expect(installer).toContain("ensure_auth_stopped() {");
+    expect(installer).not.toContain('docker stop "$AUTH_CONTAINER" >/dev/null || true');
+    expectInOrder(deployment, [
+      "ensure_auth_stopped",
+      'install -m 0644 -o root -g root -- "$SOURCE_TEMPLATE" "$TARGET_TEMPLATE"',
+      "auth-email-templates",
+    ]);
+    expectInOrder(rollback, ["ensure_auth_stopped", "stop_template_containers", "restore_backup"]);
+  });
+
+  it("removes stopped template containers during rollback", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const cleanup = installer.slice(
+      installer.indexOf("stop_template_containers() {"),
+      installer.indexOf("rollback() {"),
+    );
+
+    expect(cleanup).toContain("docker ps -aq");
+    expect(cleanup).toContain('docker rm -f "$container_id"');
   });
 
   it("documents separate existing/new-user acceptance and polled rollback health", () => {
@@ -283,5 +316,8 @@ describe("dedicated mail identity", () => {
     expect(runbook).toContain("attempt <= 120");
     expect(runbook).toContain("template.metadata");
     expect(runbook).toContain("override.metadata");
+    expect(runbook).toContain(
+      "Stop Auth first, then stop and remove the template service; recreate only the two affected services",
+    );
   });
 });
