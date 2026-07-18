@@ -91,4 +91,15 @@ describe("Next.js architecture guard", () => {
       expect(env).toContain(key);
     }
   });
+
+  it("bakes browser-visible Supabase settings into production app images", () => {
+    const dockerfile = read("Dockerfile");
+    const workflow = read(".github/workflows/app-image.yml");
+
+    for (const key of ["NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"]) {
+      expect(dockerfile).toContain(`ARG ${key}`);
+      expect(dockerfile).toMatch(new RegExp(`\\b${key}=\\\\?\\$\\{${key}\\}`));
+      expect(workflow).toContain(`${key}=\${{ secrets.${key} }}`);
+    }
+  });
 });
