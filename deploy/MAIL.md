@@ -278,7 +278,9 @@ Template rollback is independent of database, BillionMail, DNS, and app-image
 rollback. Use the exact `BACKUP_PATH` emitted by the installer; never guess a
 backup directory. Stop Auth first, then stop and remove the template service; recreate only the two affected services. Restore the prior files (or their
 recorded absence), validate the restored Compose model, and keep Auth stopped
-until any restored template service is ready:
+until any restored template service is ready. The protected prior-state metadata
+also makes this block a half-install rescue: it binds the old Auth container in a
+pre-recreate failure and the replacement Auth container in a post-recreate failure.
 
 ```bash
 set -euo pipefail
@@ -286,6 +288,7 @@ SUPABASE_ROOT=/opt/n8nmcp-supabase
 BACKUP_DIR=/opt/n8nmcp-supabase/backups/email-otp/YYYYMMDDTHHMMSSZ_FROM_INSTALLER
 BACKUP_VALIDATOR="$BACKUP_DIR/validate-email-otp-template.sh"
 BACKUP_VALIDATOR_SHA256="$BACKUP_DIR/validate-email-otp-template.sh.sha256"
+PRIOR_AUTH_STATE="$BACKUP_DIR/auth-prior-state.metadata"
 
 sudo test "$(sudo realpath -e -- "$BACKUP_DIR")" = "$BACKUP_DIR"
 sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR")" = "root:root:700"
@@ -296,6 +299,28 @@ sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_VALIDATOR_SHA256")" = "root:roo
 EXPECTED_VALIDATOR_HASH="$(sudo cat "$BACKUP_VALIDATOR_SHA256")"
 [[ "$EXPECTED_VALIDATOR_HASH" =~ ^[a-f0-9]{64}$ ]]
 test "$(sudo sha256sum "$BACKUP_VALIDATOR" | awk '{print $1}')" = "$EXPECTED_VALIDATOR_HASH"
+sudo test -f "$PRIOR_AUTH_STATE"
+sudo test ! -L "$PRIOR_AUTH_STATE"
+sudo test "$(sudo stat -c '%U:%G:%a' -- "$PRIOR_AUTH_STATE")" = "root:root:600"
+mapfile -t PRIOR_STATE_LINES < <(sudo cat "$PRIOR_AUTH_STATE")
+test "${#PRIOR_STATE_LINES[@]}" = 7
+test "${PRIOR_STATE_LINES[0]}" = version=1
+PRIOR_AUTH_MODEL="${PRIOR_STATE_LINES[1]#model=}"
+PRIOR_AUTH_CONTAINER_ID="${PRIOR_STATE_LINES[2]#container_id=}"
+PRIOR_AUTH_PROJECT="${PRIOR_STATE_LINES[3]#project=}"
+PRIOR_AUTH_ROOT="${PRIOR_STATE_LINES[4]#root=}"
+PRIOR_AUTH_SERVICE="${PRIOR_STATE_LINES[5]#service=}"
+PRIOR_AUTH_CONFIG_FILES="${PRIOR_STATE_LINES[6]#config_files=}"
+test "${PRIOR_STATE_LINES[1]}" = "model=$PRIOR_AUTH_MODEL"
+test "${PRIOR_STATE_LINES[2]}" = "container_id=$PRIOR_AUTH_CONTAINER_ID"
+test "${PRIOR_STATE_LINES[3]}" = "project=$PRIOR_AUTH_PROJECT"
+test "${PRIOR_STATE_LINES[4]}" = "root=$PRIOR_AUTH_ROOT"
+test "${PRIOR_STATE_LINES[5]}" = "service=$PRIOR_AUTH_SERVICE"
+test "${PRIOR_STATE_LINES[6]}" = "config_files=$PRIOR_AUTH_CONFIG_FILES"
+[[ "$PRIOR_AUTH_CONTAINER_ID" =~ ^[a-f0-9]{64}$ ]]
+[[ "$PRIOR_AUTH_PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]]
+test "$PRIOR_AUTH_ROOT" = "$SUPABASE_ROOT"
+test "$PRIOR_AUTH_SERVICE" = auth
 cd -- "$SUPABASE_ROOT"
 
 # Validate the complete backup state before stopping or changing any service.
@@ -333,15 +358,43 @@ else
   exit 1
 fi
 
+if test "$PRIOR_AUTH_MODEL" = base-aapanel; then
+  test "$OVERRIDE_WAS_PRESENT" = 0
+  test "$PRIOR_AUTH_CONFIG_FILES" = "$SUPABASE_ROOT/docker-compose.yml,$SUPABASE_ROOT/overrides/docker-compose.aapanel.yml"
+elif test "$PRIOR_AUTH_MODEL" = base-aapanel-email-otp; then
+  test "$OVERRIDE_WAS_PRESENT" = 1
+  test "$PRIOR_AUTH_CONFIG_FILES" = "$SUPABASE_ROOT/docker-compose.yml,$SUPABASE_ROOT/overrides/docker-compose.aapanel.yml,$SUPABASE_ROOT/overrides/docker-compose.email-otp.yml"
+else
+  echo "Prior Auth model is invalid" >&2
+  exit 1
+fi
+
 # Mutation starts only after every backup ownership, mode, state, metadata, and
-# validator-integrity gate above has passed. Bind the named container to the
-# current three-file model before stopping Auth or restoring files.
-SUPABASE_PROJECT="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' supabase-auth)"
-[[ "$SUPABASE_PROJECT" =~ ^[A-Za-z0-9_.-]+$ ]]
-current=(sudo docker compose --project-name "$SUPABASE_PROJECT" -f docker-compose.yml -f overrides/docker-compose.aapanel.yml -f overrides/docker-compose.email-otp.yml)
+# validator-integrity gate above has passed. Bind either the exact prior Auth
+# container/model or an exact replacement three-file Auth before any mutation.
+SUPABASE_PROJECT="$PRIOR_AUTH_PROJECT"
+LIVE_PRIOR_AUTH_ID="$(sudo docker inspect --format '{{.Id}}' "$PRIOR_AUTH_CONTAINER_ID" 2>/dev/null || true)"
+NAMED_AUTH_CONTAINER_ID="$(sudo docker inspect --format '{{.Id}}' supabase-auth 2>/dev/null || true)"
+if test "$LIVE_PRIOR_AUTH_ID" = "$PRIOR_AUTH_CONTAINER_ID"; then
+  test "$NAMED_AUTH_CONTAINER_ID" = "$PRIOR_AUTH_CONTAINER_ID"
+  if test "$PRIOR_AUTH_MODEL" = base-aapanel; then
+    current=(sudo docker compose --project-name "$SUPABASE_PROJECT" -f docker-compose.yml -f overrides/docker-compose.aapanel.yml)
+  else
+    current=(sudo docker compose --project-name "$SUPABASE_PROJECT" -f docker-compose.yml -f overrides/docker-compose.aapanel.yml -f overrides/docker-compose.email-otp.yml)
+  fi
+  IFS=',' read -r -a EXPECTED_CURRENT_CONFIG_FILES <<<"$PRIOR_AUTH_CONFIG_FILES"
+  echo "Detected half-installed pre-recreate state; binding the exact prior Auth container." >&2
+elif test -n "$NAMED_AUTH_CONTAINER_ID" && test "$NAMED_AUTH_CONTAINER_ID" != "$PRIOR_AUTH_CONTAINER_ID"; then
+  current=(sudo docker compose --project-name "$SUPABASE_PROJECT" -f docker-compose.yml -f overrides/docker-compose.aapanel.yml -f overrides/docker-compose.email-otp.yml)
+  EXPECTED_CURRENT_CONFIG_FILES=("$SUPABASE_ROOT/docker-compose.yml" "$SUPABASE_ROOT/overrides/docker-compose.aapanel.yml" "$SUPABASE_ROOT/overrides/docker-compose.email-otp.yml")
+  echo "Detected half-installed post-recreate state; binding the exact replacement Auth container." >&2
+else
+  echo "Auth container state is ambiguous; refusing manual rollback" >&2
+  exit 1
+fi
 "${current[@]}" config --quiet
 COMPOSE_AUTH_ID="$("${current[@]}" ps -q auth)"
-AUTH_CONTAINER_ID="$(sudo docker inspect --format '{{.Id}}' supabase-auth)"
+AUTH_CONTAINER_ID="$NAMED_AUTH_CONTAINER_ID"
 test -n "$COMPOSE_AUTH_ID"
 test "$COMPOSE_AUTH_ID" = "$AUTH_CONTAINER_ID"
 test "$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$AUTH_CONTAINER_ID")" = "$SUPABASE_PROJECT"
@@ -350,10 +403,9 @@ test "$(sudo realpath -e -- "$AUTH_WORKING_DIR")" = "$SUPABASE_ROOT"
 test "$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.service"}}' "$AUTH_CONTAINER_ID")" = auth
 AUTH_CONFIG_FILES="$(sudo docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$AUTH_CONTAINER_ID")"
 IFS=',' read -r -a ACTUAL_CONFIG_FILES <<<"$AUTH_CONFIG_FILES"
-EXPECTED_CONFIG_FILES=("$SUPABASE_ROOT/docker-compose.yml" "$SUPABASE_ROOT/overrides/docker-compose.aapanel.yml" "$SUPABASE_ROOT/overrides/docker-compose.email-otp.yml")
-test "${#ACTUAL_CONFIG_FILES[@]}" = "${#EXPECTED_CONFIG_FILES[@]}"
-for CONFIG_INDEX in "${!EXPECTED_CONFIG_FILES[@]}"; do
-  test "$(sudo realpath -e -- "${ACTUAL_CONFIG_FILES[$CONFIG_INDEX]}")" = "${EXPECTED_CONFIG_FILES[$CONFIG_INDEX]}"
+test "${#ACTUAL_CONFIG_FILES[@]}" = "${#EXPECTED_CURRENT_CONFIG_FILES[@]}"
+for CONFIG_INDEX in "${!EXPECTED_CURRENT_CONFIG_FILES[@]}"; do
+  test "$(sudo realpath -e -- "${ACTUAL_CONFIG_FILES[$CONFIG_INDEX]}")" = "${EXPECTED_CURRENT_CONFIG_FILES[$CONFIG_INDEX]}"
 done
 sudo docker stop "$AUTH_CONTAINER_ID"
 test "$(sudo docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER_ID")" = false

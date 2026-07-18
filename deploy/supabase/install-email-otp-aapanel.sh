@@ -106,7 +106,7 @@ bind_auth_container() {
 
   compose_auth_id="$("${compose_command[@]}" ps -aq auth)" || return 1
   named_auth_id="$(docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
-  [[ -n "$compose_auth_id" && -n "$named_auth_id" ]] || return 1
+  [[ "$compose_auth_id" =~ ^[a-f0-9]{64}$ && "$named_auth_id" =~ ^[a-f0-9]{64}$ ]] || return 1
   [[ "$compose_auth_id" == "$named_auth_id" ]] || return 1
 
   auth_project="$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$named_auth_id")" || return 1
@@ -202,6 +202,20 @@ verify_auth_template_configuration() {
     [[ "$(wc -l <"$actual")" == "3" ]]
 }
 
+validate_prior_auth_state_backup() {
+  local state_file="$BACKUP_DIR/auth-prior-state.metadata"
+
+  validate_root_file_mode "$state_file" 600
+  [[ "$(wc -l <"$state_file")" == "7" ]] || return 1
+  grep -Fxq "version=1" "$state_file" && \
+    grep -Fxq "model=$PRIOR_AUTH_MODEL" "$state_file" && \
+    grep -Fxq "container_id=$PRIOR_AUTH_CONTAINER_ID" "$state_file" && \
+    grep -Fxq "project=$SUPABASE_COMPOSE_PROJECT" "$state_file" && \
+    grep -Fxq "root=$SUPABASE_ROOT" "$state_file" && \
+    grep -Fxq "service=auth" "$state_file" && \
+    grep -Fxq "config_files=$PRIOR_AUTH_CONFIG_FILES" "$state_file"
+}
+
 validate_backup() {
   [[ "$(stat -c '%U:%G:%a' -- "$BACKUP_DIR")" == "root:root:700" ]] || die "Backup directory permissions are invalid."
 
@@ -228,6 +242,7 @@ validate_backup() {
   fi
 
   validate_backup_validator
+  validate_prior_auth_state_backup
 }
 
 validate_backup_validator() {
@@ -325,10 +340,15 @@ named_auth_id="$(docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" 2>/dev/null
 if [[ -f "$TARGET_OVERRIDE" ]]; then
   bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}" || \
     die "Auth container labels do not match the current three-file Supabase model."
+  PRIOR_AUTH_MODEL="base-aapanel-email-otp"
+  PRIOR_AUTH_CONFIG_FILES="$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE"
 else
   bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE" "${BASE_COMPOSE_COMMAND[@]}" || \
     die "Auth container labels do not match the current two-file Supabase model."
+  PRIOR_AUTH_MODEL="base-aapanel"
+  PRIOR_AUTH_CONFIG_FILES="$BASE_COMPOSE,$AAPANEL_OVERRIDE"
 fi
+PRIOR_AUTH_CONTAINER_ID="$AUTH_CONTAINER_ID"
 auth_running="$(docker inspect --format '{{.State.Running}}' "$AUTH_CONTAINER_ID" 2>/dev/null || true)"
 [[ "$auth_running" == "true" ]] || die "The validated $AUTH_CONTAINER container is not running."
 
@@ -340,11 +360,23 @@ BACKUP_DIR="$SUPABASE_ROOT/backups/email-otp/$timestamp"
 install -d -m 0700 -o root -g root -- "$BACKUP_DIR"
 readonly BACKUP_VALIDATOR="$BACKUP_DIR/validate-email-otp-template.sh"
 readonly BACKUP_VALIDATOR_SHA256="$BACKUP_DIR/validate-email-otp-template.sh.sha256"
+readonly PRIOR_AUTH_STATE_BACKUP="$BACKUP_DIR/auth-prior-state.metadata"
 install -m 0600 -o root -g root -- "$TEMPLATE_VALIDATOR" "$BACKUP_VALIDATOR"
 cmp -s -- "$TEMPLATE_VALIDATOR" "$BACKUP_VALIDATOR" || die "Validator backup verification failed."
 sha256sum "$BACKUP_VALIDATOR" | awk '{print $1}' >"$BACKUP_VALIDATOR_SHA256"
 chmod 0600 -- "$BACKUP_VALIDATOR_SHA256"
 chown root:root -- "$BACKUP_VALIDATOR_SHA256"
+{
+  printf 'version=1\n'
+  printf 'model=%s\n' "$PRIOR_AUTH_MODEL"
+  printf 'container_id=%s\n' "$PRIOR_AUTH_CONTAINER_ID"
+  printf 'project=%s\n' "$SUPABASE_COMPOSE_PROJECT"
+  printf 'root=%s\n' "$SUPABASE_ROOT"
+  printf 'service=auth\n'
+  printf 'config_files=%s\n' "$PRIOR_AUTH_CONFIG_FILES"
+} >"$PRIOR_AUTH_STATE_BACKUP"
+chmod 0600 -- "$PRIOR_AUTH_STATE_BACKUP"
+chown root:root -- "$PRIOR_AUTH_STATE_BACKUP"
 
 had_template=0
 had_override=0
@@ -420,19 +452,32 @@ restored_remote_otp_enabled() {
 rollback() {
   local -a rollback_compose
   local rollback_config_files=""
+  local live_prior_auth_id=""
+  local named_auth_id=""
   local has_template_service=0
   local remote_otp_enabled=0
 
   printf 'Rolling back the email OTP deployment from %s.\n' "$BACKUP_DIR" >&2
 
-  if docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" >/dev/null 2>&1; then
-    if [[ -f "$TARGET_OVERRIDE" ]]; then
-      bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}" || return 1
+  live_prior_auth_id="$(docker inspect --format '{{.Id}}' "$PRIOR_AUTH_CONTAINER_ID" 2>/dev/null || true)"
+  named_auth_id="$(docker inspect --format '{{.Id}}' "$AUTH_CONTAINER" 2>/dev/null || true)"
+  if [[ "$live_prior_auth_id" == "$PRIOR_AUTH_CONTAINER_ID" ]]; then
+    [[ "$named_auth_id" == "$PRIOR_AUTH_CONTAINER_ID" ]] || return 1
+    if [[ "$PRIOR_AUTH_MODEL" == "base-aapanel" ]]; then
+      bind_auth_container "$PRIOR_AUTH_CONFIG_FILES" "${BASE_COMPOSE_COMMAND[@]}" || return 1
+    elif [[ "$PRIOR_AUTH_MODEL" == "base-aapanel-email-otp" ]]; then
+      bind_auth_container "$PRIOR_AUTH_CONFIG_FILES" "${OTP_COMPOSE_COMMAND[@]}" || return 1
     else
-      bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE" "${BASE_COMPOSE_COMMAND[@]}" || return 1
+      return 1
     fi
+    [[ "$AUTH_CONTAINER_ID" == "$PRIOR_AUTH_CONTAINER_ID" ]] || return 1
+  elif (( auth_recreate_started )); then
+    [[ "$named_auth_id" =~ ^[a-f0-9]{64}$ && "$named_auth_id" != "$PRIOR_AUTH_CONTAINER_ID" ]] || return 1
+    bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}" || return 1
+    [[ "$AUTH_CONTAINER_ID" != "$PRIOR_AUTH_CONTAINER_ID" ]] || return 1
   else
-    AUTH_CONTAINER_ID=""
+    printf 'Auth container state is ambiguous; refusing rollback.\n' >&2
+    return 1
   fi
   ensure_auth_stopped || return 1
   stop_template_containers || return 1
@@ -506,6 +551,7 @@ trap 'on_error 130 "$LINENO"' INT
 trap 'on_error 143 "$LINENO"' TERM
 
 mutation_started=1
+auth_recreate_started=0
 ensure_auth_stopped
 ensure_secure_directory "$SUPABASE_ROOT/templates" 0755
 ensure_secure_directory "$SUPABASE_ROOT/overrides" 0755
@@ -515,6 +561,7 @@ install -m 0644 -o root -g root -- "$SOURCE_OVERRIDE" "$TARGET_OVERRIDE"
 "${OTP_COMPOSE_COMMAND[@]}" config --quiet
 "${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth-email-templates
 wait_for_template_ready "$SOURCE_TEMPLATE" 120 require-health "${OTP_COMPOSE_COMMAND[@]}"
+auth_recreate_started=1
 "${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth
 bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}"
 wait_for_auth_healthy 120

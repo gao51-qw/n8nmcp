@@ -254,6 +254,53 @@ describe("dedicated mail identity", () => {
     }
   });
 
+  it("preserves and rebinds the prior two-file Auth model on a pre-recreate rollback", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const rollback = installer.slice(
+      installer.indexOf("rollback() {"),
+      installer.indexOf("on_error() {"),
+    );
+
+    expect(installer).toContain('PRIOR_AUTH_CONTAINER_ID="$AUTH_CONTAINER_ID"');
+    expect(installer).toContain('PRIOR_AUTH_MODEL="base-aapanel"');
+    expect(installer).toContain('PRIOR_AUTH_CONFIG_FILES="$BASE_COMPOSE,$AAPANEL_OVERRIDE"');
+    expect(installer).toContain('"$BACKUP_DIR/auth-prior-state.metadata"');
+    expect(installer).toContain("validate_prior_auth_state_backup");
+    expectInOrder(rollback, [
+      "docker inspect --format '{{.Id}}' \"$PRIOR_AUTH_CONTAINER_ID\"",
+      '[[ "$live_prior_auth_id" == "$PRIOR_AUTH_CONTAINER_ID" ]]',
+      'bind_auth_container "$PRIOR_AUTH_CONFIG_FILES" "${BASE_COMPOSE_COMMAND[@]}"',
+      '[[ "$AUTH_CONTAINER_ID" == "$PRIOR_AUTH_CONTAINER_ID" ]]',
+      "ensure_auth_stopped",
+      "restore_backup",
+    ]);
+    expect(rollback).not.toMatch(
+      /if \[\[ -f "\$TARGET_OVERRIDE" \]\]; then[\s\S]*?bind_auth_container[\s\S]*?ensure_auth_stopped/,
+    );
+  });
+
+  it("rebinds the replacement three-file Auth only after recreation has started", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+    const rollback = installer.slice(
+      installer.indexOf("rollback() {"),
+      installer.indexOf("on_error() {"),
+    );
+    const deployment = installer.slice(installer.indexOf("mutation_started=1"));
+
+    expectInOrder(deployment, [
+      "auth_recreate_started=0",
+      'wait_for_template_ready "$SOURCE_TEMPLATE" 120 require-health',
+      "auth_recreate_started=1",
+      '"${OTP_COMPOSE_COMMAND[@]}" up -d --no-deps --force-recreate auth',
+    ]);
+    expect(rollback).toContain("elif (( auth_recreate_started )); then");
+    expect(rollback).toContain(
+      'bind_auth_container "$BASE_COMPOSE,$AAPANEL_OVERRIDE,$TARGET_OVERRIDE" "${OTP_COMPOSE_COMMAND[@]}"',
+    );
+    expect(rollback).toContain('[[ "$AUTH_CONTAINER_ID" != "$PRIOR_AUTH_CONTAINER_ID" ]]');
+    expect(rollback).toContain("Auth container state is ambiguous; refusing rollback");
+  });
+
   it("backs up and authenticates the validator used by automatic rollback", () => {
     const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
     const rollback = installer.slice(
@@ -426,6 +473,26 @@ describe("dedicated mail identity", () => {
     expect(manualRollback).toContain(
       "sudo docker inspect --format '{{.State.Running}}' \"$AUTH_CONTAINER_ID\"",
     );
+  });
+
+  it("documents prior-state-driven rescue for pre- and post-recreate failures", () => {
+    const runbook = read("deploy/MAIL.md");
+    const manualRollback = runbook.slice(runbook.indexOf("#### Independent OTP template rollback"));
+
+    expect(manualRollback).toContain('PRIOR_AUTH_STATE="$BACKUP_DIR/auth-prior-state.metadata"');
+    expect(manualRollback).toContain('PRIOR_AUTH_MODEL="${PRIOR_STATE_LINES[1]#model=}"');
+    expect(manualRollback).toContain('test "$PRIOR_AUTH_ROOT" = "$SUPABASE_ROOT"');
+    expect(manualRollback).toContain('test "$PRIOR_AUTH_SERVICE" = auth');
+    expect(manualRollback).toContain(
+      'if test "$LIVE_PRIOR_AUTH_ID" = "$PRIOR_AUTH_CONTAINER_ID"; then',
+    );
+    expect(manualRollback).toContain('if test "$PRIOR_AUTH_MODEL" = base-aapanel; then');
+    expect(manualRollback).toContain(
+      'elif test -n "$NAMED_AUTH_CONTAINER_ID" && test "$NAMED_AUTH_CONTAINER_ID" != "$PRIOR_AUTH_CONTAINER_ID"; then',
+    );
+    expect(manualRollback).toContain("half-installed pre-recreate state");
+    expect(manualRollback).toContain("half-installed post-recreate state");
+    expect(manualRollback).toContain("Auth container state is ambiguous; refusing manual rollback");
   });
 
   it("accurately describes Compose env interpolation without exposing values", () => {
