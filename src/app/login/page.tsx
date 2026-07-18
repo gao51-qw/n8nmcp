@@ -47,10 +47,16 @@ function LoginForm() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const normalizedEmail = email.trim().toLowerCase();
+
+    if (normalizedEmail === submittedEmail && resendSeconds > 0) {
+      setError(`You can request another code in ${resendSeconds}s.`);
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
 
-    const normalizedEmail = email.trim().toLowerCase();
     const { error: sendError } = await supabase.auth.signInWithOtp({
       email: normalizedEmail,
       options: { shouldCreateUser: true },
@@ -119,7 +125,6 @@ function LoginForm() {
     setStep("email");
     setCode("");
     setError(null);
-    setResendSeconds(0);
   }
 
   return (

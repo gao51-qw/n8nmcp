@@ -79,9 +79,14 @@ describe("email OTP login", () => {
   }
 
   async function moveToCodeStep(view: HTMLDivElement) {
-    await setInputValue(view.querySelector('input[type="email"]') as HTMLInputElement, " New.User@Example.com ");
+    await setInputValue(
+      view.querySelector('input[type="email"]') as HTMLInputElement,
+      " New.User@Example.com ",
+    );
     await act(async () => {
-      view.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
   }
 
@@ -105,7 +110,9 @@ describe("email OTP login", () => {
     expect(codeInput).toBeInstanceOf(HTMLInputElement);
     await setInputValue(codeInput as HTMLInputElement, "123456");
     await act(async () => {
-      view.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
     expect(mocks.verifyOtp).toHaveBeenCalledWith({
@@ -132,7 +139,10 @@ describe("email OTP login", () => {
   });
 
   it("keeps code entry visible and reports an invalid OTP", async () => {
-    mocks.verifyOtp.mockResolvedValueOnce({ data: {}, error: { message: "Invalid verification code" } });
+    mocks.verifyOtp.mockResolvedValueOnce({
+      data: {},
+      error: { message: "Invalid verification code" },
+    });
     const view = await renderPage();
     await moveToCodeStep(view);
     const codeInput = view.querySelector('input[autocomplete="one-time-code"]');
@@ -140,11 +150,15 @@ describe("email OTP login", () => {
     expect(codeInput).toBeInstanceOf(HTMLInputElement);
     await setInputValue(codeInput as HTMLInputElement, "123456");
     await act(async () => {
-      view.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
 
     expect(view.textContent).toContain("Enter verification code");
-    expect(view.querySelector('[role="alert"]')?.textContent).toContain("Invalid verification code");
+    expect(view.querySelector('[role="alert"]')?.textContent).toContain(
+      "Invalid verification code",
+    );
   });
 
   it("enables resend after 60 seconds and restarts the cooldown", async () => {
@@ -178,14 +192,19 @@ describe("email OTP login", () => {
   });
 
   it("changes email and clears the OTP error", async () => {
-    mocks.verifyOtp.mockResolvedValueOnce({ data: {}, error: { message: "Invalid verification code" } });
+    mocks.verifyOtp.mockResolvedValueOnce({
+      data: {},
+      error: { message: "Invalid verification code" },
+    });
     const view = await renderPage();
     await moveToCodeStep(view);
     const codeInput = view.querySelector('input[autocomplete="one-time-code"]') as HTMLInputElement;
 
     await setInputValue(codeInput, "123456");
     await act(async () => {
-      view.querySelector("form")?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await act(async () => {
       Array.from(view.querySelectorAll('button[type="button"]'))
@@ -196,5 +215,35 @@ describe("email OTP login", () => {
     expect(view.querySelector('input[type="email"]')).toBeInstanceOf(HTMLInputElement);
     expect(view.querySelector('input[autocomplete="one-time-code"]')).toBeNull();
     expect(view.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it("keeps the original email's cooldown after changing email", async () => {
+    vi.useFakeTimers();
+    const view = await renderPage();
+    await moveToCodeStep(view);
+
+    await act(async () => {
+      Array.from(view.querySelectorAll('button[type="button"]'))
+        .find((button) => button.textContent?.includes("Change email"))
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await act(async () => {
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(mocks.signInWithOtp).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    await act(async () => {
+      view
+        .querySelector("form")
+        ?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(mocks.signInWithOtp).toHaveBeenCalledTimes(2);
   });
 });
