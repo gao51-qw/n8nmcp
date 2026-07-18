@@ -217,7 +217,7 @@ describe("email OTP login", () => {
     expect(view.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("keeps the original email's cooldown after changing email", async () => {
+  it("keeps the cooldown active after changing to a different email", async () => {
     vi.useFakeTimers();
     const view = await renderPage();
     await moveToCodeStep(view);
@@ -227,6 +227,10 @@ describe("email OTP login", () => {
         .find((button) => button.textContent?.includes("Change email"))
         ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     });
+    await setInputValue(
+      view.querySelector('input[type="email"]') as HTMLInputElement,
+      " Other.User@Example.com ",
+    );
     await act(async () => {
       view
         .querySelector("form")
@@ -245,5 +249,9 @@ describe("email OTP login", () => {
     });
 
     expect(mocks.signInWithOtp).toHaveBeenCalledTimes(2);
+    expect(mocks.signInWithOtp).toHaveBeenLastCalledWith({
+      email: "other.user@example.com",
+      options: { shouldCreateUser: true },
+    });
   });
 });

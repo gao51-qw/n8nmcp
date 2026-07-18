@@ -49,7 +49,7 @@ function LoginForm() {
     event.preventDefault();
     const normalizedEmail = email.trim().toLowerCase();
 
-    if (normalizedEmail === submittedEmail && resendSeconds > 0) {
+    if (resendSeconds > 0) {
       setError(`You can request another code in ${resendSeconds}s.`);
       return;
     }
