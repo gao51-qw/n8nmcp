@@ -52,5 +52,7 @@ jobs:
             APP_BUILT_AT=${{ steps.built.outputs.at }}
             APP_GITHUB_REPO=${{ github.repository }}
             APP_IMAGE_TAG=${{ github.sha }}
+            NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
