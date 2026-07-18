@@ -150,4 +150,27 @@ describe("dedicated mail identity", () => {
 
     expect(read("deploy/README.md")).toContain("[Dedicated mail domain](./MAIL.md)");
   });
+
+  it("versions an OTP-only Supabase Auth mail template", () => {
+    const otpTemplate = read("deploy/supabase/templates/magic-link-otp.html");
+
+    expect(otpTemplate).toContain("{{ .Token }}");
+    expect(otpTemplate).not.toContain(".ConfirmationURL");
+    expect(otpTemplate).not.toMatch(/href\s*=/i);
+  });
+
+  it("serves the OTP template to Supabase Auth on its private network", () => {
+    const otpCompose = read("deploy/supabase/docker-compose.email-otp.yml");
+
+    expect(otpCompose).toContain("GOTRUE_MAILER_TEMPLATES_MAGIC_LINK");
+    expect(otpCompose).toContain("http://auth-email-templates/magic-link-otp.html");
+  });
+
+  it("installs the OTP mail override with validation and rollback", () => {
+    const installer = read("deploy/supabase/install-email-otp-aapanel.sh");
+
+    expect(installer).toContain('"${OTP_COMPOSE_COMMAND[@]}" config --quiet');
+    expect(installer).toContain("docker inspect");
+    expect(installer).toContain("rollback");
+  });
 });

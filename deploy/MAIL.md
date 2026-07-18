@@ -205,6 +205,110 @@ secret manager; it is intentionally absent here. Require implicit TLS for port
 465. Restart only the Supabase Auth service, inspect its logs for SMTP or TLS
 errors, and leave sign-up mail disabled until the acceptance gate passes.
 
+### Install the versioned OTP-only Auth template
+
+After the SMTP settings above are healthy, install the repository-owned OTP
+template from the application checkout. The installer accepts only an absolute,
+resolved Supabase root, makes a root-only timestamped backup, validates the
+three-file Compose model, and recreates only `auth-email-templates` and `auth`.
+Run this exact command:
+
+```bash
+sudo bash /opt/n8nmcp-app/deploy/supabase/install-email-otp-aapanel.sh /opt/n8nmcp-supabase
+```
+
+Keep the reported `BACKUP_PATH` in the restricted change log. The installer
+rolls back automatically if Compose validation, service recreation, Auth
+health, or the configured template URL check fails. It does not read or print
+the Supabase `.env` values.
+
+Confirm Auth health without dumping its environment:
+
+```bash
+sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' supabase-auth
+```
+
+The only acceptable result is `healthy`. Confirm the exact template setting
+without printing any other environment values:
+
+```bash
+sudo docker inspect --format '{{range .Config.Env}}{{if eq . "GOTRUE_MAILER_TEMPLATES_MAGIC_LINK=http://auth-email-templates/magic-link-otp.html"}}{{println "configured"}}{{end}}{{end}}' supabase-auth
+```
+
+The only acceptable result is `configured`.
+
+#### Controlled real-mail acceptance test
+
+Use a dedicated external test mailbox and a private browser session. Request
+one Supabase email sign-in or sign-up code through the production UI. Confirm
+that the message comes from `server@n8nworkflow.com`, contains the visible
+six-digit code, and contains no sign-in link, URL, or tracking image. Enter the
+code only into the production verification form and confirm the intended
+session is created. End that session, open a fresh private session, and submit
+the same code again: the replay must be rejected. Also request a new code and
+confirm it expires according to the configured Auth policy.
+
+Record only the test time, recipient domain, provider message ID, and pass/fail
+result. The operator must never paste a real OTP into logs, shell commands,
+screenshots, chat, or issue trackers. A delivered link, successful OTP replay,
+unexpected sender, or provider/auth warning blocks activation.
+
+#### Independent OTP template rollback
+
+Template rollback is independent of database, BillionMail, DNS, and app-image
+rollback. Use the exact `BACKUP_PATH` emitted by the installer; never guess a
+backup directory. Stop and remove only the current template service, restore
+the prior files (or their recorded absence), validate the restored Compose
+model, and recreate only the services present in that restored model:
+
+```bash
+set -euo pipefail
+SUPABASE_ROOT=/opt/n8nmcp-supabase
+BACKUP_DIR=/opt/n8nmcp-supabase/backups/email-otp/YYYYMMDDTHHMMSSZ_FROM_INSTALLER
+
+sudo test "$(sudo realpath -e -- "$BACKUP_DIR")" = "$BACKUP_DIR"
+sudo test "$(sudo stat -c '%U:%G:%a' -- "$BACKUP_DIR")" = "root:root:700"
+cd -- "$SUPABASE_ROOT"
+
+current=(sudo docker compose -f docker-compose.yml -f overrides/docker-compose.aapanel.yml -f overrides/docker-compose.email-otp.yml)
+"${current[@]}" stop auth-email-templates || true
+"${current[@]}" rm -sf auth-email-templates || true
+
+if sudo test -f "$BACKUP_DIR/magic-link-otp.html"; then
+  sudo install -m 0644 -o root -g root -- "$BACKUP_DIR/magic-link-otp.html" templates/magic-link-otp.html
+elif sudo test -f "$BACKUP_DIR/template.absent"; then
+  sudo rm -f -- templates/magic-link-otp.html
+else
+  echo "Template backup state is incomplete" >&2
+  exit 1
+fi
+
+if sudo test -f "$BACKUP_DIR/docker-compose.email-otp.yml"; then
+  sudo install -m 0644 -o root -g root -- "$BACKUP_DIR/docker-compose.email-otp.yml" overrides/docker-compose.email-otp.yml
+elif sudo test -f "$BACKUP_DIR/override.absent"; then
+  sudo rm -f -- overrides/docker-compose.email-otp.yml
+else
+  echo "Override backup state is incomplete" >&2
+  exit 1
+fi
+
+restored=(sudo docker compose -f docker-compose.yml -f overrides/docker-compose.aapanel.yml)
+if sudo test -f overrides/docker-compose.email-otp.yml; then
+  restored+=(-f overrides/docker-compose.email-otp.yml)
+fi
+"${restored[@]}" config --quiet
+services=(auth)
+if "${restored[@]}" config --services | grep -Fxq auth-email-templates; then
+  services=(auth-email-templates auth)
+fi
+"${restored[@]}" up -d --no-deps --force-recreate "${services[@]}"
+sudo docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' supabase-auth
+```
+
+The last command must report `healthy`; otherwise keep production activation
+blocked and investigate the restored Auth configuration. Do not roll back the
+database or restart the full Supabase stack for this template-only change.
+
 ## 5. Configure the app runtime
 
 In `/opt/n8nmcp-app/deploy/.env.app`, retain the pinned public and support sender
@@ -234,9 +338,11 @@ Do not enable production traffic until all of these checks pass:
    visible From address is `server@n8nworkflow.com`, SPF is PASS, DKIM is PASS,
    DMARC is PASS, and the message is not an open-relay artifact.
    Resend logs must prove that the direct BillionMail submission used the intended relay and port (2465 or 2587).
-4. Trigger both a Supabase Auth confirmation/recovery message and an app support
-   notification to an external Gmail mailbox. Confirm delivery, sender display,
-   links, reply behavior, and provider logs. Check both inbox and spam.
+4. Trigger a Supabase Auth OTP message and an app support notification to an
+   external Gmail mailbox. For Auth, confirm the code-only content and reject
+   any message containing a link or URL. For the app notification, confirm its
+   expected links and reply behavior. Confirm delivery, sender display, and
+   provider logs for both messages, checking both inbox and spam.
 5. Send a reply from Gmail and confirm the operational mailbox receives it.
    Confirm expected bounces are visible to operators and no secret appears in
    application, Supabase Auth, BillionMail, or shell logs.

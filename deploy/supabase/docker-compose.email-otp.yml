@@ -1,0 +1,18 @@
+services:
+  auth-email-templates:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    volumes:
+      - ./templates/magic-link-otp.html:/usr/share/caddy/magic-link-otp.html:ro
+    networks:
+      - default
+
+  auth:
+    depends_on:
+      auth-email-templates:
+        condition: service_started
+    environment:
+      GOTRUE_DISABLE_SIGNUP: "false"
+      GOTRUE_EXTERNAL_EMAIL_ENABLED: "true"
+      GOTRUE_MAILER_TEMPLATES_MAGIC_LINK: http://auth-email-templates/magic-link-otp.html
+      GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: Your n8n-mcp verification code
