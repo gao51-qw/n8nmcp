@@ -19,7 +19,8 @@ const es: Dict = {
     language: "Idioma",
   },
   footer: {
-    tagline: "Pasarela MCP gestionada para n8n. Conecta tus flujos a cualquier cliente de IA en segundos.",
+    tagline:
+      "Pasarela MCP gestionada para n8n. Conecta tus flujos a cualquier cliente de IA en segundos.",
     sections: { product: "Producto", resources: "Recursos", legal: "Legal" },
     links: {
       pricing: "Precios",
@@ -69,7 +70,8 @@ const es: Dict = {
     twoWays: {
       eyebrow: "Elige tu vía",
       title: "Dos formas de usar n8n-mcp",
-      subtitle: "Usa nuestro Chat Agent para construir flujos al instante o conecta tus herramientas favoritas vía MCP para tener control total.",
+      subtitle:
+        "Usa nuestro Chat Agent para construir flujos al instante o conecta tus herramientas favoritas vía MCP para tener control total.",
       poweredByPrefix: "Sobre el servidor de conocimiento open source",
       poweredBySuffix: ", más una pasarela en tiempo real — no es un fork, es un complemento.",
       chat: {
@@ -77,7 +79,8 @@ const es: Dict = {
         eyebrow: "Recomendado",
         title: "Chat Agent",
         body: "Un agente de IA completo que construye, valida y despliega flujos de n8n listos para producción a partir de un único prompt. Sin configuración ni curva de aprendizaje.",
-        example: '"Envíame un resumen en Slack de los eventos de Google Calendar cada mañana a las 8"',
+        example:
+          '"Envíame un resumen en Slack de los eventos de Google Calendar cada mañana a las 8"',
         cta: "Probar Chat Agent",
       },
       mcp: {
@@ -94,17 +97,38 @@ const es: Dict = {
     },
     features: {
       items: [
-        { title: "MCP universal", body: "Servidor MCP por HTTP streamable compatible con todos los grandes clientes de IA." },
-        { title: "Todos tus flujos", body: "Lista, ejecuta, depura e inspecciona cada flujo de tu instancia de n8n." },
-        { title: "Cifrado en reposo", body: "Tu API key de n8n se cifra con AES-256-GCM antes de tocar la base de datos." },
-        { title: "Latencia subsegundo", body: "Pasarela en el edge con enrutado por herramienta para llamadas rápidas." },
-        { title: "Protocolo abierto", body: "Basado en la especificación oficial de MCP — sin lock-in." },
-        { title: "Multi-instancia", body: "Conecta tantas instancias de n8n como quieras desde una sola cuenta." },
+        {
+          title: "MCP universal",
+          body: "Servidor MCP por HTTP streamable compatible con todos los grandes clientes de IA.",
+        },
+        {
+          title: "Todos tus flujos",
+          body: "Lista, ejecuta, depura e inspecciona cada flujo de tu instancia de n8n.",
+        },
+        {
+          title: "Cifrado en reposo",
+          body: "Tu API key de n8n se cifra con AES-256-GCM antes de tocar la base de datos.",
+        },
+        {
+          title: "Latencia subsegundo",
+          body: "Pasarela en el edge con enrutado por herramienta para llamadas rápidas.",
+        },
+        {
+          title: "Protocolo abierto",
+          body: "Basado en la especificación oficial de MCP — sin lock-in.",
+        },
+        {
+          title: "Multi-instancia",
+          body: "Conecta tantas instancias de n8n como quieras desde una sola cuenta.",
+        },
       ],
       notSame: "No es lo mismo que:",
-      zapierTip: "Zapier ofrece MCP para sus Zaps. Nosotros ofrecemos MCP para tu n8n existente — autoalojado, sin lock-in.",
-      pipedreamTip: "Ellos exponen herramientas a nivel de conector (una por endpoint). Nosotros exponemos herramientas a nivel de flujo — tu propia lógica de n8n, reutilizada.",
-      n8nCloudTip: "Solo sirve workspaces de n8n Cloud. Nosotros funcionamos con autoalojado, Cloud y multi-instancia en una sola cuenta.",
+      zapierTip:
+        "Zapier ofrece MCP para sus Zaps. Nosotros ofrecemos MCP para tu n8n existente — autoalojado, sin lock-in.",
+      pipedreamTip:
+        "Ellos exponen herramientas a nivel de conector (una por endpoint). Nosotros exponemos herramientas a nivel de flujo — tu propia lógica de n8n, reutilizada.",
+      n8nCloudTip:
+        "Solo sirve workspaces de n8n Cloud. Nosotros funcionamos con autoalojado, Cloud y multi-instancia en una sola cuenta.",
     },
     pricing: {
       eyebrow: "Precios sencillos",
@@ -162,28 +186,55 @@ const es: Dict = {
       headers: { capability: "Capacidad", diy: "Nodo MCP DIY", gateway: "Pasarela n8n-mcp" },
       mobile: { diy: "DIY", gateway: "Pasarela" },
       rows: [
-        { label: "Despliegue", diy: "Configura el nodo MCP, expón una URL y manténla viva", gateway: "Una URL gestionada, al instante — funciona con cualquier instancia" },
-        { label: "Credenciales", diy: "Tu API key de n8n entregada a cada cliente de IA", gateway: "Cifrada con AES-256-GCM en reposo, solo la pasarela la ve" },
-        { label: "Multi-cliente", diy: "Reconfigurar auth y URL por cada cliente", gateway: "Una URL para Claude, ChatGPT, Cursor, Windsurf…" },
-        { label: "Observabilidad", diy: "Bucear en los logs de ejecución de n8n", gateway: "Logs por llamada, cuotas y analítica de uso" },
+        {
+          label: "Despliegue",
+          diy: "Configura el nodo MCP, expón una URL y manténla viva",
+          gateway: "Una URL gestionada, al instante — funciona con cualquier instancia",
+        },
+        {
+          label: "Credenciales",
+          diy: "Tu API key de n8n entregada a cada cliente de IA",
+          gateway: "Cifrada con AES-256-GCM en reposo, solo la pasarela la ve",
+        },
+        {
+          label: "Multi-cliente",
+          diy: "Reconfigurar auth y URL por cada cliente",
+          gateway: "Una URL para Claude, ChatGPT, Cursor, Windsurf…",
+        },
+        {
+          label: "Observabilidad",
+          diy: "Bucear en los logs de ejecución de n8n",
+          gateway: "Logs por llamada, cuotas y analítica de uso",
+        },
       ],
     },
     arch: {
       eyebrow: "Arquitectura",
       title: "Llega a un n8n autoalojado tras cualquier red",
-      subtitle: "La pasarela solo necesita un endpoint HTTPS. Público, túnel o totalmente privado — elige el camino que encaje.",
+      subtitle:
+        "La pasarela solo necesita un endpoint HTTPS. Público, túnel o totalmente privado — elige el camino que encaje.",
       nodes: {
-        client: "Cliente de IA", clientSub: "Claude · Cursor · ChatGPT",
-        gateway: "Pasarela n8n-mcp", gatewaySub: "Edge · multi-tenant",
-        publicN8n: "n8n público", publicSub: "Endpoint HTTPS",
-        tunnel: "Túnel", tunnelSub: "Cloudflare · Tailscale",
-        privateVpc: "VPC privada", privateSub: "Solo autoalojado",
+        client: "Cliente de IA",
+        clientSub: "Claude · Cursor · ChatGPT",
+        gateway: "Pasarela n8n-mcp",
+        gatewaySub: "Edge · multi-tenant",
+        publicN8n: "n8n público",
+        publicSub: "Endpoint HTTPS",
+        tunnel: "Túnel",
+        tunnelSub: "Cloudflare · Tailscale",
+        privateVpc: "VPC privada",
+        privateSub: "Solo autoalojado",
       },
-      badges: { ssrf: "Protección SSRF", aes: "AES-256-GCM en reposo", zero: "Cero datos de flujo almacenados" },
+      badges: {
+        ssrf: "Protección SSRF",
+        aes: "AES-256-GCM en reposo",
+        zero: "Cero datos de flujo almacenados",
+      },
       security: {
         eyebrow: "Seguridad y flujo de datos",
         title: "Lo que la pasarela guarda — y lo que decididamente no",
-        subtitle: "Tres límites en los que puedes confiar cuando un cliente de IA llama a tus flujos de n8n vía n8n-mcp.",
+        subtitle:
+          "Tres límites en los que puedes confiar cuando un cliente de IA llama a tus flujos de n8n vía n8n-mcp.",
         pillars: [
           {
             title: "AES-256-GCM en reposo",
@@ -193,7 +244,8 @@ const es: Dict = {
               "Descifrado solo en memoria dentro de la pasarela",
               "Nunca registrado, nunca devuelto al cliente",
             ],
-            boundary: "Frontera: las entradas/salidas de los flujos no se persisten — solo se almacenan tus credenciales, cifradas.",
+            boundary:
+              "Frontera: las entradas/salidas de los flujos no se persisten — solo se almacenan tus credenciales, cifradas.",
           },
           {
             title: "Protección SSRF",
@@ -203,7 +255,8 @@ const es: Dict = {
               "Túneles (Cloudflare, Tailscale Funnel) admitidos por dominio",
               "Redirecciones revalidadas en cada salto",
             ],
-            boundary: "Frontera: la pasarela rechaza llamadas a 127.0.0.1, 10.0.0.0/8, link-local o endpoints de metadata.",
+            boundary:
+              "Frontera: la pasarela rechaza llamadas a 127.0.0.1, 10.0.0.0/8, link-local o endpoints de metadata.",
           },
           {
             title: "Cero datos de flujo almacenados",
@@ -213,7 +266,8 @@ const es: Dict = {
               "El log de auditoría guarda solo metadatos: herramienta, estado, latencia, bytes",
               "Ni prompts, ni payloads, ni datos de ejecución se conservan",
             ],
-            boundary: "Frontera: si necesitas retención completa, está en el log de ejecución de n8n — no en la pasarela.",
+            boundary:
+              "Frontera: si necesitas retención completa, está en el log de ejecución de n8n — no en la pasarela.",
           },
         ],
       },
@@ -221,32 +275,58 @@ const es: Dict = {
     evolution: {
       eyebrow: "La evolución",
       title: "De la frustración al flujo",
-      subtitle: "El simple prompt llega solo hasta cierto punto. Con una pasarela MCP de verdad, tu IA accede a n8n como un ciudadano de primera.",
+      subtitle:
+        "El simple prompt llega solo hasta cierto punto. Con una pasarela MCP de verdad, tu IA accede a n8n como un ciudadano de primera.",
       withoutLabel: "Sin MCP",
       withLabel: "Con n8n-mcp",
       pairs: [
         {
-          pain: { title: "Copiar y pegar JSON", body: "La IA genera JSON que copias en n8n. Parece correcto, pero falla con errores crípticos por propiedades inventadas." },
-          flow: { title: "Despliegue directo", body: "La IA crea flujos directamente en tu n8n. Sin copiar/pegar, sin errores de importación. Solo automatización funcionando." },
+          pain: {
+            title: "Copiar y pegar JSON",
+            body: "La IA genera JSON que copias en n8n. Parece correcto, pero falla con errores crípticos por propiedades inventadas.",
+          },
+          flow: {
+            title: "Despliegue directo",
+            body: "La IA crea flujos directamente en tu n8n. Sin copiar/pegar, sin errores de importación. Solo automatización funcionando.",
+          },
         },
         {
-          pain: { title: "Capturas de pantalla", body: "¿Quieres mejorar un flujo? Captura, pega, explica el contexto. Cada. Vez." },
-          flow: { title: "Acceso en vivo", body: "La IA lee tus flujos existentes, entiende el contexto y hace mejoras quirúrgicas. Sin capturas." },
+          pain: {
+            title: "Capturas de pantalla",
+            body: "¿Quieres mejorar un flujo? Captura, pega, explica el contexto. Cada. Vez.",
+          },
+          flow: {
+            title: "Acceso en vivo",
+            body: "La IA lee tus flujos existentes, entiende el contexto y hace mejoras quirúrgicas. Sin capturas.",
+          },
         },
         {
-          pain: { title: "Configs desactualizadas", body: "n8n se actualiza cada semana. Los datos de la IA tienen meses. Los flujos generados usan opciones obsoletas." },
-          flow: { title: "Siempre actualizado", body: "Documentación sincronizada con las últimas versiones de n8n. Cada nodo y parámetro, exactos." },
+          pain: {
+            title: "Configs desactualizadas",
+            body: "n8n se actualiza cada semana. Los datos de la IA tienen meses. Los flujos generados usan opciones obsoletas.",
+          },
+          flow: {
+            title: "Siempre actualizado",
+            body: "Documentación sincronizada con las últimas versiones de n8n. Cada nodo y parámetro, exactos.",
+          },
         },
         {
-          pain: { title: "Depuración a ciegas", body: "¿Falló el flujo? La IA no ve los logs. Te toca copiar errores y rezar." },
-          flow: { title: "Auto-corrección inteligente", body: "Las herramientas de validación dan feedback real. La IA detecta sus errores y los arregla antes de que los notes." },
+          pain: {
+            title: "Depuración a ciegas",
+            body: "¿Falló el flujo? La IA no ve los logs. Te toca copiar errores y rezar.",
+          },
+          flow: {
+            title: "Auto-corrección inteligente",
+            body: "Las herramientas de validación dan feedback real. La IA detecta sus errores y los arregla antes de que los notes.",
+          },
         },
       ],
     },
     cache: {
       eyebrow: "Conocimiento colectivo",
       title: "Cada flujo hace a todos más rápidos",
-      subtitle: "Cada flujo construido en la plataforma alimenta una caché compartida. Cuando tu agente elige un patrón probado y ajusta unos campos, te ahorras los tokens — y la espera — de generar desde cero.",
+      subtitle:
+        "Cada flujo construido en la plataforma alimenta una caché compartida. Cuando tu agente elige un patrón probado y ajusta unos campos, te ahorras los tokens — y la espera — de generar desde cero.",
       steps: [
         { title: "Petición", desc: "El usuario describe un flujo" },
         { title: "Buscar caché", desc: "Escanear patrones conocidos" },
@@ -281,21 +361,36 @@ const es: Dict = {
         name: "Free",
         price: "$0",
         cadenceKey: "forever",
-        features: ["100 llamadas MCP / día", "1 instancia de n8n", "1 API key de plataforma", "Soporte de la comunidad"],
+        features: [
+          "100 llamadas MCP / día",
+          "1 instancia de n8n",
+          "1 API key de plataforma",
+          "Soporte de la comunidad",
+        ],
         cta: "Empezar gratis",
       },
       {
         name: "Supporter",
         price: "$19",
         cadenceKey: "month",
-        features: ["10.000 llamadas MCP / día", "5 instancias de n8n", "API keys ilimitadas", "Soporte prioritario por email"],
+        features: [
+          "10.000 llamadas MCP / día",
+          "5 instancias de n8n",
+          "API keys ilimitadas",
+          "Soporte prioritario por email",
+        ],
         cta: "Mejorar",
       },
       {
         name: "Pro",
         price: "$49",
         cadenceKey: "month",
-        features: ["100.000 llamadas MCP / día", "Instancias ilimitadas", "Logs de auditoría", "SLA y soporte privado"],
+        features: [
+          "100.000 llamadas MCP / día",
+          "Instancias ilimitadas",
+          "Logs de auditoría",
+          "SLA y soporte privado",
+        ],
         cta: "Pasar a Pro",
       },
     ],
@@ -353,15 +448,16 @@ const es: Dict = {
   },
   seo: {
     pricing: {
-      title: 'Precios — n8n-mcp',
-      description: 'Precios mensuales sencillos para el gateway n8n-mcp. Plan gratuito con 100 llamadas MCP/día, planes de pago desde $19/mes. Sin asientos, cancela cuando quieras.',
+      title: "Precios — n8n-mcp",
+      description:
+        "Precios mensuales sencillos para el gateway n8n-mcp. Plan gratuito con 100 llamadas MCP/día, planes de pago desde $19/mes. Sin asientos, cancela cuando quieras.",
     },
     faq: {
-      title: 'Preguntas frecuentes — n8n-mcp',
-      description: 'Preguntas comunes sobre n8n-mcp: clientes de IA compatibles, seguridad, precios, autohospedaje y el protocolo MCP.',
+      title: "Preguntas frecuentes — n8n-mcp",
+      description:
+        "Preguntas comunes sobre n8n-mcp: clientes de IA compatibles, seguridad, precios, autohospedaje y el protocolo MCP.",
     },
   },
-
 };
 
 export default es;

@@ -1,314 +1,134 @@
-import type en from "./en";
-
-const docs: typeof en = {
+const docs = {
   nav: {
     sections: {
-      introduction: "Introducción",
-      connectClient: "Conectar un cliente",
-      configuration: "Configuración",
-      operations: "Operaciones",
+      introduction: "Introduction",
+      connectClient: "Connect a client",
+      configuration: "Configuration",
+      operations: "Operations",
     },
     items: {
-      overview: "Visión general",
-      gettingStarted: "Primeros pasos",
-      concepts: "Conceptos",
-      clients: "Todos los clientes MCP",
-      apiKeys: "Claves API",
-      n8nInstances: "Instancias de n8n",
-      tools: "Referencia de herramientas MCP",
-      quotas: "Cuotas y facturación",
-      security: "Seguridad",
-      admin: "Guía de administración",
-      selfHosting: "Auto-alojamiento",
-      troubleshooting: "Resolución de problemas",
+      overview: "Overview",
+      gettingStarted: "Getting started",
+      concepts: "Concepts",
+      clients: "MCP clients",
+      apiKeys: "API keys",
+      n8nInstances: "n8n instances",
+      tools: "MCP tools reference",
+      quotas: "Quotas and billing",
+      security: "Security",
+      admin: "Admin guide",
+      selfHosting: "Self-hosting",
+      troubleshooting: "Troubleshooting",
     },
-    mobileTitle: "Explorar la documentación",
+    mobileTitle: "Browse docs",
   },
   index: {
-    title: "Documentación — n8n-mcp",
-    description: "Manual operativo completo de n8n-mcp: conecta clientes de IA a n8n vía Model Context Protocol, gestiona claves API, instancias de n8n, cuotas, seguridad y tareas de administración.",
-    h1: "Documentación",
-    lead: "n8n-mcp es una pasarela hospedada de Model Context Protocol delante de tu instancia n8n. Cualquier cliente compatible con MCP puede listar y ejecutar tus workflows como herramientas tipadas, y usar la base de conocimiento integrada de ~1.650 nodos n8n para crear nuevos.",
-    pickPrefix: "Elige un tema abajo o ve directamente a ",
-    pickLink: "Primeros pasos",
-    pickSuffix: ".",
+    title: "Spanish edition: n8n-mcp documentation",
+    description:
+      "Spanish edition: Documentation for connecting n8n workflows to AI clients through a hosted MCP gateway, including setup, tools, quotas and security.",
+    h1: "Spanish edition: n8n-mcp documentation",
+    lead: "Spanish edition: n8n-mcp gives MCP-compatible AI clients a controlled gateway to your n8n workflows. These docs cover the hosted endpoint, platform API keys, encrypted n8n instances, workflow tools, quotas and security boundaries.",
+    pickPrefix: "Start with ",
+    pickLink: "Getting started",
+    pickSuffix: ", then review the tool reference and security model before production use.",
     cards: [
-      { to: "/docs/getting-started", title: "Primeros pasos", desc: "Regístrate, crea una clave y conecta tu primer cliente en 5 minutos." },
-      { to: "/docs/concepts", title: "Conceptos", desc: "Cómo encajan la pasarela MCP, las claves API y las instancias n8n." },
-      { to: "/docs/clients", title: "Conectar un cliente", desc: "Snippets para Claude, ChatGPT, Cursor, VS Code y más." },
-      { to: "/docs/api-keys", title: "Claves API", desc: "Crea, rota y revoca tokens de plataforma." },
-      { to: "/docs/n8n-instances", title: "Instancias de n8n", desc: "Añade tu n8n auto-alojado o cloud con credenciales cifradas." },
-      { to: "/docs/tools", title: "Referencia de herramientas MCP", desc: "Todas las herramientas runtime, de conocimiento y de gestión." },
-      { to: "/docs/quotas", title: "Cuotas y facturación", desc: "Límites por plan, métricas de uso y mejoras." },
-      { to: "/docs/security", title: "Seguridad", desc: "Cifrado en reposo, protección SSRF, RLS y auditoría." },
+      {
+        to: "/docs/getting-started",
+        title: "Spanish edition: Getting started",
+        desc: "Spanish edition: Set up n8n-mcp by creating a platform API key, connecting an n8n instance and configuring an MCP client with the hosted endpoint.",
+      },
+      {
+        to: "/docs/concepts",
+        title: "Spanish edition: Concepts",
+        desc: "Spanish edition: Core concepts for the hosted n8n MCP gateway: endpoint, platform API keys, encrypted n8n instances, tools and request routing.",
+      },
+      {
+        to: "/docs/clients",
+        title: "Spanish edition: Connect a client",
+        desc: "Spanish edition: Configure Claude, ChatGPT custom connectors, Cursor, Windsurf, VS Code, Zed and other MCP clients with the n8n-mcp endpoint.",
+      },
+      {
+        to: "/docs/api-keys",
+        title: "Spanish edition: Platform API keys",
+        desc: "Spanish edition: How to create, label, rotate, revoke and protect nmcp_ platform API keys used by MCP clients.",
+      },
+      {
+        to: "/docs/n8n-instances",
+        title: "Spanish edition: n8n instances",
+        desc: "Spanish edition: Connect n8n instances to the MCP gateway with encrypted API keys, SSRF checks and safe connection testing.",
+      },
+      {
+        to: "/docs/tools",
+        title: "Spanish edition: MCP tools reference",
+        desc: "Spanish edition: Reference for MCP tools that list, inspect, create, update, delete, validate, activate and execute n8n workflows.",
+      },
+      {
+        to: "/docs/quotas",
+        title: "Spanish edition: Quotas and billing",
+        desc: "Spanish edition: How n8n-mcp counts MCP requests, enforces short-window rate limits and applies daily or plan-based quotas.",
+      },
+      {
+        to: "/docs/security",
+        title: "Spanish edition: Security model",
+        desc: "Spanish edition: Security model for n8n-mcp, including credential encryption, SSRF protection, API key authentication, quotas and tenant boundaries.",
+      },
     ],
   },
   gettingStarted: {
-    title: "Primeros pasos — Documentación n8n-mcp",
-    description: "Regístrate, crea una clave API de plataforma, conecta tu instancia n8n y configura tu primer cliente MCP en menos de cinco minutos.",
-    h1: "Primeros pasos",
-    body: `<p>Esta guía te llevará unos cinco minutos. Al final, Claude (o cualquier otro cliente MCP) podrá listar y ejecutar workflows en tu propia instancia n8n.</p>
-<h2>1. Crea una cuenta</h2>
-<p>Regístrate en <a href="/signup">/signup</a> con email + contraseña o con Google. Las cuentas nuevas empiezan en el plan <strong>Free</strong> (100 llamadas MCP/día, 1 instancia n8n).</p>
-<h2>2. Genera una clave API de plataforma</h2>
-<ol>
-<li>Abre <a href="/api-keys">API Keys</a> en el panel.</li>
-<li>Pulsa <strong>Nueva clave</strong> y dale una etiqueta (p. ej. <code>claude-laptop</code>).</li>
-<li>Copia el token <code>nmcp_…</code> al instante — solo se muestra una vez.</li>
-</ol>
-<p>Trata el token como una contraseña. Quien lo tenga puede llamar a tu pasarela bajo la cuota de tu cuenta.</p>
-<h2>3. Conecta una instancia n8n</h2>
-<ol>
-<li>Abre <a href="/instances">Instancias n8n</a> → <strong>Añadir</strong>.</li>
-<li>Pega la base URL de tu n8n (p. ej. <code>https://n8n.example.com</code>).</li>
-<li>Genera una clave API de n8n en <em>Settings → n8n API</em> y pégala.</li>
-<li>Ciframos la clave con AES-256-GCM antes de tocar la base de datos.</li>
-</ol>
-<h2>4. Configura tu cliente MCP</h2>
-<p>Apunta cualquier cliente MCP a la URL de la pasarela con tu token como cabecera bearer:</p>
-<pre>{
-  "mcpServers": {
-    "n8n-mcp": {
-      "url": "https://n8nmcp.lovable.app/api/public/mcp",
-      "headers": { "Authorization": "Bearer nmcp_..." }
-    }
-  }
-}</pre>
-<p>Consulta <a href="/docs/clients">Conectar un cliente</a> para snippets por cliente.</p>
-<h2>5. Pruébalo</h2>
-<p>Reinicia tu cliente. Pregunta: <em>«Lista mis workflows de n8n.»</em> El cliente debería invocar <code>list_workflows</code> contra tu instancia y devolver la respuesta.</p>
-<h2>Siguientes pasos</h2>
-<ul>
-<li><a href="/docs/tools">Explora el catálogo completo de herramientas</a></li>
-<li><a href="/docs/quotas">Entiende las cuotas y cómo mejorar de plan</a></li>
-<li><a href="/docs/security">Lee el modelo de seguridad</a></li>
-</ul>`,
+    title: "Spanish edition: Getting started with n8n-mcp",
+    description:
+      "Spanish edition: Set up n8n-mcp by creating a platform API key, connecting an n8n instance and configuring an MCP client with the hosted endpoint.",
+    h1: "Spanish edition: Getting started",
+    body: '<p><strong>Spanish edition.</strong></p>\n<p>This guide connects one MCP-compatible client to one n8n instance through n8n-mcp. The client talks to the hosted endpoint, while n8n credentials stay encrypted inside the gateway.</p>\n<h2>1. Create a platform API key</h2>\n<p>Open the dashboard, create a platform key and copy the <code>nmcp_...</code> token immediately. The full token is shown once; after that only its hash and display metadata are stored.</p>\n<h2>2. Connect an n8n instance</h2>\n<p>Add your n8n base URL and n8n API key in the dashboard. The API key is encrypted at rest and is only decrypted server-side when the gateway calls n8n.</p>\n<h2>3. Configure your MCP client</h2>\n<pre>{\n  "mcpServers": {\n    "n8n-mcp": {\n      "url": "https://mcp.n8nworkflow.com/mcp",\n      "headers": { "Authorization": "Bearer nmcp_..." }\n    }\n  }\n}</pre>\n<h2>4. Test a read-only tool first</h2>\n<p>Restart the client and ask it to list your n8n workflows. A successful setup should call <code>list_workflows</code> and return workflow names, IDs and active status.</p>',
   },
   concepts: {
-    title: "Conceptos — Documentación n8n-mcp",
-    description: "Cómo encajan la pasarela n8n-mcp, las claves API de plataforma, las instancias n8n y las herramientas MCP.",
-    h1: "Conceptos",
-    body: `<p>Tres primitivas bastan para entender todo el sistema.</p>
-<h2>La pasarela</h2>
-<p>Un endpoint HTTPS multi-tenant en <code>/api/public/mcp</code> que habla Model Context Protocol sobre Streamable HTTP. Autentica al llamador con una clave API de plataforma, resuelve a qué instancia n8n reenviar y traduce cada llamada MCP a la petición REST de n8n correspondiente.</p>
-<h2>Claves API de plataforma</h2>
-<p>Tokens con prefijo <code>nmcp_</code> que identifican <em>tu cuenta</em> ante la pasarela. Tu cliente MCP los envía como <code>Authorization: Bearer …</code>. Se admiten múltiples claves por cuenta — emite una por dispositivo o workspace para revocarlas por separado.</p>
-<h2>Instancias n8n</h2>
-<p>Un par <code>(URL base, clave API n8n)</code> almacenado en tu cuenta. La clave API n8n se cifra en reposo con AES-256-GCM. El plan Free permite una instancia; los de pago amplían el límite. La pasarela nunca devuelve la clave n8n al cliente.</p>
-<h2>Enrutado de herramientas</h2>
-<p>Cuando tu cliente llama a una herramienta, la pasarela:</p>
-<ol>
-<li>Valida el token bearer y resuelve la cuenta propietaria.</li>
-<li>Comprueba la cuota diaria; rechaza con <code>429</code> si se agota.</li>
-<li>Para herramientas runtime (<code>list_workflows</code>, <code>execute_workflow</code>, …), descifra la clave n8n en memoria y hace de proxy.</li>
-<li>Para herramientas de conocimiento (<code>search_nodes</code>, <code>get_node_essentials</code>, …) sirve resultados desde la base SQLite incluida — sin llamar a n8n.</li>
-<li>Registra el uso para el panel y la facturación.</li>
-</ol>
-<h2>¿Por qué una pasarela?</h2>
-<ul>
-<li>Tu clave API n8n nunca sale del servidor.</li>
-<li>URL estable aunque redespliegues n8n.</li>
-<li>Cuotas por herramienta y observabilidad cruzada para todos los clientes.</li>
-<li>Conocimiento integrado de ~1.650 nodos n8n para escritura asistida por IA.</li>
-</ul>`,
+    title: "Spanish edition: n8n-mcp concepts",
+    description:
+      "Spanish edition: Core concepts for the hosted n8n MCP gateway: endpoint, platform API keys, encrypted n8n instances, tools and request routing.",
+    h1: "Spanish edition: Concepts",
+    body: "<p><strong>Spanish edition.</strong></p>\n<p>n8n-mcp has four core concepts: a hosted MCP endpoint, platform API keys, registered n8n instances and MCP tools.</p>\n<h2>Hosted endpoint</h2>\n<p>The public MCP endpoint is <code>https://mcp.n8nworkflow.com/mcp</code>. It speaks Streamable HTTP and JSON-RPC for MCP clients. Use this path for all new client configurations.</p>\n<h2>Platform API keys</h2>\n<p>AI clients authenticate with <code>Authorization: Bearer nmcp_...</code>. These keys identify the n8n-mcp user account, not the n8n instance directly.</p>\n<h2>n8n instances</h2>\n<p>An instance stores a base URL and encrypted n8n API key. The gateway resolves the authenticated user, picks the right instance and calls n8n from the server.</p>\n<h2>Tool routing</h2>\n<p>Every request passes through authentication, short-window limiting, daily quota checks and usage recording before tool dispatch.</p>",
   },
   clients: {
-    title: "Conecta cualquier cliente MCP — Documentación n8n-mcp",
-    description: "Snippets de configuración para Claude Desktop, Claude Code, ChatGPT, Cursor, Windsurf, VS Code, Continue, Cline, Zed, Gemini CLI y Codex CLI.",
-    h1: "Conectar un cliente",
-    body: `<p>Todos los clientes compatibles con MCP usan la misma URL de pasarela y el mismo token bearer. Solo cambia la ubicación del archivo de configuración.</p>
-<p>Endpoint: <code>https://n8nmcp.lovable.app/api/public/mcp</code></p>
-<h2 id="claude-desktop">Claude Desktop</h2>
-<p>Edita <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> en macOS o <code>%APPDATA%\\Claude\\claude_desktop_config.json</code> en Windows:</p>
-<pre>{
-  "mcpServers": {
-    "n8n-mcp": {
-      "url": "https://n8nmcp.lovable.app/api/public/mcp",
-      "headers": { "Authorization": "Bearer nmcp_..." }
-    }
-  }
-}</pre>
-<p>Cierra y vuelve a abrir Claude. El icono del martillo debería mostrar las herramientas n8n-mcp.</p>
-<h2 id="claude-code">Claude Code</h2>
-<pre>claude mcp add --transport http n8n-mcp https://n8nmcp.lovable.app/api/public/mcp \\
-  --header "Authorization: Bearer nmcp_..."</pre>
-<h2 id="chatgpt">ChatGPT (conectores personalizados)</h2>
-<p>En ajustes de ChatGPT → Connectors → <strong>Añadir conector personalizado</strong>:</p>
-<ul>
-<li>URL: <code>https://n8nmcp.lovable.app/api/public/mcp</code></li>
-<li>Cabecera de autenticación: <code>Authorization: Bearer nmcp_...</code></li>
-</ul>
-<h2 id="cursor">Cursor</h2>
-<p>Ajustes de Cursor → MCP → <strong>Añadir nuevo servidor MCP</strong>, pega el mismo bloque JSON que en Claude Desktop.</p>
-<h2 id="windsurf">Windsurf</h2>
-<p>Settings → MCP servers → edita <code>mcp_config.json</code> con el bloque <code>mcpServers</code> estándar.</p>
-<h2 id="vscode">VS Code (Copilot Chat) y Continue</h2>
-<p>Ambos exponen una lista de servidores MCP en su UI. Usa la URL de pasarela con la cabecera bearer.</p>
-<h2 id="zed">Zed</h2>
-<pre>// ~/.config/zed/settings.json
-{
-  "context_servers": {
-    "n8n-mcp": {
-      "command": { "transport": "http", "url": "https://n8nmcp.lovable.app/api/public/mcp",
-        "headers": { "Authorization": "Bearer nmcp_..." } }
-    }
-  }
-}</pre>
-<h2 id="gemini-cli">Gemini CLI / Codex CLI / LM Studio</h2>
-<p>Los tres usan un JSON con la misma URL + cabecera. Consulta la documentación MCP de cada herramienta para el nombre exacto del archivo.</p>
-<h2 id="verifying">Verificar la conexión</h2>
-<p>Tras configurar, pregunta: <em>«¿Qué herramientas n8n tienes?»</em>. El cliente debería listar <code>list_workflows</code>, <code>execute_workflow</code>, las herramientas de conocimiento y cualquier herramienta de gestión a la que tengas acceso.</p>`,
+    title: "Spanish edition: Connect MCP clients to n8n-mcp",
+    description:
+      "Spanish edition: Configure Claude, ChatGPT custom connectors, Cursor, Windsurf, VS Code, Zed and other MCP clients with the n8n-mcp endpoint.",
+    h1: "Spanish edition: Connect a client",
+    body: '<p><strong>Spanish edition.</strong></p>\n<p>Every MCP client uses the same endpoint and bearer token. Only the settings screen or config file differs.</p>\n<h2>Endpoint</h2>\n<p>Use <code>https://mcp.n8nworkflow.com/mcp</code> for all new clients.</p>\n<h2>Claude Desktop and Cursor style config</h2>\n<pre>{\n  "mcpServers": {\n    "n8n-mcp": {\n      "url": "https://mcp.n8nworkflow.com/mcp",\n      "headers": { "Authorization": "Bearer nmcp_..." }\n    }\n  }\n}</pre>\n<h2>Claude Code</h2>\n<pre>claude mcp add --transport http n8n-mcp https://mcp.n8nworkflow.com/mcp   --header "Authorization: Bearer nmcp_..."</pre>\n<h2>ChatGPT custom connector</h2>\n<p>Create a custom connector, set the URL to <code>https://mcp.n8nworkflow.com/mcp</code>, and add the bearer authorization header.</p>',
   },
   apiKeys: {
-    title: "Claves API de plataforma — Documentación n8n-mcp",
-    description: "Crea, etiqueta, rota y revoca claves API de plataforma nmcp_ usadas por tus clientes MCP.",
-    h1: "Claves API de plataforma",
-    body: `<p>Las claves API de plataforma (prefijo <code>nmcp_</code>) autentican a tu cliente MCP frente a la pasarela. <em>No</em> son tu clave API de n8n — esa se queda en el servidor.</p>
-<h2>Crear una clave</h2>
-<ol>
-<li>Abre <a href="/api-keys">API Keys</a>.</li>
-<li>Pulsa <strong>Nueva clave</strong> y ponle una etiqueta (p. ej. <code>cursor-work</code>).</li>
-<li>Copia el token mostrado al instante. Tras cerrar el diálogo, en la BD solo queda el prefijo y un hash.</li>
-</ol>
-<h2>Buenas prácticas</h2>
-<ul>
-<li>Una clave por dispositivo o workspace para poder revocarlas por separado.</li>
-<li>Nunca la subas a git ni la compartas en chat. Trátala como una contraseña.</li>
-<li>Rótalas trimestralmente o cuando alguien deje el equipo.</li>
-</ul>
-<h2>Rotar una clave</h2>
-<p>Por ahora no soportamos rotación in-place. Crea una clave nueva, actualiza la configuración del cliente y revoca la antigua desde la misma página.</p>
-<h2>Revocar una clave</h2>
-<p>Pulsa el icono de papelera junto a la clave. La revocación es inmediata — la siguiente llamada con ese token devolverá <code>401</code>.</p>
-<h2>Cuotas</h2>
-<p>La cuota es por cuenta, no por clave. Dividir claves no multiplica tu límite diario. Ver <a href="/docs/quotas">Cuotas y facturación</a>.</p>`,
+    title: "Spanish edition: Platform API keys for n8n-mcp",
+    description:
+      "Spanish edition: How to create, label, rotate, revoke and protect nmcp_ platform API keys used by MCP clients.",
+    h1: "Spanish edition: Platform API keys",
+    body: "<p><strong>Spanish edition.</strong></p>\n<p>Platform API keys authenticate MCP clients to n8n-mcp. They are separate from n8n API keys and should be treated like passwords.</p>\n<h2>Create a key</h2>\n<p>Create one key per client, device or workspace. Use labels such as <code>claude-desktop-prod</code> or <code>cursor-staging</code> so revocation is easy.</p>\n<h2>Storage model</h2>\n<p>The gateway stores a hash of the platform key, not the plaintext token. The full token is shown only once.</p>\n<h2>Rotation</h2>\n<p>Create a new key, update the client config, verify the client works, then revoke the old key.</p>",
   },
   n8nInstances: {
-    title: "Instancias n8n — Documentación n8n-mcp",
-    description: "Conecta tu n8n auto-alojado o n8n.cloud, guarda las claves cifradas y protégete contra SSRF.",
-    h1: "Instancias n8n",
-    body: `<p>Una <strong>instancia</strong> es un despliegue n8n con el que la pasarela puede hablar. Puedes registrar una (n8n.cloud) o varias (auto-alojadas por entorno).</p>
-<h2 id="add">Añadir una instancia</h2>
-<ol>
-<li>Abre <code>Panel → Instancias n8n → Nueva instancia</code>.</li>
-<li>Ponle una etiqueta (p. ej. <code>prod</code>, <code>staging</code>).</li>
-<li>Pega la <strong>URL base</strong> de tu n8n (sin <code>/rest</code> al final). Ejemplos: <code>https://n8n.example.com</code>, <code>https://your-tenant.app.n8n.cloud</code>.</li>
-<li>Pega una <strong>clave API de n8n</strong> creada desde <code>n8n → Settings → n8n API → Create API key</code>.</li>
-</ol>
-<h2 id="encryption">Cómo se almacenan las claves</h2>
-<p>Las claves API de n8n se cifran en reposo con una clave de servidor. Solo se descifran en memoria mientras la pasarela hace de proxy y nunca se devuelven al cliente tras el guardado inicial.</p>
-<h2 id="ssrf">Protección SSRF</h2>
-<p>La pasarela ejecuta <code>assertPublicUrl()</code> sobre cada URL antes de cualquier petición saliente. Se rechazan las URLs que resuelven a rangos privados/loopback (<code>127.0.0.0/8</code>, <code>10.0.0.0/8</code>, <code>172.16.0.0/12</code>, <code>192.168.0.0/16</code>, IPv6 link-local, etc.). Si auto-alojas n8n en una red privada, exponlo por nombre público o reverse proxy.</p>
-<h2 id="health">Health checks</h2>
-<p>Cada fila muestra el último contacto exitoso y el último error. Pulsa <strong>Test connection</strong> para reejecutar <code>GET /rest/login</code> sin cambiar nada.</p>
-<h2 id="multiple">Apuntar a una instancia concreta</h2>
-<p>Con varias instancias registradas, las llamadas MCP aceptan el parámetro <code>instance</code> (la etiqueta). Sin él, se usa la instancia por defecto del workspace.</p>
-<h2 id="rotate">Rotar una clave n8n</h2>
-<p>Genera una nueva clave en n8n, pégala en la fila y guarda. El cifrado anterior queda sobreescrito al instante.</p>`,
+    title: "Spanish edition: n8n instances in n8n-mcp",
+    description:
+      "Spanish edition: Connect n8n instances to the MCP gateway with encrypted API keys, SSRF checks and safe connection testing.",
+    h1: "Spanish edition: n8n instances",
+    body: "<p><strong>Spanish edition.</strong></p>\n<p>An n8n instance is the server that workflow tools operate against. Each instance belongs to a user account and stores an n8n base URL plus encrypted API key.</p>\n<h2>Base URL</h2>\n<p>Use the public base URL for n8n, such as <code>https://n8n.example.com</code>. Do not use localhost or private network addresses.</p>\n<h2>Credential storage</h2>\n<p>The n8n API key is encrypted before storage. It is never sent to MCP clients.</p>\n<h2>SSRF guard</h2>\n<p>Before outbound requests, the gateway checks the resolved URL and blocks localhost, private ranges, link-local addresses and cloud metadata targets.</p>",
   },
   tools: {
-    title: "Referencia de herramientas MCP — Documentación n8n-mcp",
-    description: "Referencia completa de las herramientas runtime, de conocimiento y de gestión expuestas por la pasarela n8n-mcp.",
-    h1: "Referencia de herramientas MCP",
-    body: `<p>Las herramientas se agrupan en tres categorías. Todas aceptan un argumento opcional <code>instance</code> para apuntar a una instancia concreta.</p>
-<h2 id="runtime">Herramientas runtime</h2>
-<p>Interacción directa con workflows y ejecuciones en tu n8n.</p>
-<table>
-<thead><tr><th>Herramienta</th><th>Descripción</th></tr></thead>
-<tbody>
-<tr><td><code>list_workflows</code></td><td>Lista workflows con filtros (activos, tags, proyecto).</td></tr>
-<tr><td><code>get_workflow</code></td><td>Obtiene un workflow por id, con nodos y conexiones.</td></tr>
-<tr><td><code>create_workflow</code></td><td>Crea un workflow desde una definición JSON.</td></tr>
-<tr><td><code>update_workflow</code></td><td>Actualiza nodos, ajustes o estado de activación.</td></tr>
-<tr><td><code>delete_workflow</code></td><td>Elimina un workflow por id.</td></tr>
-<tr><td><code>execute_workflow</code></td><td>Lanza una ejecución manual y transmite el resultado.</td></tr>
-<tr><td><code>list_executions</code></td><td>Lista ejecuciones recientes con filtros de estado.</td></tr>
-<tr><td><code>get_execution</code></td><td>Inspecciona los datos y errores de una ejecución.</td></tr>
-</tbody>
-</table>
-<h2 id="knowledge">Herramientas de conocimiento</h2>
-<p>Consultas de solo lectura sobre el catálogo de nodos n8n integrado. Funcionan con datos locales y no llaman a tu n8n.</p>
-<table>
-<thead><tr><th>Herramienta</th><th>Descripción</th></tr></thead>
-<tbody>
-<tr><td><code>search_nodes</code></td><td>Búsqueda full-text en nodos core y community.</td></tr>
-<tr><td><code>get_node_info</code></td><td>Devuelve parámetros, credenciales y operaciones de un nodo.</td></tr>
-<tr><td><code>list_node_categories</code></td><td>Explora nodos agrupados por categoría (IA, Datos, Comms…).</td></tr>
-<tr><td><code>get_node_examples</code></td><td>Devuelve workflows de ejemplo canónicos para un nodo.</td></tr>
-</tbody>
-</table>
-<h2 id="management">Herramientas de gestión</h2>
-<p>Operaciones administrativas contra la API REST de n8n. Solo disponibles para claves con scope <code>management</code>.</p>
-<table>
-<thead><tr><th>Herramienta</th><th>Descripción</th></tr></thead>
-<tbody>
-<tr><td><code>list_credentials</code></td><td>Lista credenciales (sin valores secretos).</td></tr>
-<tr><td><code>list_users</code></td><td>Lista usuarios de tu instancia n8n.</td></tr>
-<tr><td><code>list_projects</code></td><td>Lista proyectos n8n (Enterprise).</td></tr>
-<tr><td><code>list_tags</code></td><td>Lista tags de workflows.</td></tr>
-<tr><td><code>get_audit</code></td><td>Ejecuta un audit de n8n y devuelve el reporte de seguridad.</td></tr>
-</tbody>
-</table>
-<h2 id="errors">Semántica de errores</h2>
-<p>Los errores se devuelven como resultados MCP <code>isError: true</code> con un mensaje saneado. La pasarela nunca reenvía stack traces crudos de n8n al cliente.</p>`,
+    title: "Spanish edition: n8n-mcp tools reference",
+    description:
+      "Spanish edition: Reference for MCP tools that list, inspect, create, update, delete, validate, activate and execute n8n workflows.",
+    h1: "Spanish edition: MCP tools reference",
+    body: "<p><strong>Spanish edition.</strong></p>\n<p>n8n-mcp exposes workflow operations as MCP tools. The tools are designed for AI clients that need structured access to n8n without receiving direct n8n credentials.</p>\n<h2>Workflow read tools</h2>\n<ul><li><code>list_workflows</code>: list workflow IDs, names and active status.</li><li><code>get_workflow</code>: inspect nodes, connections and workflow metadata.</li><li><code>list_executions</code>: review recent execution history.</li></ul>\n<h2>Workflow write tools</h2>\n<ul><li><code>create_workflow</code>: create a workflow from nodes and connections.</li><li><code>update_workflow</code>: patch workflow structure or metadata.</li><li><code>delete_workflow</code>: delete a workflow by ID.</li><li><code>activate_workflow</code>: activate or deactivate a workflow.</li></ul>\n<h2>Validation and templates</h2>\n<p><code>validate_workflow</code> checks structure before changes go live. <code>import_workflow_template</code> imports templates from the knowledge layer when available.</p>",
   },
   quotas: {
-    title: "Cuotas y facturación — Documentación n8n-mcp",
-    description: "Cuotas de petición por clave, límites por plan y cómo se mide el uso de las llamadas MCP.",
-    h1: "Cuotas y facturación",
-    body: `<p>La pasarela mide el uso por clave API de plataforma. Cada llamada MCP cuenta como una petición, sin importar el tamaño del payload.</p>
-<h2 id="plans">Límites por plan</h2>
-<table>
-<thead><tr><th>Plan</th><th>Peticiones / mes</th><th>Instancias n8n</th><th>Claves API</th></tr></thead>
-<tbody>
-<tr><td>Free</td><td>1.000</td><td>1</td><td>2</td></tr>
-<tr><td>Pro</td><td>50.000</td><td>5</td><td>20</td></tr>
-<tr><td>Team</td><td>250.000</td><td>Ilimitadas</td><td>Ilimitadas</td></tr>
-</tbody>
-</table>
-<p>Los despliegues auto-alojados no tienen cuota forzada; los mismos contadores se registran para observabilidad.</p>
-<h2 id="counting">Qué cuenta como petición</h2>
-<ul>
-<li>Cada MCP <code>tools/call</code> = 1 petición.</li>
-<li>Los handshakes <code>tools/list</code> e <code>initialize</code> son gratis.</li>
-<li>Las llamadas fallidas (4xx devueltos por la pasarela) también cuentan.</li>
-<li>Los reintentos del cliente cuentan por separado.</li>
-</ul>
-<h2 id="windows">Ventana de reset</h2>
-<p>Los contadores se resetean el primer día de cada mes a las <code>00:00 UTC</code>. El uso actual se ve en la cabecera del panel y en cada fila de clave API.</p>
-<h2 id="overages">Al superar la cuota</h2>
-<p>Las llamadas devuelven el error MCP <code>QUOTA_EXCEEDED</code> con HTTP <code>429</code>. La pasarela añade una cabecera <code>Retry-After</code> apuntando al próximo reset.</p>
-<h2 id="upgrading">Mejorar de plan</h2>
-<p>Abre <code>Panel → Facturación</code> para cambiar de plan. La nueva cuota es efectiva al instante y se prorratea para el periodo en curso.</p>`,
+    title: "Spanish edition: n8n-mcp quotas and billing",
+    description:
+      "Spanish edition: How n8n-mcp counts MCP requests, enforces short-window rate limits and applies daily or plan-based quotas.",
+    h1: "Spanish edition: Quotas and billing",
+    body: "<p><strong>Spanish edition.</strong></p>\n<p>n8n-mcp uses quotas to keep hosted MCP access predictable and safe.</p>\n<h2>What counts</h2>\n<p>Tool calls count toward usage. The gateway may keep initialization and tool-list operations separate from billable workflow operations depending on the active plan policy.</p>\n<h2>Short-window rate limiting</h2>\n<p>Short bursts are limited before expensive n8n calls run. Production deployments should use database-backed or external rate limiting rather than relying only on process memory.</p>\n<h2>Daily quota</h2>\n<p>Daily quota checks happen after authentication and before tool dispatch. When a quota is exhausted, the client receives a structured MCP error and HTTP 429.</p>",
   },
   security: {
-    title: "Seguridad — Documentación n8n-mcp",
-    description: "Cifrado en reposo, protección SSRF, políticas RLS y modelo de amenazas de la pasarela.",
-    h1: "Seguridad",
-    body: `<p>La pasarela media el tráfico MCP entre clientes de IA y tu n8n. Está diseñada para que una clave de plataforma comprometida no pueda alcanzar redes privadas, exfiltrar datos de otros tenants ni escalar a admin.</p>
-<h2 id="key-storage">Almacenamiento de credenciales</h2>
-<ul>
-<li>Las <strong>claves API de plataforma</strong> (<code>nmcp_…</code>) se hashean con SHA-256 antes de guardarse. Solo se conserva una pista <code>last4</code> para mostrar.</li>
-<li>Las <strong>claves API de n8n</strong> se cifran en reposo con una clave de servidor (AES-GCM). El texto plano solo existe en memoria durante una petición proxificada.</li>
-<li>El acceso service-role a la BD es exclusivo del servidor; el navegador nunca lo ve.</li>
-</ul>
-<h2 id="ssrf">Guardia SSRF</h2>
-<p>Cada URL controlada por el usuario que el servidor resuelve pasa por <code>assertPublicUrl()</code>. Rechaza:</p>
-<ul>
-<li>Direcciones loopback (<code>127.0.0.0/8</code>, <code>::1</code>).</li>
-<li>Rangos privados RFC1918 y link-local IPv4/IPv6.</li>
-<li>Endpoints de metadata cloud (<code>169.254.169.254</code>, equivalentes en GCP/Azure).</li>
-<li>Esquemas no <code>http(s)</code> (<code>file:</code>, <code>gopher:</code>…).</li>
-<li>DNS rebinding — los nombres se resuelven y la IP se vuelve a comprobar.</li>
-</ul>
-<h2 id="rls">Row-level security</h2>
-<p>Los datos por tenant (workspaces, claves API, instancias n8n, logs de auditoría) están protegidos por RLS de Postgres acotado a <code>auth.uid()</code>. Las tablas admin (roles, audit, secrets) están explícitamente excluidas de la realtime publication.</p>
-<h2 id="roles">Roles y admin</h2>
-<p>Los roles viven en una tabla dedicada <code>user_roles</code> y se comprueban con la función security-definer <code>has_role()</code>. El rol admin nunca se deriva del almacenamiento del cliente.</p>
-<h2 id="errors">Saneado de errores</h2>
-<p>Las server functions capturan errores upstream y devuelven mensajes genéricos seguros para el usuario. Los stack traces y excepciones del runtime edge solo se loguean en servidor.</p>
-<h2 id="reporting">Reportar una vulnerabilidad</h2>
-<p>Escribe a <code>security@n8nmcp.lovable.app</code> con pasos de reproducción. No abras issues públicas para reportes de seguridad.</p>`,
+    title: "Spanish edition: n8n-mcp security model",
+    description:
+      "Spanish edition: Security model for n8n-mcp, including credential encryption, SSRF protection, API key authentication, quotas and tenant boundaries.",
+    h1: "Spanish edition: Security model",
+    body: "<p><strong>Spanish edition.</strong></p>\n<p>The gateway is the trust boundary between AI clients and n8n. Its job is to keep credentials server-side and make outbound workflow operations auditable and constrained.</p>\n<h2>Credentials</h2>\n<p>Platform keys are hashed. n8n API keys are encrypted at rest and only decrypted server-side during proxied requests.</p>\n<h2>Network protection</h2>\n<p>All user-controlled outbound URLs must pass SSRF protection. This includes connection tests and tool execution paths.</p>\n<h2>Tenant boundary</h2>\n<p>Requests are tied to the authenticated platform key and user. The gateway must only resolve n8n instances owned by that user.</p>\n<h2>Vulnerability reporting</h2>\n<p>Email <code>server@n8nworkflow.com</code> with reproduction steps. Do not publish security reports in public issues.</p>",
   },
 };
 

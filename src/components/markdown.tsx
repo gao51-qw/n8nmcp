@@ -1,29 +1,40 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize from "rehype-sanitize";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Copy, Download } from "lucide-react";
 import { toast } from "sonner";
+
+type JsonParseResult = { ok: true; obj: unknown; text: string } | { ok: false };
+type N8nWorkflowJson = { name?: unknown; nodes: unknown[]; connections: unknown };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function isN8nWorkflowJson(value: unknown): value is N8nWorkflowJson {
+  return isRecord(value) && Array.isArray(value.nodes) && "connections" in value;
+}
 
 function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   const ref = useRef<HTMLPreElement>(null);
   const [copied, setCopied] = useState(false);
   const [showDownload, setShowDownload] = useState(false);
-  const [parsedObj, setParsedObj] = useState<any>(null);
+  const [parsedObj, setParsedObj] = useState<N8nWorkflowJson | null>(null);
 
-  const getText = () => {
+  const getText = useCallback(() => {
     const pre = ref.current;
     if (!pre) return "";
     // Prefer the inner <code> element's textContent — preserves exact source
     // (newlines, leading whitespace) instead of innerText which collapses
     // whitespace and applies CSS-driven line breaks.
     const code = pre.querySelector("code");
-    const raw = (code?.textContent ?? pre.textContent ?? "");
+    const raw = code?.textContent ?? pre.textContent ?? "";
     // Normalize CRLF → LF and strip a single trailing newline added by Markdown.
     return raw.replace(/\r\n/g, "\n").replace(/\n$/, "");
-  };
+  }, []);
 
-  const tryParseJson = (): { ok: true; obj: any; text: string } | { ok: false } => {
+  const tryParseJson = useCallback((): JsonParseResult => {
     const text = getText().trim();
     if (!text || (text[0] !== "{" && text[0] !== "[")) return { ok: false };
     try {
@@ -31,21 +42,18 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
     } catch {
       return { ok: false };
     }
-  };
-
-  const looksLikeN8n = (obj: any) =>
-    obj && typeof obj === "object" && Array.isArray(obj.nodes) && obj.connections;
+  }, [getText]);
 
   useEffect(() => {
     const p = tryParseJson();
-    if (p.ok && looksLikeN8n(p.obj)) {
+    if (p.ok && isN8nWorkflowJson(p.obj)) {
       setParsedObj(p.obj);
       setShowDownload(true);
     } else {
       setParsedObj(null);
       setShowDownload(false);
     }
-  }, [props.children]);
+  }, [props.children, tryParseJson]);
 
   const onCopy = async () => {
     const text = ref.current?.innerText ?? "";
@@ -60,13 +68,15 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
   };
 
   const onDownload = () => {
-    const obj = parsedObj ?? (tryParseJson().ok ? (tryParseJson() as any).obj : null);
+    const parsed = tryParseJson();
+    const obj = parsedObj ?? (parsed.ok && isN8nWorkflowJson(parsed.obj) ? parsed.obj : null);
     if (!obj) {
       toast.error("无法解析为 JSON", { duration: 1200 });
       return;
     }
     const pretty = JSON.stringify(obj, null, 2);
-    const rawName = typeof obj?.name === "string" && obj.name.trim() ? obj.name.trim() : "n8n-workflow";
+    const rawName =
+      typeof obj?.name === "string" && obj.name.trim() ? obj.name.trim() : "n8n-workflow";
     const safe = rawName.replace(/[^\w\u4e00-\u9fa5.\- ]+/g, "_").slice(0, 80);
     const blob = new Blob([pretty], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -119,16 +129,20 @@ function CodeBlock(props: React.HTMLAttributes<HTMLPreElement>) {
  */
 export function Markdown({ children, className = "" }: { children: string; className?: string }) {
   return (
-    <div
-      className={`prose-announcement text-sm text-muted-foreground ${className}`}
-    >
+    <div className={`prose-announcement text-sm text-muted-foreground ${className}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeSanitize]}
         components={{
-          h1: ({ node, ...p }) => <h3 className="mt-3 text-base font-semibold text-foreground" {...p} />,
-          h2: ({ node, ...p }) => <h4 className="mt-3 text-sm font-semibold text-foreground" {...p} />,
-          h3: ({ node, ...p }) => <h5 className="mt-3 text-sm font-semibold text-foreground" {...p} />,
+          h1: ({ node, ...p }) => (
+            <h3 className="mt-3 text-base font-semibold text-foreground" {...p} />
+          ),
+          h2: ({ node, ...p }) => (
+            <h4 className="mt-3 text-sm font-semibold text-foreground" {...p} />
+          ),
+          h3: ({ node, ...p }) => (
+            <h5 className="mt-3 text-sm font-semibold text-foreground" {...p} />
+          ),
           p: ({ node, ...p }) => <p className="my-2 leading-relaxed" {...p} />,
           ul: ({ node, ...p }) => <ul className="my-2 list-disc space-y-1 pl-5" {...p} />,
           ol: ({ node, ...p }) => <ol className="my-2 list-decimal space-y-1 pl-5" {...p} />,
@@ -170,7 +184,10 @@ export function Markdown({ children, className = "" }: { children: string; class
             </div>
           ),
           th: ({ node, ...p }) => (
-            <th className="border border-border bg-muted/40 px-2 py-1 text-left font-semibold" {...p} />
+            <th
+              className="border border-border bg-muted/40 px-2 py-1 text-left font-semibold"
+              {...p}
+            />
           ),
           td: ({ node, ...p }) => <td className="border border-border px-2 py-1" {...p} />,
           strong: ({ node, ...p }) => <strong className="font-semibold text-foreground" {...p} />,

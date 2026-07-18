@@ -1,9 +1,24 @@
 {
-  "totalNodes": 1994,
-  "coreNodes": 661,
-  "communityNodes": 1333,
-  "communityPackages": 553,
-  "aiTools": 105,
-  "triggers": 290,
-  "generatedAt": "2026-05-12T00:00:00.000Z"
+  "totalNodes": 562,
+  "coreNodes": 562,
+  "communityNodes": 0,
+  "communityPackages": 0,
+  "aiTools": 349,
+  "triggers": 110,
+  "templates": 4940,
+  "categories": {
+    "input": 107,
+    "organization": 5,
+    "output": 99,
+    "transform": 241,
+    "trigger": 110
+  },
+  "externalCandidateNodes": 0,
+  "externalCommunityCandidates": 0,
+  "externalVerifiedCommunityCandidates": 0,
+  "externalToolVariantCandidates": 0,
+  "verifiedExternalNodes": 0,
+  "verifiedExternalCommunityNodes": 0,
+  "verifiedExternalToolVariantNodes": 0,
+  "generatedAt": "2026-07-16T07:20:30.768Z"
 }

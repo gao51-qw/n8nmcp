@@ -15,6 +15,20 @@ function pickInt(row: unknown): number {
   return Number((row as { c?: number } | undefined)?.c ?? 0);
 }
 
+function tableExists(db: Database.Database, tableName: string): boolean {
+  return !!db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(tableName);
+}
+
+function safeCount(db: Database.Database, sql: string): number {
+  try {
+    return pickInt(db.prepare(sql).get());
+  } catch {
+    return 0;
+  }
+}
+
 async function main() {
   const db = new Database(DB_PATH, { readonly: true });
 
@@ -25,6 +39,7 @@ async function main() {
   const triggers = pickInt(
     db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_trigger = 1").get(),
   );
+  const templates = safeCount(db, "SELECT COUNT(*) c FROM templates");
 
   const placeholders = [...OFFICIAL_PACKAGES].map(() => "?").join(",");
   const coreNodes = pickInt(
@@ -42,6 +57,58 @@ async function main() {
       .get(...OFFICIAL_PACKAGES),
   );
 
+  const categoryRows = db
+    .prepare(
+      `SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') category,
+              COUNT(*) count
+         FROM nodes
+        GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')
+        ORDER BY category`,
+    )
+    .all() as Array<{ category: string; count: number }>;
+  const categories = Object.fromEntries(
+    categoryRows.map((row) => [row.category, Number(row.count)]),
+  );
+
+  const hasExternalCandidates = tableExists(db, "external_node_candidates");
+  const externalCandidateNodes = hasExternalCandidates
+    ? safeCount(db, "SELECT COUNT(*) c FROM external_node_candidates")
+    : 0;
+  const externalCommunityCandidates = hasExternalCandidates
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM external_node_candidates WHERE candidate_kind = 'community'",
+      )
+    : 0;
+  const externalVerifiedCommunityCandidates = hasExternalCandidates
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM external_node_candidates WHERE candidate_kind = 'community' AND is_verified = 1",
+      )
+    : 0;
+  const externalToolVariantCandidates = hasExternalCandidates
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM external_node_candidates WHERE candidate_kind = 'tool_variant'",
+      )
+    : 0;
+  const hasVerifiedExternalNodes = tableExists(db, "verified_external_nodes");
+  const verifiedExternalNodes = hasVerifiedExternalNodes
+    ? safeCount(db, "SELECT COUNT(*) c FROM verified_external_nodes")
+    : 0;
+  const verifiedExternalCommunityNodes = hasVerifiedExternalNodes
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM verified_external_nodes WHERE candidate_kind = 'community'",
+      )
+    : 0;
+  const verifiedExternalToolVariantNodes = hasVerifiedExternalNodes
+    ? safeCount(
+        db,
+        "SELECT COUNT(*) c FROM verified_external_nodes WHERE candidate_kind = 'tool_variant'",
+      )
+    : 0;
+
   db.close();
 
   const stats = {
@@ -51,6 +118,15 @@ async function main() {
     communityPackages,
     aiTools,
     triggers,
+    templates,
+    categories,
+    externalCandidateNodes,
+    externalCommunityCandidates,
+    externalVerifiedCommunityCandidates,
+    externalToolVariantCandidates,
+    verifiedExternalNodes,
+    verifiedExternalCommunityNodes,
+    verifiedExternalToolVariantNodes,
     generatedAt: new Date().toISOString(),
   };
 
@@ -61,7 +137,7 @@ async function main() {
   await writeFile(REPO_OUT, json);
 
   console.log(
-    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools}`,
+    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools} templates=${templates} external=${externalCandidateNodes} verifiedExternal=${verifiedExternalNodes}`,
   );
   console.log(`[stats] wrote ${LOCAL_OUT}`);
   console.log(`[stats] wrote ${REPO_OUT}`);

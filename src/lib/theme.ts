@@ -25,7 +25,9 @@ export async function setTheme(next: ThemeChoice, opts?: { remote?: boolean }) {
   applyTheme(next);
   try {
     localStorage.setItem(THEME_STORAGE_KEY, next);
-  } catch {}
+  } catch {
+    // Some browsers can block storage; theme is still applied in-memory.
+  }
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: next }));
   }

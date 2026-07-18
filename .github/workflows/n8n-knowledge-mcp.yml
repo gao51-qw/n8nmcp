@@ -2,7 +2,7 @@ name: build-and-publish
 
 on:
   schedule:
-    - cron: "0 2 * * 1"   # Monday 02:00 UTC — refresh knowledge base weekly
+    - cron: "0 2 * * 1" # Monday 02:00 UTC — refresh knowledge base weekly
   push:
     branches: [main]
     paths:
@@ -25,13 +25,128 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-      - name: Build knowledge DB & emit stats
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Build node database
+        run: npm run build:nodes:official
+
+      - name: Fetch official templates
+        id: official
+        continue-on-error: true
+        run: npm run fetch:templates
+
+      - name: Build and verify official template database
+        if: steps.official.outcome == 'success'
         run: |
-          npm install --no-audit --no-fund
-          npm run build:db
+          npm run build:templates
+          npm run emit:stats
+          npm run verify:knowledge
+
+      - name: Build curated fallback database
+        if: steps.official.outcome != 'success'
+        run: |
+          rm -rf .tmp/templates/merged
+          mkdir -p .tmp/templates/merged
+          find data/curated-templates -maxdepth 1 -type f -name '*.json' ! -name 'manifest.json' -exec cp '{}' .tmp/templates/merged/ \;
+          npm run build:templates
+          npm run emit:stats
+          npm run verify:knowledge:fallback
+
+      - name: Upload degraded fallback
+        if: steps.official.outcome != 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: degraded-knowledge-fallback
+          path: |
+            tools/n8n-knowledge-mcp/data/nodes.db
+            tools/n8n-knowledge-mcp/data/stats.json
+            tools/n8n-knowledge-mcp/data/knowledge-quality-report.json
+
+      - name: Stop after degraded fallback
+        if: steps.official.outcome != 'success'
+        run: exit 1
+
+      - name: Verify production artifacts
+        if: steps.official.outcome == 'success'
+        run: npm run verify:production-artifacts
+
+      - name: Define publication values
+        if: steps.official.outcome == 'success'
+        run: |
+          EXPECTED_TEMPLATES="$(node -e "const r=require('./data/knowledge-quality-report.json'); process.stdout.write(String(r.templateCount))")"
+          IMMUTABLE_TAG="$(date -u +%Y%m%d)-${GITHUB_RUN_ID}"
+          echo "EXPECTED_TEMPLATES=${EXPECTED_TEMPLATES}" >> "$GITHUB_ENV"
+          echo "IMMUTABLE_TAG=${IMMUTABLE_TAG}" >> "$GITHUB_ENV"
+
+      - uses: docker/setup-buildx-action@v3
+        if: steps.official.outcome == 'success'
+
+      - name: Build local Linux image
+        if: steps.official.outcome == 'success'
+        run: docker buildx build --platform linux/amd64 --load -t "knowledge-local:${GITHUB_RUN_ID}" .
+
+      - name: Smoke local image
+        if: steps.official.outcome == 'success'
+        run: |
+          EXPECTED_TEMPLATES="$(node -e "const r=require('./data/knowledge-quality-report.json'); process.stdout.write(String(r.templateCount))")"
+          SMOKE_TOKEN="$(openssl rand -hex 32)"
+          CONTAINER="knowledge-smoke-${GITHUB_RUN_ID}"
+          docker run --name "$CONTAINER" -d -e AUTH_TOKEN="$SMOKE_TOKEN" -p 127.0.0.1:3000:3000 "knowledge-local:${GITHUB_RUN_ID}" >/dev/null
+          trap 'docker rm -f "$CONTAINER" >/dev/null 2>&1 || true' EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS -o /dev/null http://127.0.0.1:3000/health; then
+              break
+            fi
+            if [[ "$attempt" == "60" ]]; then
+              echo "local knowledge image did not become healthy" >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          AUTH_TOKEN="$SMOKE_TOKEN" EXPECTED_TEMPLATES="$EXPECTED_TEMPLATES" node <<'NODE'
+          const expected = process.env.EXPECTED_TEMPLATES;
+          fetch("http://127.0.0.1:3000/health", {
+            headers: { authorization: `Bearer ${process.env.AUTH_TOKEN}` },
+          }).then(async (response) => {
+            if (!response.ok) throw new Error("authenticated health check failed");
+            let body;
+            try {
+              body = await response.json();
+            } catch {
+              throw new Error("health response was not valid JSON");
+            }
+            if (body.templates !== Number(expected)) throw new Error("template count mismatch");
+          }).catch((error) => {
+            console.error(error.message);
+            process.exit(1);
+          });
+          NODE
+
+      - name: Login to GHCR
+        if: steps.official.outcome == 'success'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push immutable image
+        if: steps.official.outcome == 'success'
+        run: |
+          docker tag "knowledge-local:${GITHUB_RUN_ID}" "ghcr.io/${GITHUB_REPOSITORY_OWNER}/n8n-knowledge-mcp:${IMMUTABLE_TAG}"
+          docker push "ghcr.io/${GITHUB_REPOSITORY_OWNER}/n8n-knowledge-mcp:${IMMUTABLE_TAG}"
+
+      - name: Push latest image
+        if: steps.official.outcome == 'success'
+        run: |
+          docker tag "knowledge-local:${GITHUB_RUN_ID}" "ghcr.io/${GITHUB_REPOSITORY_OWNER}/n8n-knowledge-mcp:latest"
+          docker push "ghcr.io/${GITHUB_REPOSITORY_OWNER}/n8n-knowledge-mcp:latest"
+
       - name: Open PR with refreshed src/data/n8n-stats.json
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        if: steps.official.outcome == 'success' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -40,27 +155,33 @@ jobs:
           title: "chore(stats): weekly refresh of n8n node coverage"
           body: |
             Automated weekly refresh of `src/data/n8n-stats.json` based on the
-            latest npm-resolved n8n node packages.
+            production-verified knowledge database.
           branch: chore/n8n-stats-refresh
           base: main
           delete-branch: true
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Compute tag
-        id: tag
-        run: echo "date=$(date -u +%Y%m%d)" >> $GITHUB_OUTPUT
-      - uses: docker/build-push-action@v6
-        with:
-          context: tools/n8n-knowledge-mcp
-          file: tools/n8n-knowledge-mcp/Dockerfile
-          push: true
-          platforms: linux/amd64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/n8n-knowledge-mcp:latest
-            ghcr.io/${{ github.repository_owner }}/n8n-knowledge-mcp:${{ steps.tag.outputs.date }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+
+      - name: Install VPS SSH credentials
+        if: steps.official.outcome == 'success'
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$VPS_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+
+      - name: Deploy immutable image to VPS
+        if: steps.official.outcome == 'success'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          [[ "$VPS_HOST" =~ ^[A-Za-z0-9._:-]+$ ]] || { echo "invalid VPS_HOST" >&2; exit 2; }
+          [[ "$VPS_PORT" =~ ^[0-9]+$ ]] || { echo "invalid VPS_PORT" >&2; exit 2; }
+          [[ "$VPS_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "invalid VPS_USER" >&2; exit 2; }
+          [[ "$DEPLOY_PATH" =~ ^/[A-Za-z0-9._/-]+$ ]] || { echo "invalid DEPLOY_PATH" >&2; exit 2; }
+          scp -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -P "${VPS_PORT}" ../../deploy/update-knowledge.sh "${VPS_USER}@${VPS_HOST}:${DEPLOY_PATH}/update-knowledge.sh"
+          ssh -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$HOME/.ssh/known_hosts" -p "${VPS_PORT}" "${VPS_USER}@${VPS_HOST}" "cd '${DEPLOY_PATH}' && chmod 700 update-knowledge.sh && ./update-knowledge.sh '${IMMUTABLE_TAG}' '${EXPECTED_TEMPLATES}'"

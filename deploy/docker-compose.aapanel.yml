@@ -1,0 +1,74 @@
+name: n8nmcp-app
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_MCP_SITE_URL: ${NEXT_PUBLIC_MCP_SITE_URL:?required}
+        NEXT_PUBLIC_MCP_ENDPOINT_URL: ${NEXT_PUBLIC_MCP_ENDPOINT_URL:?required}
+        NEXT_PUBLIC_DOCS_URL: ${NEXT_PUBLIC_DOCS_URL:?required}
+        NEXT_PUBLIC_BLOG_URL: ${NEXT_PUBLIC_BLOG_URL:?required}
+        NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:?required}
+        NEXT_PUBLIC_SECURITY_EMAIL: ${NEXT_PUBLIC_SECURITY_EMAIL:?required}
+    image: n8nmcp-app:local
+    container_name: n8nmcp-app
+    restart: unless-stopped
+    depends_on:
+      mcp:
+        condition: service_healthy
+    env_file:
+      - .env.app
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      HOSTNAME: "0.0.0.0"
+      UPSTREAM_N8N_MCP_URL: http://mcp:3000/mcp
+      UPSTREAM_N8N_MCP_TOKEN: ${MCP_AUTH_TOKEN:?required}
+      NEXT_PUBLIC_MCP_SITE_URL: ${NEXT_PUBLIC_MCP_SITE_URL:?required}
+      NEXT_PUBLIC_MCP_ENDPOINT_URL: ${NEXT_PUBLIC_MCP_ENDPOINT_URL:?required}
+      NEXT_PUBLIC_DOCS_URL: ${NEXT_PUBLIC_DOCS_URL:?required}
+      NEXT_PUBLIC_BLOG_URL: ${NEXT_PUBLIC_BLOG_URL:?required}
+      NEXT_PUBLIC_DASHBOARD_URL: ${NEXT_PUBLIC_DASHBOARD_URL:?required}
+      NEXT_PUBLIC_SECURITY_EMAIL: ${NEXT_PUBLIC_SECURITY_EMAIL:?required}
+    ports:
+      - "127.0.0.1:3001:3001"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3001/"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+    networks:
+      - default
+      - backend
+
+  mcp:
+    build:
+      context: ../tools/n8n-knowledge-mcp
+      dockerfile: Dockerfile
+    image: n8nmcp-knowledge-mcp:local
+    container_name: n8nmcp-knowledge-mcp
+    restart: unless-stopped
+    environment:
+      AUTH_TOKEN: ${MCP_AUTH_TOKEN:?required}
+      PORT: "3000"
+      TRUST_PROXY: "1"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+networks:
+  backend:
+    external: true
+    name: n8nmcp-backend

@@ -18,12 +18,17 @@ services:
     image: n8nworkflow-app:local
     container_name: n8nworkflow-app
     restart: unless-stopped
+    depends_on:
+      mcp:
+        condition: service_healthy
     env_file:
       - .env.app
     environment:
       NODE_ENV: production
       PORT: "3001"
-      HOST: "0.0.0.0"
+      HOSTNAME: "0.0.0.0"
+      UPSTREAM_N8N_MCP_URL: http://mcp:3000/mcp
+      UPSTREAM_N8N_MCP_TOKEN: ${MCP_AUTH_TOKEN:?required}
     ports:
       - "127.0.0.1:3001:3001"
     healthcheck:
@@ -40,11 +45,11 @@ services:
     container_name: n8n-knowledge-mcp
     restart: unless-stopped
     environment:
-      AUTH_TOKEN: ${MCP_AUTH_TOKEN}
+      AUTH_TOKEN: ${MCP_AUTH_TOKEN:?required}
       PORT: "3000"
       TRUST_PROXY: "1"
-    ports:
-      - "127.0.0.1:3000:3000"
+    expose:
+      - "3000"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
       interval: 60s

@@ -57,10 +57,7 @@ export function AvatarUploader({ userId, email, avatarUrl, onChange }: Props) {
 
   const remove = async () => {
     setBusy(true);
-    const { error } = await supabase
-      .from("profiles")
-      .update({ avatar_url: null })
-      .eq("id", userId);
+    const { error } = await supabase.from("profiles").update({ avatar_url: null }).eq("id", userId);
     setBusy(false);
     if (error) {
       toast.error(error.message);
@@ -103,13 +100,7 @@ export function AvatarUploader({ userId, email, avatarUrl, onChange }: Props) {
           Upload
         </Button>
         {avatarUrl && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={remove}
-            disabled={busy}
-          >
+          <Button type="button" variant="ghost" size="sm" onClick={remove} disabled={busy}>
             <Trash2 className="mr-2 h-4 w-4" /> Remove
           </Button>
         )}

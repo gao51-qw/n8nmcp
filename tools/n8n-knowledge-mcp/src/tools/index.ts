@@ -1,7 +1,13 @@
 // src/tools/index.ts — register all 22 knowledge tools on an MCP server.
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { db, statsCount, type NodeRow } from "../db.js";
+import { db, statsCount, type ExternalNodeCandidateRow, type NodeRow, type VerifiedExternalNodeRow } from "../db.js";
+import {
+  buildTemplateSearchQuery,
+  extractIntentProfile,
+  rankWorkflowTemplateCandidates,
+  type TemplateCandidate,
+} from "../template-recommender.js";
 
 const text = (obj: unknown) => ({
   content: [{ type: "text" as const, text: typeof obj === "string" ? obj : JSON.stringify(obj, null, 2) }],
@@ -23,6 +29,60 @@ function ftsEscape(q: string): string {
     .filter(Boolean)
     .map((t) => `"${t.replace(/"/g, "")}"*`)
     .join(" OR ");
+}
+
+export function searchWorkflowTemplates(input: { query: string; limit?: number }) {
+  const query = input.query.trim();
+  if (!query) throw new Error("Template search query must not be empty");
+  const limit = input.limit ?? 10;
+  const rows = db
+    .prepare(
+      `SELECT t.id, t.name, t.description, t.views, t.node_count
+         FROM templates_fts f JOIN templates t ON t.id = f.rowid
+        WHERE templates_fts MATCH ?
+        ORDER BY rank, t.views DESC LIMIT ?`,
+    )
+    .all(ftsEscape(query), limit);
+  return { count: rows.length, templates: rows };
+}
+
+export function getWorkflowTemplateById(id: number) {
+  const row = db.prepare("SELECT * FROM templates WHERE id = ?").get(id) as
+    | Record<string, unknown>
+    | undefined;
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    categories: JSON.parse(String(row.categories_json || "[]")),
+    node_types: JSON.parse(String(row.node_types_json || "[]")),
+    author: {
+      name: row.author_name,
+      username: row.author_username,
+      avatar: row.author_avatar,
+    },
+    views: row.views,
+    node_count: row.node_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    source_url: row.source_url,
+    workflow: row.workflow_json ? JSON.parse(String(row.workflow_json)) : null,
+  };
+}
+
+function tableExists(name: string): boolean {
+  return !!db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(name);
+}
+
+function externalCandidatesAvailable() {
+  return tableExists("external_node_candidates") && tableExists("external_node_candidates_fts");
+}
+
+function verifiedExternalNodesAvailable() {
+  return tableExists("verified_external_nodes") && tableExists("verified_external_nodes_fts");
 }
 
 export function registerAllTools(server: McpServer) {
@@ -130,6 +190,338 @@ export function registerAllTools(server: McpServer) {
   );
 
   // ───────────────────── Info ─────────────────────
+
+  server.tool(
+    "list_external_node_candidates",
+    "List external node candidates imported from third-party sources. Discovery only.",
+    {
+      candidate_kind: z.enum(["community", "tool_variant", "external_official_missing"]).optional(),
+      package_name: z.string().optional(),
+      verified_only: z.boolean().optional(),
+      limit: z.number().int().min(1).max(500).default(100),
+    },
+    async (args) => {
+      if (!externalCandidatesAvailable()) {
+        return text({ count: 0, candidates: [], note: "external_node_candidates table is not available" });
+      }
+
+      const where: string[] = [];
+      const params: Array<string | number> = [];
+      if (args.candidate_kind) {
+        where.push("candidate_kind = ?");
+        params.push(args.candidate_kind);
+      }
+      if (args.package_name) {
+        where.push("package_name = ?");
+        params.push(args.package_name);
+      }
+      if (args.verified_only) where.push("is_verified = 1");
+      params.push(args.limit);
+
+      const rows = db
+        .prepare(
+          `SELECT source, package_name, node_type, normalized_node_type, display_name,
+                  description, candidate_kind, verification_status, is_ai_tool,
+                  is_tool_variant, tool_variant_of, is_community, is_verified,
+                  npm_package_name, npm_version, npm_downloads
+             FROM external_node_candidates
+             ${where.length ? "WHERE " + where.join(" AND ") : ""}
+             ORDER BY is_verified DESC, npm_downloads DESC, package_name, node_type
+             LIMIT ?`,
+        )
+        .all(...params);
+
+      return text({
+        count: rows.length,
+        warning:
+          "External candidates are discovery hints. Validate package integrity and schema before workflow creation.",
+        candidates: rows,
+      });
+    },
+  );
+
+  server.tool(
+    "search_external_node_candidates",
+    "Search external node candidates from third-party sources. Discovery only.",
+    {
+      query: z.string().min(1),
+      candidate_kind: z.enum(["community", "tool_variant", "external_official_missing"]).optional(),
+      verified_only: z.boolean().optional(),
+      limit: z.number().int().min(1).max(100).default(20),
+    },
+    async ({ query, candidate_kind, verified_only, limit }) => {
+      if (!externalCandidatesAvailable()) {
+        return text({ query, count: 0, results: [], note: "external_node_candidates table is not available" });
+      }
+
+      const where: string[] = ["external_node_candidates_fts MATCH ?"];
+      const params: Array<string | number> = [ftsEscape(query)];
+      if (candidate_kind) {
+        where.push("c.candidate_kind = ?");
+        params.push(candidate_kind);
+      }
+      if (verified_only) where.push("c.is_verified = 1");
+      params.push(limit);
+
+      const rows = db
+        .prepare(
+          `SELECT c.source, c.package_name, c.node_type, c.normalized_node_type,
+                  c.display_name, c.description, c.candidate_kind,
+                  c.verification_status, c.is_ai_tool, c.is_tool_variant,
+                  c.tool_variant_of, c.is_community, c.is_verified,
+                  c.npm_package_name, c.npm_version, c.npm_downloads
+             FROM external_node_candidates_fts f
+             JOIN external_node_candidates c
+               ON c.node_type = f.node_type AND c.package_name = f.package_name
+            WHERE ${where.join(" AND ")}
+            ORDER BY rank, c.is_verified DESC, c.npm_downloads DESC
+            LIMIT ?`,
+        )
+        .all(...params);
+
+      return text({
+        query,
+        count: rows.length,
+        warning:
+          "External candidates come from external metadata. Do not treat them as official n8n registry nodes until independently verified.",
+        results: rows,
+      });
+    },
+  );
+
+  server.tool(
+    "get_external_node_candidate",
+    "Fetch a full external node candidate record, including properties and metadata. Discovery only.",
+    {
+      node_type: z.string(),
+      package_name: z.string().optional(),
+    },
+    async ({ node_type, package_name }) => {
+      if (!externalCandidatesAvailable()) {
+        return text({ error: "external_node_candidates table is not available" });
+      }
+
+      const row = (
+        package_name
+          ? db
+              .prepare(
+                `SELECT * FROM external_node_candidates
+                  WHERE node_type = ? AND package_name = ?`,
+              )
+              .get(node_type, package_name)
+          : db
+              .prepare(
+                `SELECT * FROM external_node_candidates
+                  WHERE node_type = ? OR normalized_node_type = ?
+                  ORDER BY is_verified DESC, npm_downloads DESC
+                  LIMIT 1`,
+              )
+              .get(node_type, node_type)
+      ) as ExternalNodeCandidateRow | undefined;
+
+      if (!row) return text({ error: `external node candidate not found: ${node_type}` });
+
+      return text({
+        source: row.source,
+        package_name: row.package_name,
+        node_type: row.node_type,
+        normalized_node_type: row.normalized_node_type,
+        display_name: row.display_name,
+        description: row.description,
+        category: row.category,
+        version: row.version,
+        candidate_kind: row.candidate_kind,
+        verification_status: row.verification_status,
+        flags: {
+          is_ai_tool: !!row.is_ai_tool,
+          is_trigger: !!row.is_trigger,
+          is_webhook: !!row.is_webhook,
+          is_tool_variant: !!row.is_tool_variant,
+          is_community: !!row.is_community,
+          is_verified: !!row.is_verified,
+        },
+        npm: {
+          package_name: row.npm_package_name,
+          version: row.npm_version,
+          downloads: row.npm_downloads,
+        },
+        tool_variant_of: row.tool_variant_of,
+        normalized_tool_variant_of: row.normalized_tool_variant_of,
+        properties: parseProps(row.properties_json),
+        credentials: JSON.parse(row.credentials_json || "[]"),
+        operations: JSON.parse(row.operations_json || "[]"),
+        documentation: row.documentation,
+        source_metadata: JSON.parse(row.source_metadata_json || "{}"),
+        warning:
+          "External candidate only. Verify package integrity and schema before using in production workflow creation.",
+      });
+    },
+  );
+
+  server.tool(
+    "list_verified_external_nodes",
+    "List external node candidates that passed this project's local static correctness validation.",
+    {
+      candidate_kind: z.enum(["community", "tool_variant", "external_official_missing"]).optional(),
+      package_name: z.string().optional(),
+      limit: z.number().int().min(1).max(500).default(100),
+    },
+    async (args) => {
+      if (!verifiedExternalNodesAvailable()) {
+        return text({ count: 0, nodes: [], note: "verified_external_nodes table is not available" });
+      }
+
+      const where: string[] = [];
+      const params: Array<string | number> = [];
+      if (args.candidate_kind) {
+        where.push("candidate_kind = ?");
+        params.push(args.candidate_kind);
+      }
+      if (args.package_name) {
+        where.push("package_name = ?");
+        params.push(args.package_name);
+      }
+      params.push(args.limit);
+
+      const rows = db
+        .prepare(
+          `SELECT source, package_name, node_type, normalized_node_type, display_name,
+                  description, candidate_kind, verification_status, is_ai_tool,
+                  is_tool_variant, tool_variant_of, is_community, is_verified,
+                  npm_package_name, npm_version, npm_downloads, validated_at
+             FROM verified_external_nodes
+             ${where.length ? "WHERE " + where.join(" AND ") : ""}
+             ORDER BY is_verified DESC, npm_downloads DESC, package_name, node_type
+             LIMIT ?`,
+        )
+        .all(...params);
+
+      return text({
+        count: rows.length,
+        validation_scope:
+          "Local static metadata validation only: no npm install, code execution, network call, or supply-chain review.",
+        nodes: rows,
+      });
+    },
+  );
+
+  server.tool(
+    "search_verified_external_nodes",
+    "Search external nodes that passed local static correctness validation.",
+    {
+      query: z.string().min(1),
+      candidate_kind: z.enum(["community", "tool_variant", "external_official_missing"]).optional(),
+      limit: z.number().int().min(1).max(100).default(20),
+    },
+    async ({ query, candidate_kind, limit }) => {
+      if (!verifiedExternalNodesAvailable()) {
+        return text({ query, count: 0, results: [], note: "verified_external_nodes table is not available" });
+      }
+
+      const where: string[] = ["verified_external_nodes_fts MATCH ?"];
+      const params: Array<string | number> = [ftsEscape(query)];
+      if (candidate_kind) {
+        where.push("v.candidate_kind = ?");
+        params.push(candidate_kind);
+      }
+      params.push(limit);
+
+      const rows = db
+        .prepare(
+          `SELECT v.source, v.package_name, v.node_type, v.normalized_node_type,
+                  v.display_name, v.description, v.candidate_kind,
+                  v.verification_status, v.is_ai_tool, v.is_tool_variant,
+                  v.tool_variant_of, v.is_community, v.is_verified,
+                  v.npm_package_name, v.npm_version, v.npm_downloads, v.validated_at
+             FROM verified_external_nodes_fts f
+             JOIN verified_external_nodes v
+               ON v.node_type = f.node_type AND v.package_name = f.package_name
+            WHERE ${where.join(" AND ")}
+            ORDER BY rank, v.is_verified DESC, v.npm_downloads DESC
+            LIMIT ?`,
+        )
+        .all(...params);
+
+      return text({
+        query,
+        count: rows.length,
+        validation_scope:
+          "Local static metadata validation only. Treat results as recommendation candidates, not official n8n schemas.",
+        results: rows,
+      });
+    },
+  );
+
+  server.tool(
+    "get_verified_external_node",
+    "Fetch a full external node candidate that passed local static correctness validation.",
+    {
+      node_type: z.string(),
+      package_name: z.string().optional(),
+    },
+    async ({ node_type, package_name }) => {
+      if (!verifiedExternalNodesAvailable()) {
+        return text({ error: "verified_external_nodes table is not available" });
+      }
+
+      const row = (
+        package_name
+          ? db
+              .prepare(
+                `SELECT * FROM verified_external_nodes
+                  WHERE node_type = ? AND package_name = ?`,
+              )
+              .get(node_type, package_name)
+          : db
+              .prepare(
+                `SELECT * FROM verified_external_nodes
+                  WHERE node_type = ? OR normalized_node_type = ?
+                  ORDER BY is_verified DESC, npm_downloads DESC
+                  LIMIT 1`,
+              )
+              .get(node_type, node_type)
+      ) as VerifiedExternalNodeRow | undefined;
+
+      if (!row) return text({ error: `verified external node not found: ${node_type}` });
+
+      return text({
+        source: row.source,
+        package_name: row.package_name,
+        node_type: row.node_type,
+        normalized_node_type: row.normalized_node_type,
+        display_name: row.display_name,
+        description: row.description,
+        category: row.category,
+        version: row.version,
+        candidate_kind: row.candidate_kind,
+        verification_status: row.verification_status,
+        flags: {
+          is_ai_tool: !!row.is_ai_tool,
+          is_trigger: !!row.is_trigger,
+          is_webhook: !!row.is_webhook,
+          is_tool_variant: !!row.is_tool_variant,
+          is_community: !!row.is_community,
+          is_verified_by_source: !!row.is_verified,
+        },
+        npm: {
+          package_name: row.npm_package_name,
+          version: row.npm_version,
+          downloads: row.npm_downloads,
+        },
+        tool_variant_of: row.tool_variant_of,
+        normalized_tool_variant_of: row.normalized_tool_variant_of,
+        properties: parseProps(row.properties_json),
+        credentials: JSON.parse(row.credentials_json || "[]"),
+        operations: JSON.parse(row.operations_json || "[]"),
+        documentation: row.documentation,
+        source_metadata: JSON.parse(row.source_metadata_json || "{}"),
+        validation_warnings: JSON.parse(row.validation_warnings_json || "[]"),
+        validated_at: row.validated_at,
+        validation_scope:
+          "Local static metadata validation only. This does not prove package safety or runtime compatibility.",
+      });
+    },
+  );
 
   const fetchNode = (nodeType: string, pkg?: string): NodeRow | undefined => {
     if (pkg) {
@@ -299,7 +691,7 @@ export function registerAllTools(server: McpServer) {
     "Full-text search across template name/description/categories/node_types. " +
       "Optional category filter (case-insensitive substring) and node_type filter.",
     {
-      query: z.string().min(1),
+      query: z.string().trim().min(1),
       category: z.string().optional(),
       node_type: z.string().optional(),
       limit: z.number().int().min(1).max(50).default(20),
@@ -334,17 +726,9 @@ export function registerAllTools(server: McpServer) {
   server.tool(
     "search_templates",
     "Alias for search_workflow_templates.",
-    { query: z.string().min(1), limit: z.number().int().min(1).max(50).default(10) },
+    { query: z.string().trim().min(1), limit: z.number().int().min(1).max(50).default(10) },
     async ({ query, limit }) => {
-      const fts = ftsEscape(query);
-      const rows = db
-        .prepare(
-          `SELECT t.id, t.name, t.description, t.views, t.node_count
-             FROM templates_fts f JOIN templates t ON t.id = f.rowid
-            WHERE templates_fts MATCH ? ORDER BY rank, t.views DESC LIMIT ?`,
-        )
-        .all(fts, limit);
-      return text({ count: rows.length, templates: rows });
+      return text(searchWorkflowTemplates({ query, limit }));
     },
   );
 
@@ -353,22 +737,8 @@ export function registerAllTools(server: McpServer) {
     "Fetch a template's full importable n8n workflow JSON plus metadata.",
     { id: z.number().int() },
     async ({ id }) => {
-      const r = db.prepare("SELECT * FROM templates WHERE id = ?").get(id) as any;
-      if (!r) return text({ error: `template not found: ${id}` });
-      return text({
-        id: r.id,
-        name: r.name,
-        description: r.description,
-        categories: JSON.parse(r.categories_json || "[]"),
-        node_types: JSON.parse(r.node_types_json || "[]"),
-        author: { name: r.author_name, username: r.author_username, avatar: r.author_avatar },
-        views: r.views,
-        node_count: r.node_count,
-        created_at: r.created_at,
-        updated_at: r.updated_at,
-        source_url: r.source_url,
-        workflow: r.workflow_json ? JSON.parse(r.workflow_json) : null,
-      });
+      const template = getWorkflowTemplateById(id);
+      return text(template ?? { error: `template not found: ${id}` });
     },
   );
 
@@ -422,6 +792,40 @@ export function registerAllTools(server: McpServer) {
         )
         .all(like, limit);
       return text({ task, count: rows.length, templates: rows });
+    },
+  );
+
+  server.tool(
+    "recommend_workflow_template_for_intent",
+    "Lightweight template recommender: extracts systems/domains/node types from user intent, searches existing templates, and reranks candidates without vector storage.",
+    {
+      intent: z.string().min(1),
+      limit: z.number().int().min(1).max(10).default(3),
+      candidate_limit: z.number().int().min(5).max(50).default(20),
+    },
+    async ({ intent, limit, candidate_limit }) => {
+      const profile = extractIntentProfile(intent);
+      const query = buildTemplateSearchQuery(profile) || intent;
+      const fts = ftsEscape(query);
+      const candidates = db
+        .prepare(
+          `SELECT t.id, t.name, t.description, t.categories_json, t.node_types_json,
+                  t.author_name, t.views, t.node_count, t.source_url
+             FROM templates_fts f JOIN templates t ON t.id = f.rowid
+            WHERE templates_fts MATCH ?
+            ORDER BY rank, t.views DESC LIMIT ?`,
+        )
+        .all(fts, candidate_limit) as TemplateCandidate[];
+      const recommendations = rankWorkflowTemplateCandidates(profile, candidates, limit);
+
+      return text({
+        intent,
+        profile,
+        query,
+        candidate_count: candidates.length,
+        count: recommendations.length,
+        recommendations,
+      });
     },
   );
 
@@ -557,11 +961,14 @@ export function registerAllTools(server: McpServer) {
     return text({
       tools: [
         "list_nodes", "search_nodes", "list_ai_tools", "search_node_properties",
+        "list_external_node_candidates", "search_external_node_candidates", "get_external_node_candidate",
+        "list_verified_external_nodes", "search_verified_external_nodes", "get_verified_external_node",
         "get_node_info", "get_node_essentials", "get_node_documentation",
         "get_node_as_tool_info", "get_property_dependencies",
         "list_tasks", "get_node_for_task",
         "list_node_templates", "search_workflow_templates", "search_templates",
         "get_workflow_template", "get_template", "list_template_categories", "get_templates_for_task",
+        "recommend_workflow_template_for_intent",
         "validate_node_minimal", "validate_node_operation",
         "validate_workflow", "validate_workflow_connections", "validate_workflow_expressions",
         "tools_documentation", "n8n_diagnostic",

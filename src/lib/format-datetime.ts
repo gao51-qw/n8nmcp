@@ -39,8 +39,7 @@ const UTC = new Intl.DateTimeFormat("en-GB", {
   timeZone: "UTC",
 });
 
-const TZ_NAME =
-  Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
+const TZ_NAME = Intl.DateTimeFormat().resolvedOptions().timeZone || "local time";
 
 /** Resolved IANA timezone of the current browser, e.g. "Europe/Berlin". */
 export const localTimeZone = TZ_NAME;

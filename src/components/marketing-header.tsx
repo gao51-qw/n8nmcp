@@ -2,17 +2,11 @@ import * as React from "react";
 
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
-import { Menu, Sparkles } from "lucide-react";
+import { Menu } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { LanguageSwitcher } from "@/components/language-switcher";
 import { useT } from "@/i18n/context";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Link } from "@/i18n/link";
 
 type NavLink =
@@ -42,11 +36,13 @@ export function MarketingHeader() {
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/40 bg-background/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-6">
-        <Link to="/" className="flex items-center gap-2 font-semibold">
-          <span className="grid h-8 w-8 place-items-center rounded-md" style={{ background: "var(--gradient-primary)" }}>
-            <Sparkles className="h-4 w-4 text-primary-foreground" />
+        <Link to="/" className="group flex items-center gap-2.5">
+          <span className="grid h-8 w-8 place-items-center rounded-md border border-primary/40 bg-primary/10 font-mono text-sm font-bold text-primary transition-colors group-hover:border-primary group-hover:bg-primary/15">
+            ›_
           </span>
-          <span className="text-base">n8n-mcp</span>
+          <span className="font-mono text-base font-semibold tracking-tight">
+            n8n<span className="text-primary">-</span>mcp
+          </span>
         </Link>
 
         <nav className="hidden items-center gap-6 text-sm text-muted-foreground md:flex">
@@ -74,11 +70,17 @@ export function MarketingHeader() {
           <ThemeToggle />
           <div className="hidden items-center gap-2 md:flex" suppressHydrationWarning>
             {!mounted ? null : user ? (
-              <Button asChild size="sm"><Link to="/dashboard">{t.nav.dashboard}</Link></Button>
+              <Button asChild size="sm">
+                <Link to="/dashboard">{t.nav.dashboard}</Link>
+              </Button>
             ) : (
               <>
-                <Button asChild variant="ghost" size="sm"><Link to="/login">{t.nav.signIn}</Link></Button>
-                <Button asChild size="sm"><Link to="/signup">{t.nav.getStarted}</Link></Button>
+                <Button asChild variant="ghost" size="sm">
+                  <Link to="/login">{t.nav.signIn}</Link>
+                </Button>
+                <Button asChild size="sm">
+                  <Link to="/signup">{t.nav.getStarted}</Link>
+                </Button>
               </>
             )}
           </div>
@@ -120,7 +122,10 @@ export function MarketingHeader() {
                   ),
                 )}
               </nav>
-              <div className="mt-6 flex flex-col gap-2 border-t border-border pt-6" suppressHydrationWarning>
+              <div
+                className="mt-6 flex flex-col gap-2 border-t border-border pt-6"
+                suppressHydrationWarning
+              >
                 {!mounted ? null : user ? (
                   <Button asChild onClick={close}>
                     <Link to="/dashboard">{t.nav.dashboard}</Link>

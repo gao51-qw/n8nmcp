@@ -1,117 +1,296 @@
-# VPS 部署指南
+# VPS Deployment
 
-完整把项目跑在你自己的 VPS 上。架构：
+VPS Docker is the production deployment target for this repository. The
+Next.js standalone Docker image is the production app artifact. Cloudflare
+Worker and Vite build targets have been removed from the active architecture.
 
+For the production sender, SMTP hostname, DNS records, and delivery gates, follow [Dedicated mail domain](./MAIL.md).
+
+This deployment runs the main Next.js app and the internal n8n knowledge MCP
+server behind Caddy. Caddy owns ports 80/443 and provisions TLS certificates
+automatically.
+
+## Architecture
+
+```txt
+Internet
+  -> Caddy :80/:443
+       -> app container :3001
+            -> internal knowledge MCP container :3000
+  -> Supabase / Paddle
 ```
-Internet ─▶ nginx (443 TLS)
-              ├─▶ app  容器 :3001  (主站 TanStack Start, Node)
-              └─▶ mcp  容器 :3000  (n8n-knowledge-mcp)
+
+End users should connect MCP clients to:
+
+```txt
+https://mcp.n8nworkflow.com/mcp
+Authorization: Bearer nmcp_<platform-api-key>
 ```
 
-数据库继续用 Lovable Cloud 托管的 Supabase，VPS 只跑无状态服务。
+The public split-domain model is:
 
----
+```txt
+mcp.n8nworkflow.com        -> product homepage and /mcp gateway
+docs.n8nworkflow.com       -> docs, FAQ, tool reference
+blog.n8nworkflow.com       -> blog and GEO content
+dashboard.n8nworkflow.com  -> user dashboard, noindex
+```
 
-## 0. 一次性准备
+The upstream knowledge MCP server is not exposed directly; it is only reachable
+from the app container over the Docker network.
 
-VPS（Ubuntu 22.04+）安装：
+## VPS Setup
+
+Install Docker on Ubuntu 22.04+:
 
 ```bash
-sudo apt update && sudo apt install -y nginx certbot python3-certbot-nginx
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
+sudo apt update
+sudo apt install -y curl ca-certificates
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER
+newgrp docker
 ```
 
-DNS：把 `app.n8nworkflow.com`、`mcp.n8nworkflow.com` 都 A 记录指到 VPS IP。
+Point DNS A records at the VPS public IP:
 
-GitHub：
+```txt
+mcp.n8nworkflow.com       -> <VPS_IP>
+docs.n8nworkflow.com      -> <VPS_IP>
+blog.n8nworkflow.com      -> <VPS_IP>
+dashboard.n8nworkflow.com -> <VPS_IP>
+```
 
-1. 把项目推到 GitHub 仓库（包含本目录 `deploy/`、根 `Dockerfile`、`tools/n8n-knowledge-mcp/`）。
-2. push 到 `main` 后，两个 workflow 会分别构建并推送：
-   - `ghcr.io/<你的 GitHub 用户名>/n8nworkflow-app:latest`
-   - `ghcr.io/<你的 GitHub 用户名>/n8n-knowledge-mcp:latest`
-3. 在 VPS 上 `docker login ghcr.io`（用户名 = GitHub 用户名，密码 = 拥有 `read:packages` 权限的 PAT）。
-
-## 1. 拷贝部署文件到 VPS
+Open only SSH, HTTP, and HTTPS:
 
 ```bash
-sudo mkdir -p /opt/n8nworkflow && sudo chown $USER /opt/n8nworkflow
-cd /opt/n8nworkflow
-# 把本仓库 deploy/ 下的文件拷过来：
-#   docker-compose.yml  .env.example  .env.app.example  nginx/n8nworkflow.conf
-cp .env.example .env
-cp .env.app.example .env.app
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
 ```
 
-编辑 `.env`：填入 `GHCR_OWNER`，生成 `MCP_AUTH_TOKEN=$(openssl rand -hex 32)`。
+## Files On The VPS
 
-编辑 `.env.app`：从 Lovable 项目设置里把 `SUPABASE_*`、`LOVABLE_API_KEY` 等 runtime secrets 复制过来。其中 `MCP_UPSTREAM_TOKEN` 必须等于 `.env` 里的 `MCP_AUTH_TOKEN`。
+Copy these files into `/opt/n8nworkflow`:
 
-## 2. 启动容器
-
-```bash
-cd /opt/n8nworkflow
-docker compose pull
-docker compose up -d
-docker compose ps
-docker compose logs -f app mcp
+```txt
+docker-compose.yml
+Caddyfile
+deploy.sh
+rollback.sh
+.env.example
+.env.app.example
 ```
 
-健康检查：
-
-```bash
-curl http://127.0.0.1:3001/                 # 主站，应返回 HTML
-curl http://127.0.0.1:3000/health           # mcp，应返回 {ok:true,...}
-```
-
-## 3. nginx + TLS
-
-```bash
-sudo cp nginx/n8nworkflow.conf /etc/nginx/sites-available/
-sudo ln -sf /etc/nginx/sites-available/n8nworkflow.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-
-sudo certbot --nginx -d app.n8nworkflow.com -d mcp.n8nworkflow.com
-```
-
-certbot 会自动改 `n8nworkflow.conf` 加上 443 段并写好 cert renewal cron。
-
-## 4. 后续更新
-
-代码 push 到 GitHub `main` → CI 自动构建新镜像。VPS 端：
-
-- 自动：`watchtower` 容器每 5 分钟轮询 GHCR 自动拉新镜像并重启。
-- 手动：`cd /opt/n8nworkflow && docker compose pull && docker compose up -d`
-
-MCP 知识库每周 CI 自动重建（拉最新 npm 节点）。
-
-### 一键回滚
-
-新版本上线后发现问题，可以直接回到上一个本地缓存过的镜像：
+Then create the real env files:
 
 ```bash
 cd /opt/n8nworkflow
-./rollback.sh              # 回滚到上一个版本（带确认）
-./rollback.sh --list       # 查看本地可用历史版本
-./rollback.sh <commit-sha> # 回滚到指定 commit
-./rollback.sh --resume     # 恢复跟随 :latest，重新接入 watchtower
+sudo install -m 600 -o root -g root .env.example .env
+sudo install -m 600 -o root -g root .env.app.example .env.app
+sudoedit .env
+sudoedit .env.app
 ```
 
-脚本会把 `.env` 里的 `APP_IMAGE_TAG` 固定到对应 sha，watchtower 不会再自动覆盖该容器，直到你执行 `--resume`。
+Set the following non-secret values in `.env`. Enter secret values only inside
+the secure editor; do not pass them as command arguments or paste them into
+shell commands:
 
-## 5. 调试
+```ini
+GHCR_OWNER=your-github-user-or-org
+MCP_DOMAIN=mcp.n8nworkflow.com
+DOCS_DOMAIN=docs.n8nworkflow.com
+BLOG_DOMAIN=blog.n8nworkflow.com
+DASHBOARD_DOMAIN=dashboard.n8nworkflow.com
+APP_IMAGE_TAG=latest
+MCP_IMAGE_TAG=latest
+MCP_AUTH_TOKEN=<generated secret>
+```
+
+Edit `.env.app` with Supabase, encryption, billing, and upstream MCP settings.
+`UPSTREAM_N8N_MCP_TOKEN` must match `MCP_AUTH_TOKEN`.
+
+## Start
+
+Log in to GHCR if your images are private:
 
 ```bash
-docker compose logs --tail=200 app
-docker compose logs --tail=200 mcp
-docker compose exec app sh
+read -rsp "GHCR token: " GHCR_PAT
+printf '\n'
+printf '%s' "$GHCR_PAT" | docker login ghcr.io -u <github-user> --password-stdin
+unset GHCR_PAT
+```
+
+Start the stack:
+
+```bash
+cd /opt/n8nworkflow
+sudo docker compose pull
+sudo docker compose up -d
+sudo docker compose ps
+```
+
+Health checks:
+
+```bash
+curl -I https://mcp.n8nworkflow.com/
+curl -I https://mcp.n8nworkflow.com/mcp
+curl -I https://docs.n8nworkflow.com/
+curl -I https://blog.n8nworkflow.com/
+curl -I https://dashboard.n8nworkflow.com/
+```
+
+## Controlled Deploys
+
+Deploy the latest app image:
+
+```bash
+sudo ./deploy.sh app latest
+```
+
+Deploy a specific app image:
+
+```bash
+sudo ./deploy.sh app <commit-sha>
+```
+
+Deploy the knowledge MCP image:
+
+```bash
+sudo ./deploy.sh mcp latest
+```
+
+Deploy everything:
+
+```bash
+sudo ./deploy.sh all
+```
+
+## Rollback
+
+List locally cached app image tags:
+
+```bash
+sudo ./rollback.sh --list
+```
+
+Roll back to the previous cached app image:
+
+```bash
+sudo ./rollback.sh
+```
+
+Roll back to a specific tag:
+
+```bash
+sudo ./rollback.sh <commit-sha>
+```
+
+Follow `latest` again:
+
+```bash
+sudo ./rollback.sh --latest
+```
+
+## Operations
+
+Logs:
+
+```bash
+docker compose logs -f --tail=200 caddy app mcp
+```
+
+Restart one service:
+
+```bash
 docker compose restart app
+docker compose restart mcp
+docker compose restart caddy
 ```
 
-nginx 日志：`/var/log/nginx/{access,error}.log`。
+Recommended Docker log rotation:
 
-## 6. 与 Lovable 预览的关系
+```bash
+sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{ "log-driver": "json-file", "log-opts": { "max-size": "20m", "max-file": "5" } }
+EOF
+sudo systemctl restart docker
+```
 
-- Lovable 预览 / 编辑器仍然可用，依然走 Cloudflare Worker（`vite.config.ts`）。
-- 生产正式访问走 VPS（`vite.config.vps.ts` + `Dockerfile`）。
-- **不要再点 Lovable 的 Publish 当作正式发布**——以 GHCR 镜像为准。
+## Support Maintenance Cron
+
+Keep the cron bearer secret outside crontab in a root-readable environment
+file:
+
+```bash
+sudo install -d -m 700 /etc/n8nworkflow
+sudo install -m 600 -o root -g root /dev/null /etc/n8nworkflow/support-cron.env
+sudoedit /etc/n8nworkflow/support-cron.env
+```
+
+Inside the editor, add `SUPPORT_CRON_SECRET=<generated secret>`. As a
+non-editor alternative, prompt without echo and write through standard input:
+
+```bash
+read -rsp "Support cron secret: " SUPPORT_CRON_SECRET
+printf '\n'
+printf 'SUPPORT_CRON_SECRET=%s\n' "$SUPPORT_CRON_SECRET" \
+  | sudo tee /etc/n8nworkflow/support-cron.env >/dev/null
+unset SUPPORT_CRON_SECRET
+sudo chmod 600 /etc/n8nworkflow/support-cron.env
+sudo chown root:root /etc/n8nworkflow/support-cron.env
+```
+
+Install these jobs with `sudo crontab -e`. Each command loads the protected
+environment file at runtime, so the secret itself is not written into
+world-readable crontab text:
+
+```cron
+* * * * * /bin/bash -lc 'set -a; source /etc/n8nworkflow/support-cron.env; curl -fsS -X POST -H "Authorization: Bearer $SUPPORT_CRON_SECRET" https://dashboard.n8nworkflow.com/api/internal/support/process-outbox >/dev/null'
+*/5 * * * * /bin/bash -lc 'set -a; source /etc/n8nworkflow/support-cron.env; curl -fsS -X POST -H "Authorization: Bearer $SUPPORT_CRON_SECRET" https://dashboard.n8nworkflow.com/api/internal/support/run-maintenance >/dev/null'
+```
+
+The maintenance endpoint scans first-response SLA state, removes at most 100
+attachments older than 180 days, and then runs a bounded notification outbox
+pass.
+
+## Automated Knowledge Refresh
+
+The `build-and-publish` GitHub Actions workflow refreshes the knowledge image
+every Monday at 02:00 UTC. It builds one verified database snapshot, runs the
+local image with a temporary bearer token, and checks that authenticated
+`/health` reports the template count from `knowledge-quality-report.json`.
+Only that smoke-tested local image is tagged and pushed, first as immutable
+`YYYYMMDD-<run-id>` and then as `latest`.
+
+Configure these six repository Actions secrets:
+
+| Secret | Purpose |
+| --- | --- |
+| `VPS_HOST` | VPS hostname or IP address. |
+| `VPS_PORT` | SSH port. |
+| `VPS_USER` | Restricted deployment account. |
+| `VPS_SSH_KEY` | Private Ed25519 key for that account. |
+| `VPS_KNOWN_HOSTS` | Reviewed OpenSSH known-hosts entry for the VPS. |
+| `DEPLOY_PATH` | Absolute directory containing `.env` and `docker-compose.yml`, for example `/opt/n8nworkflow`. |
+
+The deployment account needs read/write access to `DEPLOY_PATH`, permission to
+replace `.env`, and permission to run Docker Compose without an interactive
+`sudo` prompt (normally by using rootless Docker or membership in the `docker`
+group). The VPS Docker client must already be authenticated to GHCR with
+`read:packages` access when the package is private. Keep `.env` readable only by
+the deployment account because it contains `MCP_AUTH_TOKEN`.
+
+If the official template fetch fails, CI builds and verifies the curated
+fallback, uploads `degraded-knowledge-fallback` containing `nodes.db`,
+`stats.json`, and `knowledge-quality-report.json`, and then fails explicitly.
+That fallback is diagnostic only: it never updates an image tag and is never
+deployed.
+
+For an on-demand refresh, open GitHub Actions, select `build-and-publish`, choose
+**Run workflow**, select the intended branch, and confirm the run. A successful
+run copies `update-knowledge.sh` into `DEPLOY_PATH` and invokes it with the
+immutable image tag and verified template count. The script changes only the
+`mcp` service. If the new container or authenticated count check fails, it
+restores the previous `MCP_IMAGE_TAG`, recreates only `mcp`, verifies rollback
+health, and leaves the failed deployment non-zero for CI visibility.

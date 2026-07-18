@@ -1,11 +1,6 @@
 import * as React from "react";
 import { DICTIONARIES, type Dict } from "./dict";
-import {
-  DEFAULT_LOCALE,
-  LOCALE_COOKIE,
-  isLocale,
-  type Locale,
-} from "./config";
+import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from "./config";
 
 type Ctx = {
   locale: Locale;
@@ -44,17 +39,13 @@ export function LocaleProvider({
     [locale, setLocale],
   );
 
-  return (
-    <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>
-  );
+  return <LocaleContext.Provider value={value}>{children}</LocaleContext.Provider>;
 }
 
 /** Read the persisted locale preference from the cookie (browser only). */
 export function readLocaleCookie(): Locale | null {
   if (typeof document === "undefined") return null;
-  const m = document.cookie.match(
-    new RegExp("(?:^|; )" + LOCALE_COOKIE + "=([^;]*)"),
-  );
+  const m = document.cookie.match(new RegExp("(?:^|; )" + LOCALE_COOKIE + "=([^;]*)"));
   const raw = m?.[1] ? decodeURIComponent(m[1]) : null;
   return isLocale(raw) ? raw : null;
 }

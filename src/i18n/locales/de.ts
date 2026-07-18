@@ -19,7 +19,8 @@ const de: Dict = {
     language: "Sprache",
   },
   footer: {
-    tagline: "Gehostetes MCP-Gateway für n8n. Verbinde deine Workflows in Sekunden mit jedem KI-Client.",
+    tagline:
+      "Gehostetes MCP-Gateway für n8n. Verbinde deine Workflows in Sekunden mit jedem KI-Client.",
     sections: { product: "Produkt", resources: "Ressourcen", legal: "Rechtliches" },
     links: {
       pricing: "Preise",
@@ -69,15 +70,18 @@ const de: Dict = {
     twoWays: {
       eyebrow: "Wähle deinen Weg",
       title: "Zwei Wege, n8n-mcp zu nutzen",
-      subtitle: "Mit dem Chat Agent direkt Workflows bauen oder die Lieblings-KI-Tools per MCP für volle Kontrolle anbinden.",
+      subtitle:
+        "Mit dem Chat Agent direkt Workflows bauen oder die Lieblings-KI-Tools per MCP für volle Kontrolle anbinden.",
       poweredByPrefix: "Aufgebaut auf dem Open-Source-",
-      poweredBySuffix: "-Knowledge-Server plus einem gehosteten Runtime-Gateway — kein Fork, eine Ergänzung.",
+      poweredBySuffix:
+        "-Knowledge-Server plus einem gehosteten Runtime-Gateway — kein Fork, eine Ergänzung.",
       chat: {
         badge: "Neu gestartet",
         eyebrow: "Empfohlen",
         title: "Chat Agent",
         body: "Ein vollwertiger KI-Agent, der aus einem einzigen Prompt produktionsreife n8n-Workflows baut, validiert und ausrollt. Kein Setup, keine Lernkurve.",
-        example: '"Schick mir jeden Morgen um 8 eine Slack-Zusammenfassung meiner Google-Calendar-Termine"',
+        example:
+          '"Schick mir jeden Morgen um 8 eine Slack-Zusammenfassung meiner Google-Calendar-Termine"',
         cta: "Chat Agent testen",
       },
       mcp: {
@@ -94,17 +98,38 @@ const de: Dict = {
     },
     features: {
       items: [
-        { title: "Universelles MCP", body: "Streamable-HTTP-MCP-Server, kompatibel mit allen großen KI-Clients." },
-        { title: "Alle Workflows", body: "Auflisten, ausführen, debuggen und prüfen — jeder Workflow deiner Instanz." },
-        { title: "Verschlüsselt im Ruhezustand", body: "Dein n8n-API-Key wird mit AES-256-GCM verschlüsselt, bevor er die DB erreicht." },
-        { title: "Sub-Sekunden-Latenz", body: "Edge-Deployment mit Tool-Routing hält Aufrufe schnell." },
-        { title: "Offenes Protokoll", body: "Auf der offiziellen MCP-Spec — kein proprietärer Lock-in." },
-        { title: "Multi-Instance", body: "Beliebig viele n8n-Instanzen aus einem Konto verbinden." },
+        {
+          title: "Universelles MCP",
+          body: "Streamable-HTTP-MCP-Server, kompatibel mit allen großen KI-Clients.",
+        },
+        {
+          title: "Alle Workflows",
+          body: "Auflisten, ausführen, debuggen und prüfen — jeder Workflow deiner Instanz.",
+        },
+        {
+          title: "Verschlüsselt im Ruhezustand",
+          body: "Dein n8n-API-Key wird mit AES-256-GCM verschlüsselt, bevor er die DB erreicht.",
+        },
+        {
+          title: "Sub-Sekunden-Latenz",
+          body: "Edge-Deployment mit Tool-Routing hält Aufrufe schnell.",
+        },
+        {
+          title: "Offenes Protokoll",
+          body: "Auf der offiziellen MCP-Spec — kein proprietärer Lock-in.",
+        },
+        {
+          title: "Multi-Instance",
+          body: "Beliebig viele n8n-Instanzen aus einem Konto verbinden.",
+        },
       ],
       notSame: "Nicht dasselbe wie:",
-      zapierTip: "Zapier hostet MCP für Zapiers Zaps. Wir hosten MCP für dein bestehendes n8n — selbstgehostet, ohne Lock-in.",
-      pipedreamTip: "Sie liefern Connector-Granularität (ein Tool pro API-Endpoint). Wir liefern Workflow-Granularität — deine bestehende n8n-Logik, eins zu eins wiederverwendet.",
-      n8nCloudTip: "Deckt nur n8n-Cloud-Workspaces ab. Wir funktionieren mit Self-Hosted, Cloud und Multi-Instance — alles in einem Konto.",
+      zapierTip:
+        "Zapier hostet MCP für Zapiers Zaps. Wir hosten MCP für dein bestehendes n8n — selbstgehostet, ohne Lock-in.",
+      pipedreamTip:
+        "Sie liefern Connector-Granularität (ein Tool pro API-Endpoint). Wir liefern Workflow-Granularität — deine bestehende n8n-Logik, eins zu eins wiederverwendet.",
+      n8nCloudTip:
+        "Deckt nur n8n-Cloud-Workspaces ab. Wir funktionieren mit Self-Hosted, Cloud und Multi-Instance — alles in einem Konto.",
     },
     pricing: {
       eyebrow: "Einfache Preise",
@@ -157,33 +182,61 @@ const de: Dict = {
     diy: {
       eyebrow: "Warum ein Gateway",
       title: "Eigenbau-MCP-Node vs. n8n-mcp Gateway",
-      subtitle: "Klar kannst du es selbst bauen. Hier siehst du, was du dir sparst, wenn wir hosten.",
+      subtitle:
+        "Klar kannst du es selbst bauen. Hier siehst du, was du dir sparst, wenn wir hosten.",
       view: { auto: "Auto", desktop: "Desktop", mobile: "Mobil" },
       headers: { capability: "Funktion", diy: "Eigener n8n-MCP-Node", gateway: "n8n-mcp Gateway" },
       mobile: { diy: "Eigenbau", gateway: "Gateway" },
       rows: [
-        { label: "Deployment", diy: "MCP-Node selbst aufsetzen, URL veröffentlichen, am Leben halten", gateway: "Eine gehostete URL — funktioniert mit jeder n8n-Instanz" },
-        { label: "Credentials", diy: "Roher n8n-API-Key wird jedem KI-Client gegeben", gateway: "AES-256-GCM verschlüsselt, nur das Gateway sieht ihn" },
-        { label: "Multi-Client", diy: "Auth & URL pro Client neu konfigurieren", gateway: "Eine URL für Claude, ChatGPT, Cursor, Windsurf…" },
-        { label: "Observability", diy: "n8n-Execution-Logs durchwühlen", gateway: "Pro-Call-Logs, Quoten und Nutzungsanalyse" },
+        {
+          label: "Deployment",
+          diy: "MCP-Node selbst aufsetzen, URL veröffentlichen, am Leben halten",
+          gateway: "Eine gehostete URL — funktioniert mit jeder n8n-Instanz",
+        },
+        {
+          label: "Credentials",
+          diy: "Roher n8n-API-Key wird jedem KI-Client gegeben",
+          gateway: "AES-256-GCM verschlüsselt, nur das Gateway sieht ihn",
+        },
+        {
+          label: "Multi-Client",
+          diy: "Auth & URL pro Client neu konfigurieren",
+          gateway: "Eine URL für Claude, ChatGPT, Cursor, Windsurf…",
+        },
+        {
+          label: "Observability",
+          diy: "n8n-Execution-Logs durchwühlen",
+          gateway: "Pro-Call-Logs, Quoten und Nutzungsanalyse",
+        },
       ],
     },
     arch: {
       eyebrow: "Architektur",
       title: "Erreiche selbstgehostetes n8n hinter jedem Netzwerk",
-      subtitle: "Das Gateway braucht nur einen HTTPS-Endpunkt. Öffentlich, getunnelt oder vollständig privat — wähle den Weg, der passt.",
+      subtitle:
+        "Das Gateway braucht nur einen HTTPS-Endpunkt. Öffentlich, getunnelt oder vollständig privat — wähle den Weg, der passt.",
       nodes: {
-        client: "KI-Client", clientSub: "Claude · Cursor · ChatGPT",
-        gateway: "n8n-mcp Gateway", gatewaySub: "Edge · Multi-Tenant",
-        publicN8n: "Öffentliches n8n", publicSub: "HTTPS-Endpunkt",
-        tunnel: "Tunnel", tunnelSub: "Cloudflare · Tailscale",
-        privateVpc: "Private VPC", privateSub: "Nur selbstgehostet",
+        client: "KI-Client",
+        clientSub: "Claude · Cursor · ChatGPT",
+        gateway: "n8n-mcp Gateway",
+        gatewaySub: "Edge · Multi-Tenant",
+        publicN8n: "Öffentliches n8n",
+        publicSub: "HTTPS-Endpunkt",
+        tunnel: "Tunnel",
+        tunnelSub: "Cloudflare · Tailscale",
+        privateVpc: "Private VPC",
+        privateSub: "Nur selbstgehostet",
       },
-      badges: { ssrf: "SSRF-Schutz", aes: "AES-256-GCM at rest", zero: "Keine Workflow-Daten gespeichert" },
+      badges: {
+        ssrf: "SSRF-Schutz",
+        aes: "AES-256-GCM at rest",
+        zero: "Keine Workflow-Daten gespeichert",
+      },
       security: {
         eyebrow: "Sicherheit & Datenfluss",
         title: "Was das Gateway speichert — und was bewusst nicht",
-        subtitle: "Drei Grenzen, auf die du dich verlassen kannst, wenn ein KI-Client deine n8n-Workflows über n8n-mcp aufruft.",
+        subtitle:
+          "Drei Grenzen, auf die du dich verlassen kannst, wenn ein KI-Client deine n8n-Workflows über n8n-mcp aufruft.",
         pillars: [
           {
             title: "AES-256-GCM at rest",
@@ -193,7 +246,8 @@ const de: Dict = {
               "Entschlüsselung nur im Gateway-Request-Handler",
               "Niemals geloggt, nie ans Frontend zurückgegeben",
             ],
-            boundary: "Grenze: Workflow-Inputs/Outputs werden nicht persistiert — nur deine Credentials, verschlüsselt.",
+            boundary:
+              "Grenze: Workflow-Inputs/Outputs werden nicht persistiert — nur deine Credentials, verschlüsselt.",
           },
           {
             title: "SSRF-Schutz",
@@ -203,7 +257,8 @@ const de: Dict = {
               "Tunnel (Cloudflare, Tailscale Funnel) per Domain-Allowlist",
               "Redirects werden bei jedem Hop neu validiert",
             ],
-            boundary: "Grenze: 127.0.0.1, 10.0.0.0/8, link-local und Metadata-Endpoints werden abgelehnt.",
+            boundary:
+              "Grenze: 127.0.0.1, 10.0.0.0/8, link-local und Metadata-Endpoints werden abgelehnt.",
           },
           {
             title: "Keine Workflow-Daten gespeichert",
@@ -213,7 +268,8 @@ const de: Dict = {
               "Audit-Log nur mit Metadaten: Tool, Status, Latenz, Bytes",
               "Weder Prompt noch Payload noch n8n-Execution-Daten bleiben",
             ],
-            boundary: "Grenze: Brauchst du volle Payload-Speicherung, nutze n8n's Execution-Log — nicht das Gateway.",
+            boundary:
+              "Grenze: Brauchst du volle Payload-Speicherung, nutze n8n's Execution-Log — nicht das Gateway.",
           },
         ],
       },
@@ -221,32 +277,58 @@ const de: Dict = {
     evolution: {
       eyebrow: "Die Evolution",
       title: "Vom Frust zum Flow",
-      subtitle: "Reines Prompting bringt dich nur so weit. Mit einem echten MCP-Gateway bekommt dein KI-Client First-Class-Zugriff auf n8n.",
+      subtitle:
+        "Reines Prompting bringt dich nur so weit. Mit einem echten MCP-Gateway bekommt dein KI-Client First-Class-Zugriff auf n8n.",
       withoutLabel: "Ohne MCP",
       withLabel: "Mit n8n-mcp",
       pairs: [
         {
-          pain: { title: "JSON kopieren", body: "Die KI generiert Workflow-JSON, du kopierst es nach n8n. Sieht richtig aus, scheitert aber an erfundenen Properties." },
-          flow: { title: "Direktes Deployment", body: "Die KI erstellt Workflows direkt in deinem n8n. Kein Copy-Paste, keine Importfehler — nur funktionierende Automation." },
+          pain: {
+            title: "JSON kopieren",
+            body: "Die KI generiert Workflow-JSON, du kopierst es nach n8n. Sieht richtig aus, scheitert aber an erfundenen Properties.",
+          },
+          flow: {
+            title: "Direktes Deployment",
+            body: "Die KI erstellt Workflows direkt in deinem n8n. Kein Copy-Paste, keine Importfehler — nur funktionierende Automation.",
+          },
         },
         {
-          pain: { title: "Screenshots schicken", body: "Workflow verbessern? Screenshot, einfügen, Kontext erklären. Jedes. Mal." },
-          flow: { title: "Live-Zugriff", body: "Die KI liest deine bestehenden Workflows, versteht den Kontext und macht gezielte Verbesserungen. Kein Screenshot nötig." },
+          pain: {
+            title: "Screenshots schicken",
+            body: "Workflow verbessern? Screenshot, einfügen, Kontext erklären. Jedes. Mal.",
+          },
+          flow: {
+            title: "Live-Zugriff",
+            body: "Die KI liest deine bestehenden Workflows, versteht den Kontext und macht gezielte Verbesserungen. Kein Screenshot nötig.",
+          },
         },
         {
-          pain: { title: "Veraltete Configs", body: "n8n updatet wöchentlich. KI-Trainingsdaten sind Monate alt. Generierte Workflows nutzen veraltete Optionen." },
-          flow: { title: "Immer aktuell", body: "Doku synchron mit den neuesten n8n-Releases. Jeder Node, jeder Parameter — immer korrekt." },
+          pain: {
+            title: "Veraltete Configs",
+            body: "n8n updatet wöchentlich. KI-Trainingsdaten sind Monate alt. Generierte Workflows nutzen veraltete Optionen.",
+          },
+          flow: {
+            title: "Immer aktuell",
+            body: "Doku synchron mit den neuesten n8n-Releases. Jeder Node, jeder Parameter — immer korrekt.",
+          },
         },
         {
-          pain: { title: "Blindes Debugging", body: "Workflow gescheitert? Die KI sieht keine Logs. Du kopierst Fehlermeldungen und hoffst." },
-          flow: { title: "Smarte Selbstkorrektur", body: "Validierungs-Tools geben der KI echtes Feedback. Sie erkennt eigene Fehler und behebt sie, bevor du es merkst." },
+          pain: {
+            title: "Blindes Debugging",
+            body: "Workflow gescheitert? Die KI sieht keine Logs. Du kopierst Fehlermeldungen und hoffst.",
+          },
+          flow: {
+            title: "Smarte Selbstkorrektur",
+            body: "Validierungs-Tools geben der KI echtes Feedback. Sie erkennt eigene Fehler und behebt sie, bevor du es merkst.",
+          },
         },
       ],
     },
     cache: {
       eyebrow: "Kollektives Wissen",
       title: "Jeder Workflow macht alle schneller",
-      subtitle: "Jeder auf der Plattform gebaute Workflow speist einen geteilten Cache. Wenn dein Agent ein bewährtes Muster nimmt und ein paar Felder anpasst, sparst du Tokens — und Wartezeit.",
+      subtitle:
+        "Jeder auf der Plattform gebaute Workflow speist einen geteilten Cache. Wenn dein Agent ein bewährtes Muster nimmt und ein paar Felder anpasst, sparst du Tokens — und Wartezeit.",
       steps: [
         { title: "Anfrage", desc: "User beschreibt einen Workflow" },
         { title: "Cache-Suche", desc: "Bekannte Muster scannen" },
@@ -281,21 +363,36 @@ const de: Dict = {
         name: "Free",
         price: "$0",
         cadenceKey: "forever",
-        features: ["100 MCP-Calls / Tag", "1 n8n-Instanz", "1 Plattform-API-Key", "Community-Support"],
+        features: [
+          "100 MCP-Calls / Tag",
+          "1 n8n-Instanz",
+          "1 Plattform-API-Key",
+          "Community-Support",
+        ],
         cta: "Kostenlos starten",
       },
       {
         name: "Supporter",
         price: "$19",
         cadenceKey: "month",
-        features: ["10.000 MCP-Calls / Tag", "5 n8n-Instanzen", "Unbegrenzte API-Keys", "Bevorzugter E-Mail-Support"],
+        features: [
+          "10.000 MCP-Calls / Tag",
+          "5 n8n-Instanzen",
+          "Unbegrenzte API-Keys",
+          "Bevorzugter E-Mail-Support",
+        ],
         cta: "Upgrade",
       },
       {
         name: "Pro",
         price: "$49",
         cadenceKey: "month",
-        features: ["100.000 MCP-Calls / Tag", "Unbegrenzte Instanzen", "Audit-Logs", "SLA & privater Support"],
+        features: [
+          "100.000 MCP-Calls / Tag",
+          "Unbegrenzte Instanzen",
+          "Audit-Logs",
+          "SLA & privater Support",
+        ],
         cta: "Pro werden",
       },
     ],
@@ -353,15 +450,16 @@ const de: Dict = {
   },
   seo: {
     pricing: {
-      title: 'Preise — n8n-mcp',
-      description: 'Einfache Monatspreise für das n8n-mcp Gateway. Kostenloser Plan mit 100 MCP-Aufrufen/Tag, bezahlte Pläne ab $19/Monat. Keine Sitzplätze, jederzeit kündbar.',
+      title: "Preise — n8n-mcp",
+      description:
+        "Einfache Monatspreise für das n8n-mcp Gateway. Kostenloser Plan mit 100 MCP-Aufrufen/Tag, bezahlte Pläne ab $19/Monat. Keine Sitzplätze, jederzeit kündbar.",
     },
     faq: {
-      title: 'FAQ — n8n-mcp',
-      description: 'Häufige Fragen zu n8n-mcp: unterstützte KI-Clients, Sicherheit, Preise, Self-Hosting und das MCP-Protokoll.',
+      title: "FAQ — n8n-mcp",
+      description:
+        "Häufige Fragen zu n8n-mcp: unterstützte KI-Clients, Sicherheit, Preise, Self-Hosting und das MCP-Protokoll.",
     },
   },
-
 };
 
 export default de;

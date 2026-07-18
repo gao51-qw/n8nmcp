@@ -69,7 +69,8 @@ const zh: Dict = {
     twoWays: {
       eyebrow: "选择你的方式",
       title: "两种使用 n8n-mcp 的方法",
-      subtitle: "用 Chat Agent 一键生成工作流，或通过 MCP 把你常用的 AI 工具直连到 n8n，掌控全流程。",
+      subtitle:
+        "用 Chat Agent 一键生成工作流，或通过 MCP 把你常用的 AI 工具直连到 n8n，掌控全流程。",
       poweredByPrefix: "底层使用开源的",
       poweredBySuffix: "知识服务器，外加托管的运行网关——不是 fork，而是补充。",
       chat: {
@@ -102,9 +103,12 @@ const zh: Dict = {
         { title: "多实例", body: "一个账号即可连接任意数量的 n8n 实例。" },
       ],
       notSame: "并不等同于：",
-      zapierTip: "Zapier 把 MCP 提供给 Zapier 的 Zaps；我们把 MCP 提供给你已有的 n8n——自建、不锁平台。",
-      pipedreamTip: "它们暴露的是接口粒度的工具（一个 API 端点一个工具），我们暴露的是工作流粒度的工具——直接复用你已有的 n8n 逻辑。",
-      n8nCloudTip: "只服务 n8n Cloud 的工作区。我们同时支持自建、Cloud 以及多实例，全在一个账号里。",
+      zapierTip:
+        "Zapier 把 MCP 提供给 Zapier 的 Zaps；我们把 MCP 提供给你已有的 n8n——自建、不锁平台。",
+      pipedreamTip:
+        "它们暴露的是接口粒度的工具（一个 API 端点一个工具），我们暴露的是工作流粒度的工具——直接复用你已有的 n8n 逻辑。",
+      n8nCloudTip:
+        "只服务 n8n Cloud 的工作区。我们同时支持自建、Cloud 以及多实例，全在一个账号里。",
     },
     pricing: {
       eyebrow: "简单清晰的定价",
@@ -113,23 +117,13 @@ const zh: Dict = {
       free: {
         name: "免费版",
         cadence: "永久",
-        features: [
-          "每天 100 次 MCP 调用",
-          "1 个 n8n 实例",
-          "1 个平台 API key",
-          "社区支持",
-        ],
+        features: ["每天 100 次 MCP 调用", "1 个 n8n 实例", "1 个平台 API key", "社区支持"],
         cta: "免费开始",
       },
       supporter: {
         name: "支持者版",
         cadence: "每月",
-        features: [
-          "每天 10,000 次 MCP 调用",
-          "5 个 n8n 实例",
-          "无限 API key",
-          "优先邮件支持",
-        ],
+        features: ["每天 10,000 次 MCP 调用", "5 个 n8n 实例", "无限 API key", "优先邮件支持"],
         cta: "成为支持者",
         badge: "最受欢迎",
       },
@@ -162,9 +156,21 @@ const zh: Dict = {
       headers: { capability: "能力", diy: "自建 n8n MCP 节点", gateway: "n8n-mcp 网关" },
       mobile: { diy: "自建", gateway: "网关" },
       rows: [
-        { label: "部署", diy: "手动配 MCP 节点、暴露 URL、自己保活", gateway: "一个托管 URL，开箱即用，兼容所有 n8n 实例" },
-        { label: "凭据", diy: "把原始 n8n API key 直接交给每个 AI 客户端", gateway: "AES-256-GCM 静态加密，仅网关可解密" },
-        { label: "多客户端", diy: "每个客户端都要重新配置认证和 URL", gateway: "一个 URL 适配 Claude、ChatGPT、Cursor、Windsurf…" },
+        {
+          label: "部署",
+          diy: "手动配 MCP 节点、暴露 URL、自己保活",
+          gateway: "一个托管 URL，开箱即用，兼容所有 n8n 实例",
+        },
+        {
+          label: "凭据",
+          diy: "把原始 n8n API key 直接交给每个 AI 客户端",
+          gateway: "AES-256-GCM 静态加密，仅网关可解密",
+        },
+        {
+          label: "多客户端",
+          diy: "每个客户端都要重新配置认证和 URL",
+          gateway: "一个 URL 适配 Claude、ChatGPT、Cursor、Windsurf…",
+        },
         { label: "可观测", diy: "翻 n8n 执行日志找线索", gateway: "逐次调用日志、配额与使用分析" },
       ],
     },
@@ -173,11 +179,16 @@ const zh: Dict = {
       title: "无论网络如何，都能连上你的自建 n8n",
       subtitle: "网关只需一个 HTTPS 端点。公网、隧道或完全私有，都能选到合适的方案。",
       nodes: {
-        client: "AI 客户端", clientSub: "Claude · Cursor · ChatGPT",
-        gateway: "n8n-mcp 网关", gatewaySub: "边缘 · 多租户",
-        publicN8n: "公网 n8n", publicSub: "HTTPS 端点",
-        tunnel: "隧道", tunnelSub: "Cloudflare · Tailscale",
-        privateVpc: "私有 VPC", privateSub: "仅自建",
+        client: "AI 客户端",
+        clientSub: "Claude · Cursor · ChatGPT",
+        gateway: "n8n-mcp 网关",
+        gatewaySub: "边缘 · 多租户",
+        publicN8n: "公网 n8n",
+        publicSub: "HTTPS 端点",
+        tunnel: "隧道",
+        tunnelSub: "Cloudflare · Tailscale",
+        privateVpc: "私有 VPC",
+        privateSub: "仅自建",
       },
       badges: { ssrf: "SSRF 防护", aes: "AES-256-GCM 静态加密", zero: "零工作流数据留存" },
       security: {
@@ -221,32 +232,58 @@ const zh: Dict = {
     evolution: {
       eyebrow: "进化",
       title: "从受挫到顺畅",
-      subtitle: "纯靠提示词只能走这么远。有了真正的 MCP 网关，你的 AI 客户端就能一等公民地访问 n8n。",
+      subtitle:
+        "纯靠提示词只能走这么远。有了真正的 MCP 网关，你的 AI 客户端就能一等公民地访问 n8n。",
       withoutLabel: "没有 MCP",
       withLabel: "用 n8n-mcp",
       pairs: [
         {
-          pain: { title: "复制粘贴 JSON", body: "AI 生成工作流 JSON 让你贴回 n8n。看似无误，却因臆造的字段抛出晦涩错误。" },
-          flow: { title: "直接部署", body: "AI 直接在你的 n8n 实例里创建工作流。无需复制粘贴、无导入错误，只有真正能跑的自动化。" },
+          pain: {
+            title: "复制粘贴 JSON",
+            body: "AI 生成工作流 JSON 让你贴回 n8n。看似无误，却因臆造的字段抛出晦涩错误。",
+          },
+          flow: {
+            title: "直接部署",
+            body: "AI 直接在你的 n8n 实例里创建工作流。无需复制粘贴、无导入错误，只有真正能跑的自动化。",
+          },
         },
         {
-          pain: { title: "靠截图沟通", body: "想让 AI 改进工作流？截图、贴回、再解释一遍上下文。每。一。次。" },
-          flow: { title: "实时读取工作流", body: "AI 直接读取你的现有工作流，理解上下文并精准改动。无需截图。" },
+          pain: {
+            title: "靠截图沟通",
+            body: "想让 AI 改进工作流？截图、贴回、再解释一遍上下文。每。一。次。",
+          },
+          flow: {
+            title: "实时读取工作流",
+            body: "AI 直接读取你的现有工作流，理解上下文并精准改动。无需截图。",
+          },
         },
         {
-          pain: { title: "节点配置过时", body: "n8n 每周更新，AI 的训练数据已是几个月前。生成的工作流用的是过时选项与缺失参数。" },
-          flow: { title: "始终最新", body: "文档与最新 n8n 版本同步。每个节点、每个参数都准确无误。" },
+          pain: {
+            title: "节点配置过时",
+            body: "n8n 每周更新，AI 的训练数据已是几个月前。生成的工作流用的是过时选项与缺失参数。",
+          },
+          flow: {
+            title: "始终最新",
+            body: "文档与最新 n8n 版本同步。每个节点、每个参数都准确无误。",
+          },
         },
         {
-          pain: { title: "盲调试", body: "工作流挂了？AI 看不到执行日志，你只能复制错误信息，碰运气。" },
-          flow: { title: "智能自我纠错", body: "校验工具给 AI 真实反馈，它会在你察觉之前就发现并修复自己的错误。" },
+          pain: {
+            title: "盲调试",
+            body: "工作流挂了？AI 看不到执行日志，你只能复制错误信息，碰运气。",
+          },
+          flow: {
+            title: "智能自我纠错",
+            body: "校验工具给 AI 真实反馈，它会在你察觉之前就发现并修复自己的错误。",
+          },
         },
       ],
     },
     cache: {
       eyebrow: "群体智慧",
       title: "每一个工作流，都让所有人更快",
-      subtitle: "平台上构建的每个工作流都会进入共享缓存。当 Agent 选用一个经过验证的模式并改几个字段，你就省下了从零生成的 token——和等待时间。",
+      subtitle:
+        "平台上构建的每个工作流都会进入共享缓存。当 Agent 选用一个经过验证的模式并改几个字段，你就省下了从零生成的 token——和等待时间。",
       steps: [
         { title: "请求", desc: "用户描述一个工作流" },
         { title: "搜索缓存", desc: "扫描已有模式" },
@@ -255,11 +292,7 @@ const zh: Dict = {
         { title: "定制", desc: "Agent 按你的需求微调" },
       ],
       privacyLabel: "始终隐私优先。",
-      badges: [
-        "只匹配模式，不读你的数据",
-        "自托管 AI 筛选",
-        "数据不离开 n8n-mcp",
-      ],
+      badges: ["只匹配模式，不读你的数据", "自托管 AI 筛选", "数据不离开 n8n-mcp"],
     },
     community: {
       eyebrow: "社区",
@@ -353,15 +386,16 @@ const zh: Dict = {
   },
   seo: {
     pricing: {
-      title: '价格 — n8n-mcp',
-      description: 'n8n-mcp 网关的月度订阅:免费套餐每天 100 次 MCP 调用,付费版本起价 $19/月,按需取消,无席位限制。',
+      title: "价格 — n8n-mcp",
+      description:
+        "n8n-mcp 网关的月度订阅:免费套餐每天 100 次 MCP 调用,付费版本起价 $19/月,按需取消,无席位限制。",
     },
     faq: {
-      title: '常见问题 — n8n-mcp',
-      description: '关于 n8n-mcp 的常见问题:支持的 AI 客户端、安全性、价格、私有部署以及 MCP 协议。',
+      title: "常见问题 — n8n-mcp",
+      description:
+        "关于 n8n-mcp 的常见问题:支持的 AI 客户端、安全性、价格、私有部署以及 MCP 协议。",
     },
   },
-
 };
 
 export default zh;

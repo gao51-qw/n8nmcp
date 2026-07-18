@@ -8,8 +8,9 @@
 import { LOCALES, DEFAULT_LOCALE, type Locale } from "@/i18n/config";
 import { isLocale } from "@/i18n/config";
 import { DICTIONARIES } from "@/i18n/dict";
+import { siteUrl, type SiteSurface } from "@/lib/site-domains";
 
-export const SITE_ORIGIN = "https://n8nmcp.lovable.app";
+export const SITE_ORIGIN = siteUrl("mcp");
 
 // Map our internal locale codes to the BCP-47 / hreflang values Google expects.
 export const LOCALE_HREFLANG: Record<Locale, string> = {
@@ -40,26 +41,34 @@ export function localizedPath(logicalPath: string, locale: Locale): string {
 }
 
 /** Absolute URL for a logical path in a given locale. */
-export function localizedUrl(logicalPath: string, locale: Locale): string {
-  return `${SITE_ORIGIN}${localizedPath(logicalPath, locale)}`;
+export function localizedUrl(
+  logicalPath: string,
+  locale: Locale,
+  surface: SiteSurface = "mcp",
+): string {
+  return `${siteUrl(surface)}${localizedPath(logicalPath, locale)}`;
 }
 
 /** Build the canonical + hreflang `<link>` set for a logical path. */
-export function buildAlternateLinks(logicalPath: string, currentLocale: Locale) {
+export function buildAlternateLinks(
+  logicalPath: string,
+  currentLocale: Locale,
+  surface: SiteSurface = "mcp",
+) {
   const links: Array<{ rel: string; href: string; hrefLang?: string }> = [
-    { rel: "canonical", href: localizedUrl(logicalPath, currentLocale) },
+    { rel: "canonical", href: localizedUrl(logicalPath, currentLocale, surface) },
   ];
   for (const l of LOCALES) {
     links.push({
       rel: "alternate",
       hrefLang: LOCALE_HREFLANG[l],
-      href: localizedUrl(logicalPath, l),
+      href: localizedUrl(logicalPath, l, surface),
     });
   }
   links.push({
     rel: "alternate",
     hrefLang: "x-default",
-    href: localizedUrl(logicalPath, DEFAULT_LOCALE),
+    href: localizedUrl(logicalPath, DEFAULT_LOCALE, surface),
   });
   return links;
 }
@@ -93,11 +102,13 @@ export function buildLocalizedHead(args: {
   pickStrings: (t: (typeof DICTIONARIES)[Locale]) => SeoStrings;
   ogType?: string;
   ogImage?: string;
+  surface?: SiteSurface;
 }) {
   const locale = resolveLocale(args.rawLocale);
   const t = DICTIONARIES[locale];
   const { title, description } = args.pickStrings(t);
-  const url = localizedUrl(args.logicalPath, locale);
+  const surface = args.surface ?? "mcp";
+  const url = localizedUrl(args.logicalPath, locale, surface);
 
   return {
     meta: [
@@ -121,6 +132,6 @@ export function buildLocalizedHead(args: {
           ]
         : []),
     ],
-    links: buildAlternateLinks(args.logicalPath, locale),
+    links: buildAlternateLinks(args.logicalPath, locale, surface),
   };
 }

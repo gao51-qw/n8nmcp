@@ -1,0 +1,275 @@
+# Dedicated production mail
+
+This runbook is the operator contract for the production sender
+`server@n8nworkflow.com`. Complete every gate in order. Do not activate a
+changed mail path until DNS, TLS, authentication, and external delivery checks
+all pass.
+
+## Scope and ownership
+
+- Public SMTP hostname: `server.n8nworkflow.com`
+- Production sender and login: `server@n8nworkflow.com`
+- VPS: `159.195.40.97`
+- Application directory: `/opt/n8nmcp-app`
+- Mail runtime: the existing BillionMail installation on the VPS
+- Outbound relay: Resend, configured through BillionMail
+
+This file contains non-secret values only. Never put an SMTP password, Resend
+credential, API key, DKIM private key, or provider recovery code in this
+repository, a ticket, a command argument, or shell history.
+
+## 1. Back up before changing anything
+
+Open a change window and record the current DNS TTLs and mail-service health.
+Export the current DNS zone from the DNS provider. Store that export in the
+restricted operator vault, not in Git.
+
+Select the installed roots and verify every source before creating a snapshot.
+`SUPABASE_AUTH_SOURCE` must be the discovered directory containing the active
+self-hosted Supabase Auth environment or compose configuration; do not guess it.
+Run this whole block before changing DNS or any running service:
+
+```bash
+set -euo pipefail
+BILLIONMAIL_ROOT=/opt/BillionMail
+SUPABASE_AUTH_SOURCE=/path/to/discovered/supabase-auth
+MAIL_BACKUP=/opt/n8nmcp-app/backups/mail/$(date -u +%Y%m%dT%H%M%SZ)
+
+sudo test -d "$BILLIONMAIL_ROOT"
+sudo test -r "$BILLIONMAIL_ROOT"
+sudo find "$BILLIONMAIL_ROOT" -mindepth 1 -print -quit | grep -q .
+sudo test -d "$SUPABASE_AUTH_SOURCE"
+sudo test -r "$SUPABASE_AUTH_SOURCE"
+sudo find "$SUPABASE_AUTH_SOURCE" -mindepth 1 -print -quit | grep -q .
+sudo test -s /opt/n8nmcp-app/deploy/.env.app
+
+sudo install -d -m 0700 -o root -g root "$MAIL_BACKUP"
+sudo install -d -m 0700 -o root -g root "$MAIL_BACKUP/billionmail"
+sudo install -d -m 0700 -o root -g root "$MAIL_BACKUP/supabase-auth"
+sudo cp -a "$BILLIONMAIL_ROOT"/. "$MAIL_BACKUP/billionmail"/
+sudo cp -a "$SUPABASE_AUTH_SOURCE"/. "$MAIL_BACKUP/supabase-auth"/
+sudo cp -a /opt/n8nmcp-app/deploy/.env.app "$MAIL_BACKUP/app.env"
+sudo chown -R root:root "$MAIL_BACKUP"
+sudo chmod 0700 "$MAIL_BACKUP" "$MAIL_BACKUP/billionmail"
+sudo find "$MAIL_BACKUP/supabase-auth" -type d -exec chmod 0700 {} +
+sudo find "$MAIL_BACKUP/supabase-auth" -type f -exec chmod 0600 {} +
+sudo chmod 0600 "$MAIL_BACKUP/app.env"
+
+# Create root-only, deterministic manifests. Each command changes to its data
+# root so the manifest records the same relative paths for source and backup.
+sudo install -m 0600 -o root -g root /dev/null "$MAIL_BACKUP/billionmail.source.sha256"
+sudo install -m 0600 -o root -g root /dev/null "$MAIL_BACKUP/billionmail.destination.sha256"
+sudo install -m 0600 -o root -g root /dev/null "$MAIL_BACKUP/supabase-auth.source.sha256"
+sudo install -m 0600 -o root -g root /dev/null "$MAIL_BACKUP/supabase-auth.destination.sha256"
+sudo bash -c 'set -euo pipefail; cd -- "$1"; find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum --zero' _ "$BILLIONMAIL_ROOT" \
+  | sudo tee "$MAIL_BACKUP/billionmail.source.sha256" >/dev/null
+sudo bash -c 'set -euo pipefail; cd -- "$1"; find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum --zero' _ "$MAIL_BACKUP/billionmail" \
+  | sudo tee "$MAIL_BACKUP/billionmail.destination.sha256" >/dev/null
+sudo bash -c 'set -euo pipefail; cd -- "$1"; find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum --zero' _ "$SUPABASE_AUTH_SOURCE" \
+  | sudo tee "$MAIL_BACKUP/supabase-auth.source.sha256" >/dev/null
+sudo bash -c 'set -euo pipefail; cd -- "$1"; find . -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum --zero' _ "$MAIL_BACKUP/supabase-auth" \
+  | sudo tee "$MAIL_BACKUP/supabase-auth.destination.sha256" >/dev/null
+
+# Fail-closed read-back and integrity gate.
+sudo test -r "$MAIL_BACKUP/billionmail"
+sudo find "$MAIL_BACKUP/billionmail" -mindepth 1 -print -quit | grep -q .
+sudo tar -C "$MAIL_BACKUP/billionmail" -cf /dev/null .
+sudo test -r "$MAIL_BACKUP/supabase-auth"
+sudo find "$MAIL_BACKUP/supabase-auth" -mindepth 1 -print -quit | grep -q .
+sudo tar -C "$MAIL_BACKUP/supabase-auth" -cf /dev/null .
+sudo test -s "$MAIL_BACKUP/app.env"
+sudo sha256sum "$MAIL_BACKUP/app.env"
+sudo cmp -s "$MAIL_BACKUP/billionmail.source.sha256" "$MAIL_BACKUP/billionmail.destination.sha256" \
+  || { echo "BillionMail backup manifest mismatch" >&2; exit 1; }
+sudo cmp -s "$MAIL_BACKUP/supabase-auth.source.sha256" "$MAIL_BACKUP/supabase-auth.destination.sha256" \
+  || { echo "Supabase Auth backup manifest mismatch" >&2; exit 1; }
+sudo cmp -s /opt/n8nmcp-app/deploy/.env.app "$MAIL_BACKUP/app.env" \
+  || { echo "App environment backup mismatch" >&2; exit 1; }
+sudo test "$(sudo stat -c '%U:%G:%a' "$MAIL_BACKUP")" = "root:root:700"
+sudo test "$(sudo stat -c '%U:%G:%a' "$MAIL_BACKUP/billionmail")" = "root:root:700"
+sudo test "$(sudo stat -c '%U:%G:%a' "$MAIL_BACKUP/supabase-auth")" = "root:root:700"
+sudo test "$(sudo stat -c '%U:%G:%a' "$MAIL_BACKUP/app.env")" = "root:root:600"
+if sudo find "$MAIL_BACKUP/supabase-auth" -type d ! -perm 0700 -print -quit | grep -q .; then exit 1; fi
+if sudo find "$MAIL_BACKUP/supabase-auth" -type f ! -perm 0600 -print -quit | grep -q .; then exit 1; fi
+OWNERSHIP_MISMATCH="$(sudo find "$MAIL_BACKUP" \( ! -user root -o ! -group root \) -print -quit)"
+if ! test -z "$OWNERSHIP_MISMATCH"; then
+  unset OWNERSHIP_MISMATCH
+  echo "Backup ownership verification failed" >&2
+  exit 1
+fi
+unset OWNERSHIP_MISMATCH
+```
+
+If the installed BillionMail runtime reports a different root directory, use
+that discovered directory in place of `/opt/BillionMail` and record it in the
+change log. The backup root and Supabase backup directories must have mode `0700`;
+every contained Supabase backup file and the app environment backup must have mode `0600`.
+The SHA-256 manifests use relative paths, null-delimited filenames, and stable
+byte-order sorting. Their silent comparisons prove that both copied trees have
+the same regular files and content as their sources; the app `cmp -s` proves its
+copy is byte-for-byte identical. No manifest or comparison prints file contents
+or secrets. The `tar` commands are additional deliberate read-back checks: they must
+traverse every copied entry without an unreadable-file or structural error.
+Record the app-environment checksum, snapshot directory, and DNS export
+identifier in the restricted change log. The resulting protected backups
+contain secrets: never copy them into the repository or an unencrypted shared
+location.
+
+Stop before any DNS or runtime mutation if any backup verification fails. Do
+not bypass a failed source, copy, ownership, permission, non-empty, read-back,
+archive traversal, checksum, or DNS-export check; repair the backup and rerun
+the entire gate first.
+
+## 2. Publish and verify DNS
+
+The initial routing set is exactly:
+
+```txt
+server.n8nworkflow.com.  A    159.195.40.97   DNS only
+n8nworkflow.com.         MX   10 server.n8nworkflow.com.
+```
+
+Keep the SMTP host **DNS only**; do not proxy it through Cloudflare. In the
+verified Resend and BillionMail domain screens, obtain the required SPF, DKIM,
+and DMARC records. Copy every record name, type, and value verbatim. Never guess
+a value or merge multiple provider values by hand. Where multiple senders need
+one SPF policy, use only a provider-documented combined value confirmed by both
+domain screens.
+
+After authoritative DNS has propagated, verify it from outside the VPS:
+
+```bash
+dig +short A server.n8nworkflow.com
+dig +short MX n8nworkflow.com
+dig +short TXT n8nworkflow.com
+dig +short TXT _dmarc.n8nworkflow.com
+```
+
+The A lookup must return only `159.195.40.97`, the MX lookup must identify
+`10 server.n8nworkflow.com.`, and the TXT responses must exactly match the
+verified provider screens. Query each DKIM selector shown by those screens with
+`dig +short TXT <selector>._domainkey.n8nworkflow.com`.
+
+## 3. Configure BillionMail and TLS
+
+Configure the public submission endpoint with these non-secret values:
+
+```dotenv
+SMTP_PORT=465
+SMTP_ADMIN_EMAIL=server@n8nworkflow.com
+```
+
+Port 465 must use implicit TLS and present a publicly trusted certificate for
+`server.n8nworkflow.com`. Use port 587 with STARTTLS only as a documented
+fallback for a client that cannot use 465; do not silently downgrade to
+plaintext or accept an invalid certificate.
+
+Configure BillionMail's authenticated outbound relay to Resend using port
+`2465` for implicit TLS or port `2587` for STARTTLS. Copy the relay hostname,
+username, and password from the verified Resend SMTP screen. Prefer 2465; use
+2587 only when the runtime requires STARTTLS. Do not confuse the Resend relay
+port with the public BillionMail submission port `465`.
+
+Enter secrets only in BillionMail's protected UI or a root-only file opened
+with `sudoedit`. If an approved setup tool requires interactive input, use a
+hidden prompt (`read -rsp`), pass the value through standard input, and `unset`
+it immediately. Do not use `echo`, command-line password flags, or paste a
+secret into a command.
+
+Verify the listener and certificate from a host outside the VPS:
+
+```bash
+openssl s_client -connect server.n8nworkflow.com:465 \
+  -servername server.n8nworkflow.com -verify_return_error </dev/null
+```
+
+The command must complete certificate verification, show the expected hostname,
+and negotiate TLS without exposing credentials. Confirm the firewall exposes
+only the intended SMTP ports and that BillionMail accepts authenticated
+submission but rejects unauthenticated relay.
+
+## 4. Configure Supabase Auth
+
+In the self-hosted Supabase Auth environment, set these exact non-secret values:
+
+```dotenv
+GOTRUE_SMTP_HOST=server.n8nworkflow.com
+GOTRUE_SMTP_PORT=465
+GOTRUE_SMTP_USER=server@n8nworkflow.com
+GOTRUE_SMTP_ADMIN_EMAIL=server@n8nworkflow.com
+GOTRUE_SMTP_SENDER_NAME=n8nworkflow
+```
+
+Set the corresponding SMTP password through the protected environment file or
+secret manager; it is intentionally absent here. Require implicit TLS for port
+465. Restart only the Supabase Auth service, inspect its logs for SMTP or TLS
+errors, and leave sign-up mail disabled until the acceptance gate passes.
+
+## 5. Configure the app runtime
+
+In `/opt/n8nmcp-app/deploy/.env.app`, retain the pinned public and support sender
+identity:
+
+```dotenv
+NEXT_PUBLIC_SECURITY_EMAIL=server@n8nworkflow.com
+SUPPORT_EMAIL_FROM=server@n8nworkflow.com
+```
+
+If app notifications continue to use the Resend API directly, enter
+`RESEND_API_KEY` only through the root-only environment file or deployment
+secret mechanism. Restart only the app container after changing its environment
+and confirm its health before testing mail. Do not print the effective
+environment or include it in diagnostic bundles.
+
+## 6. Acceptance gate
+
+Do not enable production traffic until all of these checks pass:
+
+1. The external DNS checks return the exact A and MX routing above, and the
+   Resend/BillionMail screens show SPF, DKIM, and DMARC as verified.
+2. The external OpenSSL check validates the certificate and hostname on port
+   465 with no verification error.
+3. An authenticated submission through BillionMail reaches an external Gmail address
+   outside the organization. In Gmail, open **Show original** and confirm the
+   visible From address is `server@n8nworkflow.com`, SPF is PASS, DKIM is PASS,
+   DMARC is PASS, and the message is not an open-relay artifact.
+   Resend logs must prove that the direct BillionMail submission used the intended relay and port (2465 or 2587).
+4. Trigger both a Supabase Auth confirmation/recovery message and an app support
+   notification to an external Gmail mailbox. Confirm delivery, sender display,
+   links, reply behavior, and provider logs. Check both inbox and spam.
+5. Send a reply from Gmail and confirm the operational mailbox receives it.
+   Confirm expected bounces are visible to operators and no secret appears in
+   application, Supabase Auth, BillionMail, or shell logs.
+
+Record timestamps, recipient domain, message IDs, and pass/fail results in the
+change log. Do not record message bodies, credentials, or authentication tokens.
+Warnings or partial provider verification block activation.
+
+## Rollback
+
+Rollback is service-specific. Restore only the component changed, then repeat
+its health and external acceptance checks:
+
+- **DNS:** restore the provider's pre-change zone export, including its prior
+  TTLs. Wait for authoritative answers to converge and verify A, MX, SPF, DKIM,
+  and DMARC again.
+- **BillionMail/TLS/relay:** stop only the BillionMail runtime, restore its
+  protected snapshot from
+  `/opt/n8nmcp-app/backups/mail/<UTC timestamp>/billionmail`, start it, and
+  verify TLS plus authenticated submission. If only the Resend relay changed,
+  restore the previous relay configuration instead of replacing unrelated mail
+  state.
+- **Supabase Auth:** restore the backed-up Auth environment from
+  `/opt/n8nmcp-app/backups/mail/<UTC timestamp>/supabase-auth/` and restart only
+  the Auth service. Do not roll back the database or the full Supabase stack for
+  an SMTP configuration failure.
+- **App:** restore
+  `/opt/n8nmcp-app/backups/mail/<UTC timestamp>/app.env` to
+  `/opt/n8nmcp-app/deploy/.env.app`, preserve mode `600`, and recreate only the
+  app container. Do not roll back the application image unless the image itself
+  caused the incident.
+
+After rollback, revoke any relay credential that may have been exposed, confirm
+the previous delivery path with an external Gmail check, and document the
+restored snapshot and provider state. Keep production activation blocked until
+all applicable gates are green.

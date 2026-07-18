@@ -16,11 +16,15 @@ export function getMasterKey(): Buffer {
     try {
       const b = Buffer.from(explicit, "base64");
       if (b.length === 32) return b;
-    } catch {}
+    } catch {
+      // Try the next supported encoding.
+    }
     try {
       const h = Buffer.from(explicit, "hex");
       if (h.length === 32) return h;
-    } catch {}
+    } catch {
+      // Fall back to utf8 validation below.
+    }
     const u = Buffer.from(explicit, "utf8");
     if (u.length >= 32) return u.subarray(0, 32);
     throw new Error("APP_ENCRYPTION_KEY must decode to >=32 bytes (base64/hex/utf8)");

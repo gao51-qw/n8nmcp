@@ -13,7 +13,9 @@ export default defineConfig({
     },
   },
   test: {
+    maxWorkers: 2,
+    setupFiles: ["./vitest.setup.ts"],
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
-    exclude: ["tests/e2e/**", "node_modules/**", "dist/**", ".lovable/**"],
+    exclude: ["tests/e2e/**", "node_modules/**", "dist/**", ".next/**"],
   },
 });

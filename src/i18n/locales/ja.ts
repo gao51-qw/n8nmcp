@@ -19,7 +19,8 @@ const ja: Dict = {
     language: "言語",
   },
   footer: {
-    tagline: "n8n 向けのホステッド MCP ゲートウェイ。あなたのワークフローを数秒で任意の AI クライアントに接続します。",
+    tagline:
+      "n8n 向けのホステッド MCP ゲートウェイ。あなたのワークフローを数秒で任意の AI クライアントに接続します。",
     sections: { product: "プロダクト", resources: "リソース", legal: "規約" },
     links: {
       pricing: "料金",
@@ -69,9 +70,11 @@ const ja: Dict = {
     twoWays: {
       eyebrow: "使い方を選ぶ",
       title: "n8n-mcp の 2 つの使い方",
-      subtitle: "Chat Agent でその場でワークフローを生成するか、MCP でお気に入りの AI ツールを直結してフルコントロールするか。",
+      subtitle:
+        "Chat Agent でその場でワークフローを生成するか、MCP でお気に入りの AI ツールを直結してフルコントロールするか。",
       poweredByPrefix: "オープンソースの",
-      poweredBySuffix: "ナレッジサーバー＋ホステッドのランタイムゲートウェイ。fork ではなく、補完です。",
+      poweredBySuffix:
+        "ナレッジサーバー＋ホステッドのランタイムゲートウェイ。fork ではなく、補完です。",
       chat: {
         badge: "新登場",
         eyebrow: "おすすめ",
@@ -94,17 +97,26 @@ const ja: Dict = {
     },
     features: {
       items: [
-        { title: "ユニバーサル MCP", body: "主要な AI クライアントに対応した Streamable HTTP MCP サーバー。" },
-        { title: "全ワークフロー対応", body: "n8n インスタンスのワークフローを一覧・実行・デバッグ・調査。" },
+        {
+          title: "ユニバーサル MCP",
+          body: "主要な AI クライアントに対応した Streamable HTTP MCP サーバー。",
+        },
+        {
+          title: "全ワークフロー対応",
+          body: "n8n インスタンスのワークフローを一覧・実行・デバッグ・調査。",
+        },
         { title: "保存時に暗号化", body: "n8n API キーは DB に届く前に AES-256-GCM で暗号化。" },
         { title: "サブ秒レイテンシ", body: "エッジ配置とツール別ルーティングで高速応答。" },
         { title: "オープンプロトコル", body: "公式 MCP 仕様に準拠 — 独自ロックインなし。" },
         { title: "マルチインスタンス", body: "1 アカウントで好きなだけ n8n インスタンスを接続。" },
       ],
       notSame: "次とは異なります：",
-      zapierTip: "Zapier は自社の Zaps 用に MCP を提供。私たちはあなたの既存の n8n 用に MCP を提供——セルフホスト、ロックインなし。",
-      pipedreamTip: "彼らはコネクタ粒度（API エンドポイントごとに 1 ツール）を公開。私たちはワークフロー粒度——既存の n8n ロジックをそのまま再利用。",
-      n8nCloudTip: "n8n Cloud のワークスペースのみ対応。私たちはセルフホスト、Cloud、複数インスタンスを 1 アカウントで対応。",
+      zapierTip:
+        "Zapier は自社の Zaps 用に MCP を提供。私たちはあなたの既存の n8n 用に MCP を提供——セルフホスト、ロックインなし。",
+      pipedreamTip:
+        "彼らはコネクタ粒度（API エンドポイントごとに 1 ツール）を公開。私たちはワークフロー粒度——既存の n8n ロジックをそのまま再利用。",
+      n8nCloudTip:
+        "n8n Cloud のワークスペースのみ対応。私たちはセルフホスト、Cloud、複数インスタンスを 1 アカウントで対応。",
     },
     pricing: {
       eyebrow: "シンプルな料金",
@@ -162,28 +174,55 @@ const ja: Dict = {
       headers: { capability: "項目", diy: "自前 n8n MCP ノード", gateway: "n8n-mcp ゲートウェイ" },
       mobile: { diy: "自前", gateway: "ゲートウェイ" },
       rows: [
-        { label: "デプロイ", diy: "MCP ノードを自分で配線し、URL を公開して維持", gateway: "ホステッド URL 1 本ですぐに使える、全 n8n インスタンス対応" },
-        { label: "認証情報", diy: "生の n8n API キーを各 AI クライアントに渡す", gateway: "AES-256-GCM で暗号化保存、復号はゲートウェイ内のみ" },
-        { label: "マルチクライアント", diy: "クライアントごとに認証と URL を再設定", gateway: "1 つの URL で Claude、ChatGPT、Cursor、Windsurf に対応" },
-        { label: "可観測性", diy: "n8n の実行ログを掘る", gateway: "コール単位のログ、クォータ、利用分析" },
+        {
+          label: "デプロイ",
+          diy: "MCP ノードを自分で配線し、URL を公開して維持",
+          gateway: "ホステッド URL 1 本ですぐに使える、全 n8n インスタンス対応",
+        },
+        {
+          label: "認証情報",
+          diy: "生の n8n API キーを各 AI クライアントに渡す",
+          gateway: "AES-256-GCM で暗号化保存、復号はゲートウェイ内のみ",
+        },
+        {
+          label: "マルチクライアント",
+          diy: "クライアントごとに認証と URL を再設定",
+          gateway: "1 つの URL で Claude、ChatGPT、Cursor、Windsurf に対応",
+        },
+        {
+          label: "可観測性",
+          diy: "n8n の実行ログを掘る",
+          gateway: "コール単位のログ、クォータ、利用分析",
+        },
       ],
     },
     arch: {
       eyebrow: "アーキテクチャ",
       title: "どんなネットワークの裏にあるセルフホスト n8n にも到達",
-      subtitle: "ゲートウェイに必要なのは HTTPS エンドポイントだけ。公開、トンネル、完全プライベート — 構成に合わせて選べます。",
+      subtitle:
+        "ゲートウェイに必要なのは HTTPS エンドポイントだけ。公開、トンネル、完全プライベート — 構成に合わせて選べます。",
       nodes: {
-        client: "AI クライアント", clientSub: "Claude · Cursor · ChatGPT",
-        gateway: "n8n-mcp ゲートウェイ", gatewaySub: "Edge · マルチテナント",
-        publicN8n: "公開 n8n", publicSub: "HTTPS エンドポイント",
-        tunnel: "トンネル", tunnelSub: "Cloudflare · Tailscale",
-        privateVpc: "プライベート VPC", privateSub: "セルフホスト専用",
+        client: "AI クライアント",
+        clientSub: "Claude · Cursor · ChatGPT",
+        gateway: "n8n-mcp ゲートウェイ",
+        gatewaySub: "Edge · マルチテナント",
+        publicN8n: "公開 n8n",
+        publicSub: "HTTPS エンドポイント",
+        tunnel: "トンネル",
+        tunnelSub: "Cloudflare · Tailscale",
+        privateVpc: "プライベート VPC",
+        privateSub: "セルフホスト専用",
       },
-      badges: { ssrf: "SSRF 防御", aes: "AES-256-GCM 保存時暗号化", zero: "ワークフローデータ非保存" },
+      badges: {
+        ssrf: "SSRF 防御",
+        aes: "AES-256-GCM 保存時暗号化",
+        zero: "ワークフローデータ非保存",
+      },
       security: {
         eyebrow: "セキュリティとデータフロー",
         title: "ゲートウェイが保持するもの — そして敢えて持たないもの",
-        subtitle: "AI クライアントが n8n-mcp 経由で n8n ワークフローを呼ぶ時に頼れる、3 つの境界線。",
+        subtitle:
+          "AI クライアントが n8n-mcp 経由で n8n ワークフローを呼ぶ時に頼れる、3 つの境界線。",
         pillars: [
           {
             title: "AES-256-GCM 保存時暗号化",
@@ -193,7 +232,8 @@ const ja: Dict = {
               "復号はゲートウェイのリクエスト処理中のみ",
               "ログにも UI にも返しません",
             ],
-            boundary: "境界：ワークフローの入出力は永続化しません — 保存されるのは暗号化された認証情報だけ。",
+            boundary:
+              "境界：ワークフローの入出力は永続化しません — 保存されるのは暗号化された認証情報だけ。",
           },
           {
             title: "SSRF 保護",
@@ -203,7 +243,8 @@ const ja: Dict = {
               "トンネル（Cloudflare、Tailscale Funnel）はドメイン許可リストで通過",
               "リダイレクトはホップごとに再検証",
             ],
-            boundary: "境界：127.0.0.1、10.0.0.0/8、リンクローカル、メタデータエンドポイントへの呼び出しは拒否。",
+            boundary:
+              "境界：127.0.0.1、10.0.0.0/8、リンクローカル、メタデータエンドポイントへの呼び出しは拒否。",
           },
           {
             title: "ワークフローデータ非保存",
@@ -213,7 +254,8 @@ const ja: Dict = {
               "監査ログはメタデータのみ：ツール、ステータス、レイテンシ、バイト数",
               "プロンプトもペイロードも n8n 実行データも保持しません",
             ],
-            boundary: "境界：ペイロードを完全保持したい場合は n8n の実行ログで — ゲートウェイの責務外です。",
+            boundary:
+              "境界：ペイロードを完全保持したい場合は n8n の実行ログで — ゲートウェイの責務外です。",
           },
         ],
       },
@@ -221,32 +263,58 @@ const ja: Dict = {
     evolution: {
       eyebrow: "進化",
       title: "ストレスからフローへ",
-      subtitle: "プロンプトだけでは限界があります。本物の MCP ゲートウェイがあれば、AI クライアントは n8n をファーストクラスで扱えます。",
+      subtitle:
+        "プロンプトだけでは限界があります。本物の MCP ゲートウェイがあれば、AI クライアントは n8n をファーストクラスで扱えます。",
       withoutLabel: "MCP なし",
       withLabel: "n8n-mcp あり",
       pairs: [
         {
-          pain: { title: "JSON のコピペ", body: "AI が生成したワークフロー JSON を n8n に貼ると、見た目は正しくても幻覚プロパティで謎エラー。" },
-          flow: { title: "そのままデプロイ", body: "AI が n8n インスタンスに直接ワークフローを作成。コピペもインポートエラーもなし。" },
+          pain: {
+            title: "JSON のコピペ",
+            body: "AI が生成したワークフロー JSON を n8n に貼ると、見た目は正しくても幻覚プロパティで謎エラー。",
+          },
+          flow: {
+            title: "そのままデプロイ",
+            body: "AI が n8n インスタンスに直接ワークフローを作成。コピペもインポートエラーもなし。",
+          },
         },
         {
-          pain: { title: "スクショで共有", body: "改善してほしい？スクショして貼って文脈を説明。毎・回・です。" },
-          flow: { title: "ライブ参照", body: "AI が既存ワークフローを直接読み、文脈を理解して的確に改善。スクショ不要。" },
+          pain: {
+            title: "スクショで共有",
+            body: "改善してほしい？スクショして貼って文脈を説明。毎・回・です。",
+          },
+          flow: {
+            title: "ライブ参照",
+            body: "AI が既存ワークフローを直接読み、文脈を理解して的確に改善。スクショ不要。",
+          },
         },
         {
-          pain: { title: "古いノード設定", body: "n8n は毎週更新。AI の学習データは数か月前。非推奨オプションや欠損パラメータの嵐。" },
-          flow: { title: "常に最新", body: "ドキュメントは最新 n8n に同期。全ノード・全パラメータが正確。" },
+          pain: {
+            title: "古いノード設定",
+            body: "n8n は毎週更新。AI の学習データは数か月前。非推奨オプションや欠損パラメータの嵐。",
+          },
+          flow: {
+            title: "常に最新",
+            body: "ドキュメントは最新 n8n に同期。全ノード・全パラメータが正確。",
+          },
         },
         {
-          pain: { title: "手探りデバッグ", body: "失敗しても AI は実行ログを見られず、エラーメッセージを貼って祈るだけ。" },
-          flow: { title: "賢く自己修正", body: "検証ツールが AI に実フィードバックを返し、気付かないうちに自分で直してくれます。" },
+          pain: {
+            title: "手探りデバッグ",
+            body: "失敗しても AI は実行ログを見られず、エラーメッセージを貼って祈るだけ。",
+          },
+          flow: {
+            title: "賢く自己修正",
+            body: "検証ツールが AI に実フィードバックを返し、気付かないうちに自分で直してくれます。",
+          },
         },
       ],
     },
     cache: {
       eyebrow: "集合知",
       title: "あらゆるワークフローが、皆を速くする",
-      subtitle: "プラットフォーム上のワークフローは共有キャッシュに蓄積されます。Agent が実証済みパターンを選んでフィールドを微調整すれば、ゼロから生成するトークンと待ち時間を節約できます。",
+      subtitle:
+        "プラットフォーム上のワークフローは共有キャッシュに蓄積されます。Agent が実証済みパターンを選んでフィールドを微調整すれば、ゼロから生成するトークンと待ち時間を節約できます。",
       steps: [
         { title: "リクエスト", desc: "ユーザーがワークフローを記述" },
         { title: "キャッシュ検索", desc: "既知パターンを走査" },
@@ -281,21 +349,36 @@ const ja: Dict = {
         name: "Free",
         price: "$0",
         cadenceKey: "forever",
-        features: ["1 日 100 MCP コール", "1 つの n8n インスタンス", "1 つのプラットフォーム API キー", "コミュニティサポート"],
+        features: [
+          "1 日 100 MCP コール",
+          "1 つの n8n インスタンス",
+          "1 つのプラットフォーム API キー",
+          "コミュニティサポート",
+        ],
         cta: "無料で始める",
       },
       {
         name: "Supporter",
         price: "$19",
         cadenceKey: "month",
-        features: ["1 日 10,000 MCP コール", "5 つの n8n インスタンス", "API キー無制限", "優先メールサポート"],
+        features: [
+          "1 日 10,000 MCP コール",
+          "5 つの n8n インスタンス",
+          "API キー無制限",
+          "優先メールサポート",
+        ],
         cta: "アップグレード",
       },
       {
         name: "Pro",
         price: "$49",
         cadenceKey: "month",
-        features: ["1 日 100,000 MCP コール", "無制限インスタンス", "監査ログ", "SLA と専用サポート"],
+        features: [
+          "1 日 100,000 MCP コール",
+          "無制限インスタンス",
+          "監査ログ",
+          "SLA と専用サポート",
+        ],
         cta: "Pro にする",
       },
     ],
@@ -353,15 +436,16 @@ const ja: Dict = {
   },
   seo: {
     pricing: {
-      title: '料金 — n8n-mcp',
-      description: 'n8n-mcp ゲートウェイのシンプルな月額料金。無料プランは1日100回のMCP呼び出し、有料プランは月額$19から。シート課金なし、いつでも解約可能。',
+      title: "料金 — n8n-mcp",
+      description:
+        "n8n-mcp ゲートウェイのシンプルな月額料金。無料プランは1日100回のMCP呼び出し、有料プランは月額$19から。シート課金なし、いつでも解約可能。",
     },
     faq: {
-      title: 'よくある質問 — n8n-mcp',
-      description: 'n8n-mcp に関するよくある質問:対応AIクライアント、セキュリティ、料金、セルフホスティング、MCPプロトコルについて。',
+      title: "よくある質問 — n8n-mcp",
+      description:
+        "n8n-mcp に関するよくある質問:対応AIクライアント、セキュリティ、料金、セルフホスティング、MCPプロトコルについて。",
     },
   },
-
 };
 
 export default ja;

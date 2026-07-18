@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { LOCALES, type Locale } from "@/i18n/config";
 import { DOCS_DICTIONARIES, buildDocsRouteHead, type DocsDict } from "@/i18n/docs-dict";
+import { siteUrl } from "@/lib/site-domains";
 
 type PageKey = Exclude<keyof DocsDict, "nav">;
 
@@ -9,15 +10,15 @@ const PAGES: Array<{
   navItemKey: keyof DocsDict["nav"]["items"];
   logicalPath: string;
 }> = [
-  { pageKey: "index",          navItemKey: "overview",        logicalPath: "/docs" },
-  { pageKey: "gettingStarted", navItemKey: "gettingStarted",  logicalPath: "/docs/getting-started" },
-  { pageKey: "concepts",       navItemKey: "concepts",        logicalPath: "/docs/concepts" },
-  { pageKey: "clients",        navItemKey: "clients",         logicalPath: "/docs/clients" },
-  { pageKey: "apiKeys",        navItemKey: "apiKeys",         logicalPath: "/docs/api-keys" },
-  { pageKey: "n8nInstances",   navItemKey: "n8nInstances",    logicalPath: "/docs/n8n-instances" },
-  { pageKey: "tools",          navItemKey: "tools",           logicalPath: "/docs/tools" },
-  { pageKey: "quotas",         navItemKey: "quotas",          logicalPath: "/docs/quotas" },
-  { pageKey: "security",       navItemKey: "security",        logicalPath: "/docs/security" },
+  { pageKey: "index", navItemKey: "overview", logicalPath: "/docs" },
+  { pageKey: "gettingStarted", navItemKey: "gettingStarted", logicalPath: "/docs/getting-started" },
+  { pageKey: "concepts", navItemKey: "concepts", logicalPath: "/docs/concepts" },
+  { pageKey: "clients", navItemKey: "clients", logicalPath: "/docs/clients" },
+  { pageKey: "apiKeys", navItemKey: "apiKeys", logicalPath: "/docs/api-keys" },
+  { pageKey: "n8nInstances", navItemKey: "n8nInstances", logicalPath: "/docs/n8n-instances" },
+  { pageKey: "tools", navItemKey: "tools", logicalPath: "/docs/tools" },
+  { pageKey: "quotas", navItemKey: "quotas", logicalPath: "/docs/quotas" },
+  { pageKey: "security", navItemKey: "security", logicalPath: "/docs/security" },
 ];
 
 function pickMeta(meta: Array<Record<string, unknown>>, sel: Record<string, string>) {
@@ -40,17 +41,25 @@ describe("docs route head() — i18n integrity", () => {
         });
 
         expect(pickMeta(head.meta, { title: expected.title })).toBeTruthy();
-        expect(pickMeta(head.meta, { name: "description", content: expected.description })).toBeTruthy();
+        expect(
+          pickMeta(head.meta, { name: "description", content: expected.description }),
+        ).toBeTruthy();
         expect(pickMeta(head.meta, { property: "og:title", content: expected.title })).toBeTruthy();
-        expect(pickMeta(head.meta, { property: "og:description", content: expected.description })).toBeTruthy();
-        expect(pickMeta(head.meta, { name: "twitter:title", content: expected.title })).toBeTruthy();
-        expect(pickMeta(head.meta, { name: "twitter:description", content: expected.description })).toBeTruthy();
+        expect(
+          pickMeta(head.meta, { property: "og:description", content: expected.description }),
+        ).toBeTruthy();
+        expect(
+          pickMeta(head.meta, { name: "twitter:title", content: expected.title }),
+        ).toBeTruthy();
+        expect(
+          pickMeta(head.meta, { name: "twitter:description", content: expected.description }),
+        ).toBeTruthy();
 
         // og:url must be locale-prefixed (except English) and absolute.
         const ogUrl = pickMeta(head.meta, { property: "og:url" });
         expect(ogUrl).toBeTruthy();
         const url = String(ogUrl!.content);
-        expect(url.startsWith("https://n8nmcp.lovable.app")).toBe(true);
+        expect(url.startsWith(siteUrl("docs"))).toBe(true);
         if (locale !== "en") expect(url).toContain(`/${locale}/`);
 
         // Exactly one canonical link, matching og:url.
@@ -72,8 +81,12 @@ describe("docs route head() — i18n integrity", () => {
         titles.add(p.title);
         descs.add(p.description);
       }
-      expect(titles.size, `duplicate title across locales for ${page.pageKey}`).toBe(LOCALES.length);
-      expect(descs.size, `duplicate description across locales for ${page.pageKey}`).toBe(LOCALES.length);
+      expect(titles.size, `duplicate title across locales for ${page.pageKey}`).toBe(
+        LOCALES.length,
+      );
+      expect(descs.size, `duplicate description across locales for ${page.pageKey}`).toBe(
+        LOCALES.length,
+      );
     }
   });
 
@@ -82,7 +95,10 @@ describe("docs route head() — i18n integrity", () => {
       const dict = DOCS_DICTIONARIES[locale as Locale];
       for (const page of PAGES) {
         expect(dict[page.pageKey], `${locale} missing ${page.pageKey}`).toBeTruthy();
-        expect(dict.nav.items[page.navItemKey], `${locale} nav missing ${page.navItemKey}`).toBeTruthy();
+        expect(
+          dict.nav.items[page.navItemKey],
+          `${locale} nav missing ${page.navItemKey}`,
+        ).toBeTruthy();
       }
     }
   });

@@ -61,7 +61,13 @@ async function main() {
   db.exec(`
     DROP TABLE IF EXISTS nodes;
     DROP TABLE IF EXISTS nodes_fts;
+    DROP TABLE IF EXISTS templates_fts;
     DROP TABLE IF EXISTS templates;
+    DROP TABLE IF EXISTS external_node_candidates;
+    DROP TABLE IF EXISTS external_node_candidates_fts;
+    DROP TABLE IF EXISTS external_node_validation_results;
+    DROP TABLE IF EXISTS verified_external_nodes;
+    DROP TABLE IF EXISTS verified_external_nodes_fts;
 
     CREATE TABLE nodes (
       node_type TEXT NOT NULL,
@@ -116,7 +122,104 @@ async function main() {
 
     CREATE VIRTUAL TABLE templates_fts USING fts5(
       name, description, categories, node_types,
-      content='templates', content_rowid='id',
+      content='', contentless_delete=1,
+      tokenize='unicode61'
+    );
+
+    CREATE TABLE external_node_candidates (
+      source TEXT NOT NULL,
+      package_name TEXT NOT NULL,
+      node_type TEXT NOT NULL,
+      normalized_node_type TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      version TEXT,
+      candidate_kind TEXT NOT NULL,
+      verification_status TEXT NOT NULL DEFAULT 'external-unverified',
+      is_ai_tool INTEGER NOT NULL DEFAULT 0,
+      is_trigger INTEGER NOT NULL DEFAULT 0,
+      is_webhook INTEGER NOT NULL DEFAULT 0,
+      is_tool_variant INTEGER NOT NULL DEFAULT 0,
+      tool_variant_of TEXT,
+      normalized_tool_variant_of TEXT,
+      is_community INTEGER NOT NULL DEFAULT 0,
+      is_verified INTEGER NOT NULL DEFAULT 0,
+      npm_package_name TEXT,
+      npm_version TEXT,
+      npm_downloads INTEGER NOT NULL DEFAULT 0,
+      properties_json TEXT NOT NULL DEFAULT '[]',
+      credentials_json TEXT NOT NULL DEFAULT '[]',
+      documentation TEXT,
+      operations_json TEXT NOT NULL DEFAULT '[]',
+      source_metadata_json TEXT NOT NULL DEFAULT '{}',
+      imported_at TEXT NOT NULL,
+      PRIMARY KEY (source, package_name, node_type)
+    );
+
+    CREATE INDEX idx_external_node_candidates_kind ON external_node_candidates(candidate_kind);
+    CREATE INDEX idx_external_node_candidates_package ON external_node_candidates(package_name);
+    CREATE INDEX idx_external_node_candidates_verified ON external_node_candidates(is_verified);
+
+    CREATE VIRTUAL TABLE external_node_candidates_fts USING fts5(
+      node_type, normalized_node_type, display_name, description, package_name, documentation,
+      tokenize='unicode61'
+    );
+
+    CREATE TABLE external_node_validation_results (
+      source TEXT NOT NULL,
+      package_name TEXT NOT NULL,
+      node_type TEXT NOT NULL,
+      normalized_node_type TEXT NOT NULL,
+      candidate_kind TEXT NOT NULL,
+      validation_status TEXT NOT NULL,
+      validation_errors_json TEXT NOT NULL DEFAULT '[]',
+      validation_warnings_json TEXT NOT NULL DEFAULT '[]',
+      validated_at TEXT NOT NULL,
+      PRIMARY KEY (source, package_name, node_type)
+    );
+
+    CREATE INDEX idx_external_node_validation_status
+      ON external_node_validation_results(validation_status);
+
+    CREATE TABLE verified_external_nodes (
+      source TEXT NOT NULL,
+      package_name TEXT NOT NULL,
+      node_type TEXT NOT NULL,
+      normalized_node_type TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      category TEXT,
+      version TEXT,
+      candidate_kind TEXT NOT NULL,
+      verification_status TEXT NOT NULL,
+      is_ai_tool INTEGER NOT NULL DEFAULT 0,
+      is_trigger INTEGER NOT NULL DEFAULT 0,
+      is_webhook INTEGER NOT NULL DEFAULT 0,
+      is_tool_variant INTEGER NOT NULL DEFAULT 0,
+      tool_variant_of TEXT,
+      normalized_tool_variant_of TEXT,
+      is_community INTEGER NOT NULL DEFAULT 0,
+      is_verified INTEGER NOT NULL DEFAULT 0,
+      npm_package_name TEXT,
+      npm_version TEXT,
+      npm_downloads INTEGER NOT NULL DEFAULT 0,
+      properties_json TEXT NOT NULL DEFAULT '[]',
+      credentials_json TEXT NOT NULL DEFAULT '[]',
+      documentation TEXT,
+      operations_json TEXT NOT NULL DEFAULT '[]',
+      source_metadata_json TEXT NOT NULL DEFAULT '{}',
+      validation_warnings_json TEXT NOT NULL DEFAULT '[]',
+      validated_at TEXT NOT NULL,
+      PRIMARY KEY (source, package_name, node_type)
+    );
+
+    CREATE INDEX idx_verified_external_nodes_kind ON verified_external_nodes(candidate_kind);
+    CREATE INDEX idx_verified_external_nodes_package ON verified_external_nodes(package_name);
+    CREATE INDEX idx_verified_external_nodes_downloads ON verified_external_nodes(npm_downloads DESC);
+
+    CREATE VIRTUAL TABLE verified_external_nodes_fts USING fts5(
+      node_type, normalized_node_type, display_name, description, package_name, documentation,
       tokenize='unicode61'
     );
   `);
@@ -158,6 +261,7 @@ async function main() {
   const count = (db.prepare("SELECT COUNT(*) c FROM nodes").get() as { c: number }).c;
   const ai = (db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_ai_tool = 1").get() as { c: number }).c;
   const triggers = (db.prepare("SELECT COUNT(*) c FROM nodes WHERE is_trigger = 1").get() as { c: number }).c;
+  db.pragma("journal_mode = DELETE");
   console.log(`[db] wrote ${count} nodes (${ai} AI tools, ${triggers} triggers) → ${OUT}`);
   db.close();
 }

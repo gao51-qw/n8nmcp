@@ -1,7 +1,7 @@
-
 import { Sparkles } from "lucide-react";
 import { useT } from "@/i18n/context";
 import { Link } from "@/i18n/link";
+import { SITE_CONTACT_MAILTO } from "@/lib/site-contact";
 
 export function MarketingFooter() {
   const t = useT();
@@ -21,8 +21,10 @@ export function MarketingFooter() {
         { label: t.footer.links.mcp, href: "https://modelcontextprotocol.io" },
         { label: t.footer.links.n8n, href: "https://n8n.io" },
         { label: t.footer.links.github, href: "https://github.com/czlonkowski/n8n-mcp" },
-        { label: t.footer.links.starHistory, href: "https://star-history.com/#czlonkowski/n8n-mcp&Date" },
-        { label: t.footer.links.status, href: "https://status.lovable.app" },
+        {
+          label: t.footer.links.starHistory,
+          href: "https://star-history.com/#czlonkowski/n8n-mcp&Date",
+        },
       ],
     },
     {
@@ -32,7 +34,7 @@ export function MarketingFooter() {
         { label: t.footer.links.privacy, to: "/privacy" as const },
         { label: t.footer.links.cookies, to: "/privacy" as const, hash: "cookies" },
         { label: t.footer.links.imprint, to: "/imprint" as const },
-        { label: t.footer.links.contact, href: "mailto:hello@n8nmcp.app" },
+        { label: t.footer.links.contact, href: SITE_CONTACT_MAILTO },
       ],
     },
   ];
@@ -51,9 +53,7 @@ export function MarketingFooter() {
               </span>
               <span className="text-base">n8n-mcp</span>
             </Link>
-            <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-              {t.footer.tagline}
-            </p>
+            <p className="mt-3 max-w-xs text-sm text-muted-foreground">{t.footer.tagline}</p>
           </div>
 
           {SECTIONS.map((s) => (
@@ -89,9 +89,15 @@ export function MarketingFooter() {
             <span className="ml-2 opacity-70">v{APP_VERSION}</span>
           </p>
           <div className="flex items-center gap-4">
-            <Link to="/terms" className="hover:text-foreground">{t.footer.links.termsShort}</Link>
-            <Link to="/privacy" className="hover:text-foreground">{t.footer.links.privacyShort}</Link>
-            <a href="mailto:support@n8nmcp.app" className="hover:text-foreground">{t.footer.links.support}</a>
+            <Link to="/terms" className="hover:text-foreground">
+              {t.footer.links.termsShort}
+            </Link>
+            <Link to="/privacy" className="hover:text-foreground">
+              {t.footer.links.privacyShort}
+            </Link>
+            <a href={SITE_CONTACT_MAILTO} className="hover:text-foreground">
+              {t.footer.links.support}
+            </a>
           </div>
         </div>
       </div>

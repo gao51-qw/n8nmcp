@@ -2,8 +2,6 @@
 export type Tier = "free" | "pro" | "enterprise";
 
 export type TierLimits = {
-  /** Daily prompts to the Chat Agent. -1 = unlimited */
-  prompts_day: number;
   /** Daily MCP calls. -1 = unlimited */
   calls_day: number;
   /** Requests-per-minute hard ceiling */
@@ -12,26 +10,23 @@ export type TierLimits = {
   features: readonly Feature[];
 };
 
-export type Feature = "mcp" | "instances" | "chat-agent" | "audit-export" | "priority-support";
+export type Feature = "mcp" | "instances" | "audit-export" | "priority-support";
 
 export const TIER_LIMITS: Record<Tier, TierLimits> = {
   free: {
-    prompts_day: 5,
     calls_day: 100,
     rpm: 50,
     features: ["mcp", "instances"],
   },
   pro: {
-    prompts_day: 200,
     calls_day: 100_000,
     rpm: 100,
-    features: ["mcp", "instances", "chat-agent", "audit-export"],
+    features: ["mcp", "instances", "audit-export"],
   },
   enterprise: {
-    prompts_day: -1,
     calls_day: -1,
     rpm: 1_000,
-    features: ["mcp", "instances", "chat-agent", "audit-export", "priority-support"],
+    features: ["mcp", "instances", "audit-export", "priority-support"],
   },
 };
 
@@ -50,7 +45,6 @@ export const TIER_LABELS: Record<Tier, string> = {
 export const FEATURE_LABELS: Record<Feature, string> = {
   mcp: "MCP gateway access",
   instances: "n8n instance management",
-  "chat-agent": "AI Chat Agent (n8n workflow generator)",
   "audit-export": "Audit log export (CSV / JSON / XLSX)",
   "priority-support": "Priority support",
 };
@@ -67,7 +61,8 @@ export function tierLimits(tier: string | null | undefined): TierLimits {
 export const TIER_DAILY_LIMITS: Record<Tier, number> = {
   free: TIER_LIMITS.free.calls_day,
   pro: TIER_LIMITS.pro.calls_day,
-  enterprise: TIER_LIMITS.enterprise.calls_day === -1 ? 1_000_000 : TIER_LIMITS.enterprise.calls_day,
+  enterprise:
+    TIER_LIMITS.enterprise.calls_day === -1 ? 1_000_000 : TIER_LIMITS.enterprise.calls_day,
 };
 
 export function tierLimit(tier: string | null | undefined): number {

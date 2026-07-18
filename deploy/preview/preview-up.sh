@@ -7,7 +7,7 @@
 # - Container name: n8n-preview-pr-<N>
 # - Host port:      40000 + N  (loopback only — exposed via nginx wildcard)
 # - Env file:       /opt/n8nworkflow/.env.app  (shared with prod backend)
-# - Label:          lovable.preview.pr=<N>     (used by preview-list / GC)
+# - Label:          n8nmcp.preview.pr=<N>      (used by preview-list / GC)
 #
 # Requires the nginx wildcard vhost (deploy/nginx/preview.conf) to be installed
 # so that pr-<N>.<PREVIEW_BASE_DOMAIN> proxies to 127.0.0.1:$((40000+N)).
@@ -26,10 +26,18 @@ fi
 
 PORT=$(( 40000 + PR ))
 NAME="n8n-preview-pr-${PR}"
-ENV_FILE="${ENV_FILE:-/opt/n8nworkflow/.env.app}"
+ENV_FILE="${ENV_FILE:-/opt/n8nworkflow/.env.preview}"
 
 if [[ ! -f "$ENV_FILE" ]]; then
-  echo "ERROR: $ENV_FILE missing — preview shares the production .env.app" >&2
+  echo "ERROR: $ENV_FILE missing — use a preview-specific env file, NOT production .env.app" >&2
+  echo "SECURITY: Preview containers must never access production secrets" >&2
+  exit 1
+fi
+
+# Explicitly reject production env file
+if [[ "$ENV_FILE" == *".env.app" ]]; then
+  echo "ERROR: Cannot use production .env.app for preview containers" >&2
+  echo "SECURITY: This would leak production Supabase/Paddle/encryption keys to PR containers" >&2
   exit 1
 fi
 
@@ -43,8 +51,8 @@ echo "→ Starting $NAME on 127.0.0.1:${PORT}"
 docker run -d \
   --name "$NAME" \
   --restart unless-stopped \
-  --label "lovable.preview.pr=${PR}" \
-  --label "lovable.preview.image=${IMAGE}" \
+  --label "n8nmcp.preview.pr=${PR}" \
+  --label "n8nmcp.preview.image=${IMAGE}" \
   --label "com.centurylinklabs.watchtower.enable=false" \
   --env-file "$ENV_FILE" \
   -e NODE_ENV=production \

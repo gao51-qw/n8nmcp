@@ -3,11 +3,7 @@ import QRCode from "qrcode";
 import { toast } from "sonner";
 import { Check, Copy, Linkedin, Link2, MessageCircle, Twitter } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type ShareButtonsProps = {
   url: string;
@@ -27,13 +23,7 @@ function buildBlurb(title: string, description: string, max = 200) {
   return base.slice(0, max - 1).trimEnd() + "…";
 }
 
-export function ShareButtons({
-  url,
-  title,
-  description,
-  via,
-  hashtags = [],
-}: ShareButtonsProps) {
+export function ShareButtons({ url, title, description, via, hashtags = [] }: ShareButtonsProps) {
   const [copied, setCopied] = React.useState(false);
   const [qrDataUrl, setQrDataUrl] = React.useState<string | null>(null);
 
@@ -46,9 +36,9 @@ export function ShareButtons({
     return `https://twitter.com/intent/tweet?${params.toString()}`;
   })();
 
-  const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams(
-    { url },
-  ).toString()}`;
+  const linkedInUrl = `https://www.linkedin.com/sharing/share-offsite/?${new URLSearchParams({
+    url,
+  }).toString()}`;
 
   async function copyLink() {
     try {
@@ -77,9 +67,7 @@ export function ShareButtons({
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="mr-1 text-xs uppercase tracking-wider text-muted-foreground">
-        Share
-      </span>
+      <span className="mr-1 text-xs uppercase tracking-wider text-muted-foreground">Share</span>
 
       <Button
         variant="outline"
@@ -118,21 +106,14 @@ export function ShareButtons({
 
       <Popover onOpenChange={(open) => open && buildQr()}>
         <PopoverTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            aria-label="Share on WeChat"
-          >
+          <Button variant="outline" size="sm" className="gap-1.5" aria-label="Share on WeChat">
             <MessageCircle className="h-3.5 w-3.5" /> WeChat
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[260px]" align="end">
           <div className="text-center">
             <p className="text-sm font-medium">扫码分享到微信</p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Open WeChat → Discover → Scan
-            </p>
+            <p className="mt-1 text-xs text-muted-foreground">Open WeChat → Discover → Scan</p>
             <div className="mt-3 flex justify-center">
               {qrDataUrl ? (
                 <img
