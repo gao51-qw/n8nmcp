@@ -1,4 +1,3 @@
-﻿import { randomBytes } from "node:crypto";
 import { CronExpressionParser } from "cron-parser";
 import type { ToolContext } from "./mcp.server";
 import {
@@ -144,8 +143,6 @@ type WorkflowFixDetail = {
   retryConfig?: { maxRetries: number; waitBetween: number };
 };
 
-const CONFIRMATION_TOKEN_TTL_MS = 5 * 60_000;
-
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -164,7 +161,6 @@ function createLazyKnowledgeClient(): KnowledgeClient {
 }
 
 export class OrchestratedToolsService {
-  private confirmationChallenges = new Map<string, { token: string; expiresAt: number }>();
   private readonly workflowValidationService = new WorkflowValidationService();
   private readonly creationPipeline: WorkflowCreationPipeline;
   private readonly deploymentPipeline: WorkflowDeploymentPipeline;
@@ -1413,147 +1409,6 @@ export class OrchestratedToolsService {
           `{"confirm": true, "confirmationToken": "${error.token}"} to proceed.`,
       );
     }
-
-    /* Retired deployment implementation:
-    await this.requireConfirmation(
-      params as Record<string, unknown>,
-      "Deploy and test workflow",
-      {
-        requireToken: true,
-        scope: {
-          workflowId: params.workflowId,
-          testData: params.testData,
-          validationRules: params.validationRules,
-          rollbackOnFailure: params.rollbackOnFailure,
-        },
-      },
-      context,
-    );
-
-    const results = {
-      validation: { passed: true, errors: [] as string[], warnings: [] as string[] },
-      activation: { success: false, error: null as string | null },
-      test: {
-        success: false,
-        skipped: false,
-        output: null as Record<string, unknown> | null,
-        error: null as string | null,
-      },
-    };
-
-    try {
-      // Validate and encode workflowId
-      const workflowId = encodeURIComponent(String(params.workflowId));
-
-      // 1. 楠岃瘉宸ヤ綔娴侀厤缃?
-      const workflow = (await n8n(
-        this.inst,
-        `/api/v1/workflows/${workflowId}`,
-      )) as N8nWorkflowResult;
-
-      if (!workflow.nodes || workflow.nodes.length === 0) {
-        results.validation.passed = false;
-        results.validation.errors.push("Workflow has no nodes");
-      }
-      const validation = await this.workflowValidationService.validateWorkflow(workflow);
-      results.validation.passed = validation.ok;
-      results.validation.errors = validation.errors.map((issue) => issue.message);
-      results.validation.warnings = validation.warnings.map((issue) => issue.message);
-      if (
-        (!workflow.nodes || workflow.nodes.length === 0) &&
-        !results.validation.errors.includes("Workflow has no nodes")
-      ) {
-        results.validation.errors.push("Workflow has no nodes");
-      }
-
-      if (!results.validation.passed) {
-        return { success: false, results, message: "Validation failed" };
-      }
-
-      if (!validation.canActivate) {
-        return {
-          success: false,
-          results,
-          validation,
-          message: "Validation warnings block automatic activation",
-        };
-      }
-
-      // 2. 鎵ц娴嬭瘯锛堝鏋滄彁渚涗簡娴嬭瘯鏁版嵁锛?
-      if (params.testData) {
-        try {
-          const execution = (await n8n(this.inst, `/api/v1/workflows/${workflowId}/run`, {
-            method: "POST",
-            body: JSON.stringify({ workflowData: workflow, runData: params.testData }),
-          })) as {
-            finished?: boolean;
-            data?: {
-              resultData?: {
-                error?: unknown;
-                lastNodeExecuted?: { data: { main: Array<Record<string, unknown>> } };
-              };
-            };
-          };
-
-          results.test.success = execution.finished === true && !execution.data?.resultData?.error;
-          results.test.output = execution.data?.resultData?.lastNodeExecuted
-            ? execution.data.resultData.lastNodeExecuted.data.main[0]
-            : null;
-
-          // 4. 楠岃瘉杈撳嚭锛堝鏋滄彁渚涗簡楠岃瘉瑙勫垯锛?
-          if (params.validationRules && results.test.output) {
-            for (const rule of params.validationRules) {
-              const isValid = this.validateOutput(results.test.output, rule);
-              if (!isValid) {
-                results.test.success = false;
-                results.test.error = `Validation failed for field '${rule.field}': expected ${rule.condition} ${rule.expectedValue || ""}`;
-                break;
-              }
-            }
-          }
-        } catch (testError) {
-          results.test.success = false;
-          results.test.error = testError instanceof Error ? testError.message : String(testError);
-        }
-      } else {
-        results.test.success = false;
-        results.test.skipped = true;
-        results.test.error = "Smoke test data is required before activation.";
-      }
-
-      if (!results.test.success) {
-        return {
-          success: false,
-          results,
-          message: results.test.skipped
-            ? "Smoke test data is required; workflow was not activated"
-            : "Test failed, workflow was not activated",
-        };
-      }
-
-      // 3. 婵€娲诲伐浣滄祦
-      await n8n(this.inst, `/api/v1/workflows/${workflowId}/activate`, { method: "POST" });
-      results.activation.success = true;
-
-      return {
-        success: true,
-        results,
-        message: results.test.skipped
-          ? "Workflow deployed without test data; no smoke test was run."
-          : results.test.success
-            ? "Workflow deployed and tested successfully!"
-            : "Workflow deployed but test had issues",
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      results.activation.error = message;
-      return {
-        success: false,
-        results,
-        message: `Deployment failed: ${message}`,
-      };
-    }
-    */
   }
 
   // ============================================
@@ -1930,106 +1785,4 @@ export class OrchestratedToolsService {
 
     return updatedWorkflow;
   }
-
-  private async capableOfElicitation(context?: ToolContext): Promise<boolean> {
-    return !!(
-      context?.clientCapabilities?.elicitation && typeof context.requestElicitation === "function"
-    );
-  }
-
-  private async requestUserConfirmation(
-    context: ToolContext | undefined,
-    operation: string,
-    args: Record<string, unknown>,
-  ): Promise<boolean> {
-    if (!context?.requestElicitation || !context.clientCapabilities?.elicitation) {
-      return false;
-    }
-
-    try {
-      const response = await context.requestElicitation({
-        title: operation,
-        description: `Please confirm operation on workflow ${String(args.workflowId ?? args.id ?? "target")}.`,
-        schema: {
-          type: "object",
-          properties: {
-            confirm: {
-              type: "boolean",
-              title: "Confirm this action",
-              description: "Set true to proceed.",
-            },
-          },
-          required: ["confirm"],
-        },
-      });
-      return response.confirm === true;
-    } catch {
-      return false;
-    }
-  }
-
-  private async requireConfirmation(
-    args: Record<string, unknown>,
-    operation: string,
-    opts: { requireToken?: boolean; scope?: unknown } = {},
-    context?: ToolContext,
-  ): Promise<void> {
-    if (opts.requireToken && (await this.capableOfElicitation(context))) {
-      const confirmed = await this.requestUserConfirmation(context, operation, args);
-      if (!confirmed) {
-        throw new Error(`${operation} requires user confirmation via elicitation flow.`);
-      }
-      return;
-    }
-
-    if (!opts.requireToken) {
-      if (args.confirm !== true) {
-        throw new Error(
-          `${operation} requires confirmation. Re-send with "confirm": true to proceed.`,
-        );
-      }
-      return;
-    }
-
-    const challengeKey = `${operation}:${stableStringify(opts.scope ?? {})}`;
-    const now = Date.now();
-    const existing = this.confirmationChallenges.get(challengeKey);
-
-    if (
-      args.confirm === true &&
-      typeof args.confirmationToken === "string" &&
-      existing?.token === args.confirmationToken &&
-      existing.expiresAt > now
-    ) {
-      this.confirmationChallenges.delete(challengeKey);
-      return;
-    }
-
-    const token = `mcp_confirm_${randomBytes(16).toString("base64url")}`;
-    this.confirmationChallenges.set(challengeKey, {
-      token,
-      expiresAt: now + CONFIRMATION_TOKEN_TTL_MS,
-    });
-
-    if (args.confirm === true) {
-      throw new Error(
-        `${operation} requires a valid confirmation token. Re-send with ` +
-          `{"confirm": true, "confirmationToken": "${token}"} to proceed.`,
-      );
-    }
-
-    throw new Error(
-      `${operation} requires confirmation. Re-send with ` +
-        `{"confirm": true, "confirmationToken": "${token}"} to proceed.`,
-    );
-  }
-}
-function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((item) => stableStringify(item)).join(",")}]`;
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(record[key])}`)
-    .join(",")}}`;
 }
