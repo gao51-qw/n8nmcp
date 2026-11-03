@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.npm \
 
 # Copy source and build the Next.js standalone server.
 COPY . .
-RUN npm run build:next
+RUN npm run build
 
 # ---------- runtime ----------
 FROM node:22-alpine AS run

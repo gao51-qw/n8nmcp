@@ -24,7 +24,6 @@ dist-ssr
 
 # Wrangler / Cloudflare
 .wrangler/
-.vinext/
 .dev.vars
 
 # Editor directories and files
