@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { proxy } from "@/proxy";
 
 describe("domain proxy", () => {
@@ -34,5 +34,45 @@ describe("domain proxy", () => {
   it("leaves the main domain untouched", () => {
     expect(rewriteTarget("mcp.n8nworkflow.com", "/docs/faq")).toBeNull();
     expect(rewriteTarget("mcp.n8nworkflow.com", "/pricing")).toBeNull();
+  });
+
+  it("permanently redirects the old main-site FAQ to the docs host", () => {
+    const host = "mcp.n8nworkflow.com";
+    const response = proxy(
+      new NextRequest(`https://${host}/faq?ref=search`, { headers: { host } }),
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe("https://docs.n8nworkflow.com/faq?ref=search");
+  });
+
+  it("does not redirect the FAQ on the docs host itself", () => {
+    const host = "docs.n8nworkflow.com";
+    const response = proxy(new NextRequest(`https://${host}/faq`, { headers: { host } }));
+
+    expect(response.headers.get("location")).toBeNull();
+    expect(rewriteTarget(host, "/faq")).toBe("/docs/faq");
+  });
+});
+
+describe("domain proxy on a single origin (next dev)", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("sends /faq to the in-app docs route instead of looping", async () => {
+    for (const name of ["MCP_SITE", "DOCS", "BLOG", "DASHBOARD"]) {
+      vi.stubEnv(`NEXT_PUBLIC_${name}_URL`, "http://localhost:3000");
+    }
+    vi.resetModules();
+    const { proxy: devProxy } = await import("@/proxy");
+
+    const response = devProxy(
+      new NextRequest("http://localhost:3000/faq", { headers: { host: "localhost:3000" } }),
+    );
+
+    expect(response.status).toBe(301);
+    expect(response.headers.get("location")).toBe("http://localhost:3000/docs/faq");
   });
 });

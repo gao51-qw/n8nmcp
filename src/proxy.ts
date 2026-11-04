@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { normalizeHost, surfaceFromHost } from "@/lib/site-domains";
+import { canonicalUrl, normalizeHost, SITE_DOMAINS, surfaceFromHost } from "@/lib/site-domains";
 
 const PUBLIC_FILE = /\.(?:avif|ico|jpg|jpeg|png|svg|webp|css|js|map|txt|xml)$/;
 const NOINDEX = "noindex,nofollow";
@@ -25,6 +25,22 @@ function rewriteWithNoIndex(request: NextRequest, pathname: string): NextRespons
   return response;
 }
 
+/**
+ * The FAQ moved from the main site (mcp.<host>/faq) to the docs host
+ * (docs.<host>/faq). Keep old links and search results working with a
+ * permanent redirect. When every surface shares one origin (`next dev`),
+ * redirecting to docs/faq on the same host would loop, so go straight to the
+ * app route instead.
+ */
+function redirectMovedFaq(request: NextRequest): NextResponse {
+  const singleOrigin = SITE_DOMAINS.docs.host === SITE_DOMAINS.mcp.host;
+  const target = singleOrigin
+    ? new URL("/docs/faq", request.nextUrl)
+    : new URL(canonicalUrl("/faq", "docs"));
+  target.search = request.nextUrl.search;
+  return NextResponse.redirect(target, 301);
+}
+
 export function proxy(request: NextRequest) {
   const surface = surfaceFromHost(normalizeHost(request.headers.get("host")));
   const { pathname } = request.nextUrl;
@@ -37,6 +53,7 @@ export function proxy(request: NextRequest) {
 
   if (surface === "mcp") {
     if (pathname === "/mcp") return rewriteWithNoIndex(request, "/mcp");
+    if (pathname === "/faq") return redirectMovedFaq(request);
     return NextResponse.next();
   }
 
