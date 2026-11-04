@@ -44,3 +44,7 @@ dist-ssr
 test-results/
 *.tsbuildinfo
 .superpowers/sdd/
+
+# Legacy root reports kept locally only (public repo; see the README there)
+docs/archive/2025-legacy-reports/*
+!docs/archive/2025-legacy-reports/README.md
