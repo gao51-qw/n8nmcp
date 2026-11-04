@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { canonicalUrl } from "@/lib/site-domains";
 
 export const metadata: Metadata = {
   title: "Getting Started",
   description:
     "Set up n8n-mcp by connecting an n8n instance, creating a platform API key and configuring an MCP-compatible AI client.",
-  alternates: { canonical: "/docs/getting-started" },
+  alternates: { canonical: canonicalUrl("/getting-started", "docs") },
 };
 
 const steps = [

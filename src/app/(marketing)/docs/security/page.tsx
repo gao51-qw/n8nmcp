@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
+import { canonicalUrl } from "@/lib/site-domains";
 
 export const metadata: Metadata = {
   title: "Security Model",
   description:
     "Security model for n8n-mcp, including encrypted n8n API keys, SSRF protection, API key authentication, tenant boundaries and Workflow Agent safety controls.",
-  alternates: { canonical: "/docs/security" },
+  alternates: { canonical: canonicalUrl("/security", "docs") },
 };
 
 const controls = [

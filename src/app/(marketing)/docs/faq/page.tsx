@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { homepageFaq } from "@/lib/geo-content";
 import { buildFaqPageJsonLd } from "@/lib/seo-jsonld";
+import { canonicalUrl } from "@/lib/site-domains";
 
 export const metadata: Metadata = {
   title: "FAQ",
   description:
     "Answers to common questions about n8n-mcp, hosted MCP gateways, n8n API key safety and supported AI clients.",
-  alternates: { canonical: "/faq" },
+  alternates: { canonical: canonicalUrl("/faq", "docs") },
 };
 
 export default function FaqPage() {

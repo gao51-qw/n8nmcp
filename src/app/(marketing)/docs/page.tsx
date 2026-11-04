@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, BookOpen, KeyRound, ShieldCheck } from "lucide-react";
+import { canonicalUrl } from "@/lib/site-domains";
 
 export const metadata: Metadata = {
   title: "Documentation",
   description:
     "Documentation for connecting n8n workflows to AI clients with the hosted n8n-mcp gateway.",
-  alternates: { canonical: "/docs" },
+  alternates: { canonical: canonicalUrl("/", "docs") },
 };
 
 const docs = [

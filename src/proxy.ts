@@ -41,14 +41,12 @@ export function proxy(request: NextRequest) {
   }
 
   if (surface === "docs") {
-    if (pathname === "/") {
+    // Every docs page lives under /docs in the app tree; the docs host exposes
+    // them at the root (docs.<host>/getting-started), matching the sitemap,
+    // llms.txt and the canonical URLs each page declares.
+    if (!pathname.startsWith("/docs")) {
       const url = request.nextUrl.clone();
-      url.pathname = "/docs";
-      return NextResponse.rewrite(url);
-    }
-    if (pathname === "/tools") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/docs/tools";
+      url.pathname = `/docs${pathname === "/" ? "" : pathname}`;
       return NextResponse.rewrite(url);
     }
     return NextResponse.next();
