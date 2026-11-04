@@ -342,6 +342,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      oauth_grants: {
+        Row: {
+          client_id: string;
+          client_name: string;
+          granted_at: string;
+          id: string;
+          last_used_at: string | null;
+          revoked_at: string | null;
+          scopes: string[];
+          user_id: string;
+        };
+        Insert: {
+          client_id: string;
+          client_name?: string;
+          granted_at?: string;
+          id?: string;
+          last_used_at?: string | null;
+          revoked_at?: string | null;
+          scopes?: string[];
+          user_id: string;
+        };
+        Update: {
+          client_id?: string;
+          client_name?: string;
+          granted_at?: string;
+          id?: string;
+          last_used_at?: string | null;
+          revoked_at?: string | null;
+          scopes?: string[];
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       platform_api_keys: {
         Row: {
           created_at: string;
