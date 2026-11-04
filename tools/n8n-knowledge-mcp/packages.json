@@ -15,6 +15,11 @@
       "n8n-nodes-template",
       "n8n-nodes-starter",
       "n8n-nodes-boilerplate"
-    ]
+    ],
+    "min_weekly_downloads": 50,
+    "max_age_months": 24,
+    "max_parsed_packages": 1500,
+    "min_community_nodes": 1500,
+    "min_verified_nodes": 300
   }
 }
