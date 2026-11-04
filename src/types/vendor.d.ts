@@ -10,6 +10,7 @@ declare module "lucide-react" {
 
   export const AlertCircle: LucideIcon;
   export const AlertTriangle: LucideIcon;
+  export const AppWindow: LucideIcon;
   export const ArrowLeft: LucideIcon;
   export const ArrowRight: LucideIcon;
   export const BarChart3: LucideIcon;

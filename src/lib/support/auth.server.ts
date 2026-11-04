@@ -1,3 +1,4 @@
+import { decodeJwt } from "jose";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type SupportUser = {
@@ -7,6 +8,17 @@ export type SupportUser = {
 
 function unauthorized(): Response {
   return new Response("Unauthorized", { status: 401 });
+}
+
+/** The token was already validated by getUser; this only reads its claims. */
+function issuedToOAuthClient(token: string): boolean {
+  try {
+    const clientId = decodeJwt(token).client_id;
+    return typeof clientId === "string" && clientId.length > 0;
+  } catch {
+    // Supabase access tokens are always JWTs; anything else fails closed.
+    return true;
+  }
 }
 
 export async function requireSupportUser(request: Request): Promise<SupportUser> {
@@ -20,6 +32,13 @@ export async function requireSupportUser(request: Request): Promise<SupportUser>
 
   const { data, error } = await supabaseAdmin.auth.getUser(token);
   if (error || !data.user) {
+    throw unauthorized();
+  }
+
+  // Access tokens issued to OAuth clients (MCP agents) carry `client_id`. They
+  // are scoped MCP credentials, not dashboard sessions, so they must not reach
+  // dashboard or support APIs — e.g. to widen their own grant.
+  if (issuedToOAuthClient(token)) {
     throw unauthorized();
   }
 

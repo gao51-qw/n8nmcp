@@ -23,10 +23,14 @@ function DashboardShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!loading && !user) {
-      const next = pathname ? `?next=${encodeURIComponent(pathname)}` : "";
+      // Keep the query string: the OAuth consent page needs its authorization_id
+      // after sign-in.
+      const query = searchParams.toString();
+      const destination = pathname ? `${pathname}${query ? `?${query}` : ""}` : "";
+      const next = destination ? `?next=${encodeURIComponent(destination)}` : "";
       router.replace(`/login${next}`);
     }
-  }, [loading, pathname, router, user]);
+  }, [loading, pathname, router, searchParams, user]);
 
   if (loading || !user) {
     return (

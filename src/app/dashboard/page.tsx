@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, Bot, Headphones, KeyRound, Server, ShieldCheck } from "lucide-react";
+import { BarChart3, Bot, Headphones, KeyRound, AppWindow, Server, ShieldCheck } from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -18,6 +18,12 @@ const modules = [
     title: "API keys",
     text: "Create, rotate and revoke platform API keys.",
     icon: <KeyRound className="h-5 w-5" />,
+  },
+  {
+    title: "Connected apps",
+    text: "Review and revoke MCP clients you approved through OAuth.",
+    icon: <AppWindow className="h-5 w-5" />,
+    href: "/dashboard/connected-apps",
   },
   {
     title: "Usage",

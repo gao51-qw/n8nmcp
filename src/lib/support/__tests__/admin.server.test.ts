@@ -2,6 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/** Shape of a Supabase session access token; getUser is mocked, so it is unsigned. */
+function fakeJwt(claims: Record<string, unknown>): string {
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${part({ alg: "ES256", typ: "JWT" })}.${part(claims)}.signature`;
+}
+
+const SESSION_TOKEN = fakeJwt({ sub: "user-1", role: "authenticated" });
+
 const supabaseMocks = vi.hoisted(() => ({
   from: vi.fn(),
   getUser: vi.fn(),
@@ -213,7 +221,7 @@ describe("admin support routes", () => {
     const response = await POST(
       new Request("https://example.test/api/support/admin/heartbeat", {
         method: "POST",
-        headers: { authorization: "Bearer valid-token" },
+        headers: { authorization: `Bearer ${SESSION_TOKEN}` },
       }),
     );
 
@@ -236,7 +244,7 @@ describe("admin support routes", () => {
     const response = await POST(
       new Request("https://example.test/api/support/admin/heartbeat", {
         method: "POST",
-        headers: { authorization: "Bearer valid-token" },
+        headers: { authorization: `Bearer ${SESSION_TOKEN}` },
       }),
     );
 

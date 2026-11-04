@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+/** Shape of a Supabase session access token; getUser is mocked, so it is unsigned. */
+function fakeJwt(claims: Record<string, unknown>): string {
+  const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${part({ alg: "ES256", typ: "JWT" })}.${part(claims)}.signature`;
+}
+
+const SESSION_TOKEN = fakeJwt({ sub: "user-1", role: "authenticated" });
+
 const supabaseMocks = vi.hoisted(() => ({
   getUser: vi.fn(),
   maybeSingle: vi.fn(),
@@ -51,17 +59,36 @@ describe("support authorization", () => {
     expect(supabaseMocks.getUser).not.toHaveBeenCalled();
   });
 
+  it("rejects access tokens issued to OAuth clients", async () => {
+    const { requireSupportUser } = await import("@/lib/support/auth.server");
+    const agentToken = fakeJwt({ sub: "user-1", client_id: "mcp-client-1" });
+    const request = new Request("https://example.test/support", {
+      headers: { authorization: `Bearer ${agentToken}` },
+    });
+
+    await expect(requireSupportUser(request)).rejects.toMatchObject({ status: 401 });
+  });
+
+  it("fails closed for a token that is not a JWT", async () => {
+    const { requireSupportUser } = await import("@/lib/support/auth.server");
+    const request = new Request("https://example.test/support", {
+      headers: { authorization: "Bearer not-a-jwt" },
+    });
+
+    await expect(requireSupportUser(request)).rejects.toMatchObject({ status: 401 });
+  });
+
   it("returns the authenticated support user", async () => {
     const { requireSupportUser } = await import("@/lib/support/auth.server");
     const request = new Request("https://example.test/support", {
-      headers: { authorization: "Bearer valid-token" },
+      headers: { authorization: `Bearer ${SESSION_TOKEN}` },
     });
 
     await expect(requireSupportUser(request)).resolves.toEqual({
       userId: "user-1",
       email: "support@example.com",
     });
-    expect(supabaseMocks.getUser).toHaveBeenCalledWith("valid-token");
+    expect(supabaseMocks.getUser).toHaveBeenCalledWith(SESSION_TOKEN);
   });
 
   it("rejects an empty bearer token", async () => {
@@ -78,7 +105,7 @@ describe("support authorization", () => {
     supabaseMocks.maybeSingle.mockResolvedValueOnce({ data: null, error: null });
     const { requireSupportAdmin } = await import("@/lib/support/auth.server");
     const request = new Request("https://example.test/support", {
-      headers: { authorization: "Bearer valid-token" },
+      headers: { authorization: `Bearer ${SESSION_TOKEN}` },
     });
 
     await expect(requireSupportAdmin(request)).rejects.toMatchObject({ status: 403 });
@@ -91,7 +118,7 @@ describe("support authorization", () => {
     });
     const { requireSupportAdmin } = await import("@/lib/support/auth.server");
     const request = new Request("https://example.test/support", {
-      headers: { authorization: "Bearer valid-token" },
+      headers: { authorization: `Bearer ${SESSION_TOKEN}` },
     });
 
     await expect(requireSupportAdmin(request)).rejects.toMatchObject({ status: 403 });
