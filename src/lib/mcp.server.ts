@@ -1,5 +1,6 @@
 // MCP Streamable HTTP gateway helpers (server-only).
-// Auth: Bearer nmcp_<...> from `Authorization` header → SHA-256 → platform_api_keys lookup.
+// Auth: Bearer nmcp_<...> from `Authorization` header → SHA-256 → platform_api_keys lookup,
+// or (when MCP_OAUTH_ENABLED=1) a Supabase Auth OAuth access token backed by oauth_grants.
 // Rate limit: database-backed short-window limiter + daily quota check via usage_daily.
 import { pruneExpired } from "@/lib/expiring-store";
 import { createHash, randomBytes } from "node:crypto";
@@ -17,6 +18,8 @@ import {
   type CallerCtx,
 } from "./mcp-upstream.server";
 import { LOCAL_TOOLS, TOOLS } from "./mcp-tool-definitions";
+import { MCP_SCOPES, type McpScope } from "./oauth/scopes";
+import { verifyOAuthAccessToken } from "./oauth/verify.server";
 import {
   calculateChanges,
   detectSuspiciousActivity,
@@ -54,8 +57,15 @@ import {
 
 export type AuthedKey = {
   user_id: string;
+  /** Platform key id, or `oauth:<client_id>` for OAuth access tokens. */
   key_id: string;
   tier: Tier;
+  /** Missing on callers built before OAuth support; treat as "api_key". */
+  auth_source?: "api_key" | "oauth";
+  /** OAuth client id when auth_source is "oauth". */
+  client_id?: string;
+  /** Granted MCP scopes; platform keys carry every scope. */
+  scopes?: readonly McpScope[];
 };
 
 type ClientCapabilities = {
@@ -171,9 +181,32 @@ export async function checkShortWindowQuota(userId: string): Promise<boolean> {
   return data === true;
 }
 
+async function tierForUser(userId: string): Promise<Tier> {
+  const { data: sub } = await supabaseAdmin
+    .from("subscriptions")
+    .select("tier,status")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return effectiveTier(sub?.tier, sub?.status);
+}
+
 export async function authenticateBearer(req: Request): Promise<AuthedKey | null> {
   const h = req.headers.get("authorization") ?? "";
-  const m = h.match(/^Bearer\s+(nmcp_[A-Za-z0-9_-]+)$/);
+  const bearer = h.match(/^Bearer\s+(\S+)$/)?.[1];
+  if (!bearer) return null;
+  if (!bearer.startsWith("nmcp_")) {
+    const principal = await verifyOAuthAccessToken(bearer);
+    if (!principal) return null;
+    return {
+      user_id: principal.userId,
+      key_id: `oauth:${principal.clientId}`,
+      tier: await tierForUser(principal.userId),
+      auth_source: "oauth",
+      client_id: principal.clientId,
+      scopes: principal.scopes,
+    };
+  }
+  const m = bearer.match(/^(nmcp_[A-Za-z0-9_-]+)$/);
   if (!m) return null;
   const full = m[1];
   const hash = hashPlatformApiKey(full);
@@ -185,22 +218,20 @@ export async function authenticateBearer(req: Request): Promise<AuthedKey | null
     .maybeSingle();
   if (!key || key.revoked_at) return null;
 
-  const { data: sub } = await supabaseAdmin
-    .from("subscriptions")
-    .select("tier,status")
-    .eq("user_id", key.user_id)
-    .maybeSingle();
-
-  // touch last_used_at (fire and forget)
+  // Touch last_used_at, fire and forget. Query builders are lazy: .then() is
+  // what sends the request, so a bare `void builder` would never run.
   void supabaseAdmin
     .from("platform_api_keys")
     .update({ last_used_at: new Date().toISOString() })
-    .eq("id", key.id);
+    .eq("id", key.id)
+    .then(undefined, () => undefined);
 
   return {
     user_id: key.user_id,
     key_id: key.id,
-    tier: effectiveTier(sub?.tier, sub?.status),
+    tier: await tierForUser(key.user_id),
+    auth_source: "api_key",
+    scopes: MCP_SCOPES,
   };
 }
 
@@ -246,7 +277,22 @@ export async function recordCall(opts: {
   workflow_id?: string | null;
   session_id?: string | null;
   metadata?: Json;
+  /** How the caller authenticated; stored under metadata.auth. */
+  auth?: { source: "api_key" | "oauth"; client_id?: string };
 }) {
+  const baseMetadata =
+    opts.metadata && typeof opts.metadata === "object" && !Array.isArray(opts.metadata)
+      ? opts.metadata
+      : {};
+  const metadata: Json = opts.auth
+    ? {
+        ...baseMetadata,
+        auth: {
+          source: opts.auth.source,
+          ...(opts.auth.client_id ? { client_id: opts.auth.client_id } : {}),
+        },
+      }
+    : (opts.metadata ?? {});
   const writes: PromiseLike<unknown>[] = [
     supabaseAdmin.from("mcp_call_logs").insert({
       user_id: opts.user_id,
@@ -259,7 +305,7 @@ export async function recordCall(opts: {
       category: opts.category ?? null,
       workflow_id: opts.workflow_id ?? null,
       session_id: opts.session_id ?? null,
-      metadata: opts.metadata ?? {},
+      metadata,
     }),
   ];
 

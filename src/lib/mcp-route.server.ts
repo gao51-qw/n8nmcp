@@ -18,7 +18,10 @@ import {
   recordCall,
 } from "@/lib/mcp.server";
 import * as Sentry from "@sentry/nextjs";
-import { isUpstreamConfigured } from "@/lib/mcp-upstream.server";
+import { isManagementTool, isUpstreamConfigured } from "@/lib/mcp-upstream.server";
+import { isOAuthEnabled, protectedResourceMetadataUrl } from "@/lib/oauth/config.server";
+import { missingScopes } from "@/lib/oauth/scopes";
+import { requiredScopesForTool } from "@/lib/oauth/tool-scopes.server";
 import { getRequestId, log } from "@/lib/logger.server";
 import { CORS, jsonResp, rpcError, rpcResult, sseStream } from "@/lib/mcp-transport.server";
 import type { JsonRpcReq } from "@/lib/mcp-types";
@@ -320,6 +323,39 @@ function inputRequiredResult(
   };
 }
 
+type AuthedCaller = NonNullable<Awaited<ReturnType<typeof authenticateBearer>>>;
+
+function callAuth(ctx: AuthedCaller) {
+  return { source: ctx.auth_source ?? "api_key", client_id: ctx.client_id } as const;
+}
+
+/** RFC 6750 / RFC 9728 challenge pointing OAuth clients at the resource metadata. */
+function bearerChallenge(extra: Record<string, string> = {}): string {
+  const params: Record<string, string> = {
+    ...extra,
+    resource_metadata: protectedResourceMetadataUrl(),
+  };
+  return `Bearer ${Object.entries(params)
+    .map(([key, value]) => `${key}="${value.replace(/["\\]/g, "")}"`)
+    .join(", ")}`;
+}
+
+function insufficientScope(payload: unknown): string[] | null {
+  const error = (payload as { error?: { data?: { requiredScopes?: unknown } } } | null)?.error;
+  const scopes = error?.data?.requiredScopes;
+  return Array.isArray(scopes) ? scopes.map(String) : null;
+}
+
+/** 403 + WWW-Authenticate insufficient_scope for a single-request scope failure. */
+function forbiddenScopeResponse(payload: unknown, scopes: string[], requestId: string): Response {
+  const response = jsonResp(payload, 403);
+  response.headers.set(
+    "WWW-Authenticate",
+    bearerChallenge({ error: "insufficient_scope", scope: scopes.join(" ") }),
+  );
+  return withRequestId(response, requestId);
+}
+
 function withNoIndex(response: Response): Response {
   response.headers.set("X-Robots-Tag", ROBOTS_NOINDEX);
   return response;
@@ -438,6 +474,31 @@ async function handleRpc(
       const name = String(params.name ?? "");
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const started = Date.now();
+      // OAuth clients only get the scopes the user granted on the consent page.
+      if (ctx.auth_source === "oauth") {
+        const required = requiredScopesForTool(name, isManagementTool(name));
+        const missing = missingScopes(ctx.scopes ?? [], required);
+        if (missing.length > 0) {
+          log.warn("mcp.gateway.request", {
+            method: "tools/call",
+            tool: name,
+            user_id: ctx.user_id,
+            key_id: ctx.key_id,
+            request_id: source.request_id,
+            status: "insufficient_scope",
+            missing_scopes: missing,
+            ...protocolLog,
+          });
+          return rpcError(
+            req.id,
+            -32001,
+            `Insufficient scope: ${name} requires ${missing.join(" ")}`,
+            {
+              requiredScopes: required,
+            },
+          );
+        }
+      }
       let toolContext: ToolContext;
       if (modern) {
         const resolved = resolveModernToolContext(ctx.user_id, name, args, modern, params);
@@ -483,6 +544,7 @@ async function handleRpc(
             category: result.category,
             workflow_id: workflowIdFromCall(name, args, result.output),
             session_id: sessionId,
+            auth: callAuth(ctx),
           });
           log.warn("mcp.gateway.request", {
             method: "tools/call",
@@ -530,6 +592,7 @@ async function handleRpc(
           category: result.category,
           workflow_id: workflowIdFromCall(name, args, result.output),
           session_id: sessionId,
+          auth: callAuth(ctx),
           metadata: buildWorkflowAgentCallMetadata(name, args, result.output),
         });
         log.info("mcp.gateway.request", {
@@ -606,6 +669,7 @@ async function handleRpc(
           error_message: msg,
           workflow_id: workflowIdFromCall(name, args, null),
           session_id: sessionId,
+          auth: callAuth(ctx),
         });
         log.warn("mcp.gateway.request", {
           method: "tools/call",
@@ -742,6 +806,8 @@ async function serveModern(
 
   const out = (await throttle(auth, r)) ?? (await handleRpc(r, auth, source, request, null, era));
   const payload = out as { result?: unknown; error?: { code?: number } };
+  const scopes = insufficientScope(payload);
+  if (scopes) return forbiddenScopeResponse(payload, scopes, requestId);
   if (payload.error) {
     return withRequestId(jsonResp(payload, modernErrorStatus(payload.error.code ?? 0)), requestId);
   }
@@ -756,10 +822,12 @@ export async function mcpPost(request: Request) {
 
   if (!auth) {
     log.warn("mcp.gateway.unauthorized", source);
-    return withRequestId(
-      jsonResp(rpcError(null, -32001, "Unauthorized: invalid or missing Bearer key"), 401),
-      requestId,
+    const response = jsonResp(
+      rpcError(null, -32001, "Unauthorized: invalid or missing Bearer key"),
+      401,
     );
+    if (isOAuthEnabled()) response.headers.set("WWW-Authenticate", bearerChallenge());
+    return withRequestId(response, requestId);
   }
 
   let body: unknown;
@@ -841,6 +909,8 @@ export async function mcpPost(request: Request) {
   }
 
   const payload = isBatch ? responses : (responses[0] ?? null);
+  const scopes = isBatch ? null : insufficientScope(payload);
+  if (scopes) return forbiddenScopeResponse(payload, scopes, requestId);
 
   // Preserve HTTP 429 for the common single-request throttle/quota case so clients
   // can back off. Batches always use 200 with per-item JSON-RPC errors.
