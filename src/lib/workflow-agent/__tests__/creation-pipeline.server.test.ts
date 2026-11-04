@@ -360,6 +360,12 @@ describe("WorkflowCreationPipeline", () => {
             type: "n8n-nodes-base.Webhook",
             parameters: {},
           },
+          {
+            id: "non-canonical-langchain",
+            name: "Non Canonical LangChain",
+            type: "@n8n/n8n-nodes-langchain.Agent",
+            parameters: {},
+          },
         ],
         connections: {},
       }),
@@ -378,14 +384,92 @@ describe("WorkflowCreationPipeline", () => {
           nodeId: "surrounding-space",
         }),
         expect.objectContaining({ code: "knowledge.node_identifier", nodeId: "non-canonical" }),
+        expect.objectContaining({
+          code: "knowledge.node_identifier",
+          nodeId: "non-canonical-langchain",
+        }),
       ]),
     );
     expect(
       result.validation.errors.filter((item) => item.code === "knowledge.node_identifier"),
-    ).toHaveLength(6);
+    ).toHaveLength(7);
     expect(knowledge.getNode).not.toHaveBeenCalled();
     expect(knowledge.validateNode).not.toHaveBeenCalled();
     expect(knowledge.validateWorkflow).not.toHaveBeenCalled();
+    expect(createDraft).not.toHaveBeenCalled();
+  });
+
+  it("validates community nodes in Knowledge under their full package type", async () => {
+    const { pipeline, knowledge, createDraft } = createHarness();
+    vi.mocked(knowledge.validateNode).mockImplementation(async ({ nodeType }) =>
+      nodeType === "@acme/n8n-nodes-crm.acmeCrm"
+        ? {
+            ok: true,
+            warnings: [{ message: "community node not reviewed by n8n" }],
+            trust_level: "parsed",
+          }
+        : { ok: true },
+    );
+
+    const result = await pipeline.create({
+      intent: "sync contacts",
+      activateIntent: true,
+      buildFallback: () => ({
+        ...reviewedWorkflow,
+        nodes: [
+          ...reviewedWorkflow.nodes!,
+          {
+            id: "crm",
+            name: "Acme CRM",
+            type: "@acme/n8n-nodes-crm.acmeCrm",
+            parameters: { resource: "contact" },
+          },
+        ],
+      }),
+      templateCompatibility: () => false,
+    });
+
+    expect(knowledge.validateNode).toHaveBeenCalledWith({
+      nodeType: "@acme/n8n-nodes-crm.acmeCrm",
+      parameters: { resource: "contact" },
+      packageName: "@acme/n8n-nodes-crm",
+    });
+    expect(createDraft).toHaveBeenCalledWith(expect.objectContaining({ active: false }));
+    expect(result.activationEligible).toBe(false);
+    expect(result.validation.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "knowledge.node_warning", nodeId: "crm" }),
+      ]),
+    );
+  });
+
+  it("blocks a community node type Knowledge does not know", async () => {
+    const { pipeline, knowledge, createDraft } = createHarness();
+    vi.mocked(knowledge.validateNode).mockImplementation(async ({ nodeType }) =>
+      nodeType === "n8n-nodes-ghost.ghost"
+        ? { ok: false, error: "Node validation failed" }
+        : { ok: true },
+    );
+
+    const result = await pipeline.create({
+      intent: "ghost",
+      activateIntent: false,
+      buildFallback: () => ({
+        ...reviewedWorkflow,
+        nodes: [
+          ...reviewedWorkflow.nodes!,
+          { id: "ghost", name: "Ghost", type: "n8n-nodes-ghost.ghost", parameters: {} },
+        ],
+      }),
+      templateCompatibility: () => false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.validation.errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ code: "knowledge.node_validation", nodeId: "ghost" }),
+      ]),
+    );
     expect(createDraft).not.toHaveBeenCalled();
   });
 

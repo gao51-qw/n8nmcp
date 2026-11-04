@@ -109,6 +109,12 @@ function workflowSemanticSignature(workflow: WorkflowLike): string {
 }
 
 const CANONICAL_OFFICIAL_NODE_NAME = /^[a-z][a-zA-Z0-9]*$/;
+const OFFICIAL_PACKAGES: ReadonlySet<string> = new Set([
+  "n8n-nodes-base",
+  "@n8n/n8n-nodes-langchain",
+]);
+const COMMUNITY_NODE_TYPE =
+  /^((?:@[a-z0-9][a-z0-9._-]*\/)?n8n-nodes-[a-z0-9._-]+)\.([a-zA-Z][a-zA-Z0-9]*)$/;
 
 function isCanonicalOfficialNodeName(value: unknown): value is string {
   return (
@@ -137,7 +143,7 @@ function resolveKnowledgeNodeIdentifier(nodeType: unknown): KnowledgeNodeIdentif
 
   // Some reviewed orchestrated builders predate the blueprint registry. Keep their
   // official package/type protocol explicit without ever sending the full n8n type.
-  for (const packageName of ["n8n-nodes-base", "@n8n/n8n-nodes-langchain"] as const) {
+  for (const packageName of OFFICIAL_PACKAGES) {
     const prefix = `${packageName}.`;
     if (nodeType.startsWith(prefix)) {
       const officialName = nodeType.slice(prefix.length);
@@ -145,6 +151,16 @@ function resolveKnowledgeNodeIdentifier(nodeType: unknown): KnowledgeNodeIdentif
         return { nodeType: officialName, packageName };
       }
     }
+  }
+
+  // Community nodes are `<community package>.<node>` and are looked up in
+  // Knowledge under that full type. Knowledge decides how far to trust the
+  // schema: verified (reviewed by n8n) validates like an official node, while
+  // parsed or listed packages come back with warnings, which keep the draft
+  // inactive until someone activates it explicitly. Unknown types fail.
+  const community = COMMUNITY_NODE_TYPE.exec(nodeType);
+  if (community && !OFFICIAL_PACKAGES.has(community[1]!)) {
+    return { nodeType, packageName: community[1]! };
   }
   return undefined;
 }
