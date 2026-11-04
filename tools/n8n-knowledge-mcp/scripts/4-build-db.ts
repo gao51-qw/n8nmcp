@@ -3,6 +3,8 @@
 import Database from "better-sqlite3";
 import { readFile, mkdir } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
+import { COMMUNITY_SCHEMA_SQL } from "../src/community-db.js";
+import { essentialsOf } from "../src/node-essentials.js";
 
 const TMP = resolve(process.cwd(), ".tmp/pkgs");
 const OUT = resolve(process.cwd(), "data/nodes.db");
@@ -22,31 +24,6 @@ type Node = {
   source_path: string;
   source_excerpt: string;
 };
-
-function essentialsOf(propsJson: string): string {
-  let props: any[];
-  try {
-    props = JSON.parse(propsJson);
-  } catch {
-    return "[]";
-  }
-  if (!Array.isArray(props)) return "[]";
-  const essentials = props
-    .filter((p) => p.required || /^(resource|operation|url|method)$/i.test(p.name ?? ""))
-    .slice(0, 20)
-    .map((p) => ({
-      name: p.name,
-      displayName: p.displayName,
-      type: p.type,
-      required: !!p.required,
-      default: p.default,
-      description: p.description,
-      options: Array.isArray(p.options)
-        ? p.options.slice(0, 12).map((o: any) => ({ name: o.name, value: o.value }))
-        : undefined,
-    }));
-  return JSON.stringify(essentials);
-}
 
 async function main() {
   await mkdir(dirname(OUT), { recursive: true });
@@ -68,6 +45,7 @@ async function main() {
     DROP TABLE IF EXISTS external_node_validation_results;
     DROP TABLE IF EXISTS verified_external_nodes;
     DROP TABLE IF EXISTS verified_external_nodes_fts;
+    DROP TABLE IF EXISTS community_packages;
 
     CREATE TABLE nodes (
       node_type TEXT NOT NULL,
@@ -86,10 +64,16 @@ async function main() {
       examples_json TEXT NOT NULL DEFAULT '[]',
       source_excerpt TEXT,
       updated_at TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'official' CHECK (source IN ('official', 'community')),
+      trust_level TEXT NOT NULL DEFAULT 'official'
+        CHECK (trust_level IN ('official', 'verified', 'parsed')),
+      package_version TEXT,
+      package_integrity TEXT,
       PRIMARY KEY (package_name, node_type)
     );
 
     CREATE INDEX idx_nodes_type ON nodes(node_type);
+    CREATE INDEX idx_nodes_trust ON nodes(source, trust_level);
     CREATE INDEX idx_nodes_aitool ON nodes(is_ai_tool);
     CREATE INDEX idx_nodes_category ON nodes(category);
 
@@ -229,12 +213,14 @@ async function main() {
       node_type, package_name, display_name, description, category, version,
       is_ai_tool, is_trigger, is_webhook,
       properties_json, essentials_json, credentials_json,
-      documentation, examples_json, source_excerpt, updated_at
+      documentation, examples_json, source_excerpt, updated_at,
+      source, trust_level, package_version
     ) VALUES (
       @node_type, @package_name, @display_name, @description, @category, @version,
       @is_ai_tool, @is_trigger, @is_webhook,
       @properties_json, @essentials_json, @credentials_json,
-      @documentation, @examples_json, @source_excerpt, @updated_at
+      @documentation, @examples_json, @source_excerpt, @updated_at,
+      @source, @trust_level, @package_version
     )
   `);
   const insFts = db.prepare(`
@@ -242,12 +228,31 @@ async function main() {
     VALUES (?, ?, ?, ?, ?)
   `);
 
+  // Community packages fetched by step 1 (non-official builds) are parsed, not
+  // reviewed; scripts/7b-add-community-nodes.ts adds reviewed ones.
+  const packageSources = new Map<string, { source: string; version: string }>();
+  try {
+    const index = JSON.parse(await readFile(join(TMP, "_index.json"), "utf8")) as Array<{
+      name: string;
+      source: string;
+      version: string;
+    }>;
+    for (const pkg of index) packageSources.set(pkg.name, { source: pkg.source, version: pkg.version });
+  } catch {}
+
+  db.exec(COMMUNITY_SCHEMA_SQL);
+
   const tx = db.transaction((rows: Node[]) => {
     const now = new Date().toISOString();
     for (const n of rows) {
       const doc = docs[n.node_type] ?? { documentation: "", examples_json: "[]" };
+      const pkg = packageSources.get(n.package_name);
+      const community = pkg?.source === "community";
       ins.run({
         ...n,
+        source: community ? "community" : "official",
+        trust_level: community ? "parsed" : "official",
+        package_version: pkg?.version ?? null,
         essentials_json: essentialsOf(n.properties_json),
         documentation: doc.documentation || null,
         examples_json: doc.examples_json || "[]",

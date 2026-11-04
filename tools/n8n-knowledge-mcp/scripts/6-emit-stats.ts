@@ -109,6 +109,20 @@ async function main() {
       )
     : 0;
 
+  const hasTrustLevels = safeCount(
+    db,
+    "SELECT COUNT(*) c FROM pragma_table_info('nodes') WHERE name = 'trust_level'",
+  ) > 0;
+  const communityVerifiedNodes = hasTrustLevels
+    ? safeCount(db, "SELECT COUNT(*) c FROM nodes WHERE trust_level = 'verified'")
+    : 0;
+  const communityParsedNodes = hasTrustLevels
+    ? safeCount(db, "SELECT COUNT(*) c FROM nodes WHERE trust_level = 'parsed'")
+    : 0;
+  const communityListedPackages = tableExists(db, "community_packages")
+    ? safeCount(db, "SELECT COUNT(*) c FROM community_packages WHERE trust_level = 'listed'")
+    : 0;
+
   db.close();
 
   const stats = {
@@ -127,6 +141,9 @@ async function main() {
     verifiedExternalNodes,
     verifiedExternalCommunityNodes,
     verifiedExternalToolVariantNodes,
+    communityVerifiedNodes,
+    communityParsedNodes,
+    communityListedPackages,
     generatedAt: new Date().toISOString(),
   };
 
@@ -137,7 +154,7 @@ async function main() {
   await writeFile(REPO_OUT, json);
 
   console.log(
-    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} ai=${aiTools} templates=${templates} external=${externalCandidateNodes} verifiedExternal=${verifiedExternalNodes}`,
+    `[stats] total=${total} core=${coreNodes} community=${communityNodes} pkgs=${communityPackages} verified=${communityVerifiedNodes} parsed=${communityParsedNodes} listed=${communityListedPackages} ai=${aiTools} templates=${templates} external=${externalCandidateNodes} verifiedExternal=${verifiedExternalNodes}`,
   );
   console.log(`[stats] wrote ${LOCAL_OUT}`);
   console.log(`[stats] wrote ${REPO_OUT}`);

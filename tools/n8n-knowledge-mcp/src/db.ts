@@ -70,12 +70,26 @@ function tableExists(name: string): boolean {
 export function statsCount() {
   const hasExternalCandidates = tableExists("external_node_candidates");
   const hasVerifiedExternalNodes = tableExists("verified_external_nodes");
+  const hasTrustLevels =
+    safeCount("SELECT COUNT(*) c FROM pragma_table_info('nodes') WHERE name = 'trust_level'") > 0;
   return {
     total: safeCount("SELECT COUNT(*) c FROM nodes"),
     ai_tools: safeCount("SELECT COUNT(*) c FROM nodes WHERE is_ai_tool=1"),
     triggers: safeCount("SELECT COUNT(*) c FROM nodes WHERE is_trigger=1"),
     webhooks: safeCount("SELECT COUNT(*) c FROM nodes WHERE is_webhook=1"),
     templates: safeCount("SELECT COUNT(*) c FROM templates"),
+    community_nodes: hasTrustLevels
+      ? safeCount("SELECT COUNT(*) c FROM nodes WHERE source='community'")
+      : 0,
+    community_verified_nodes: hasTrustLevels
+      ? safeCount("SELECT COUNT(*) c FROM nodes WHERE trust_level='verified'")
+      : 0,
+    community_parsed_nodes: hasTrustLevels
+      ? safeCount("SELECT COUNT(*) c FROM nodes WHERE trust_level='parsed'")
+      : 0,
+    community_listed_packages: tableExists("community_packages")
+      ? safeCount("SELECT COUNT(*) c FROM community_packages WHERE trust_level='listed'")
+      : 0,
     external_candidates: hasExternalCandidates
       ? safeCount("SELECT COUNT(*) c FROM external_node_candidates")
       : 0,

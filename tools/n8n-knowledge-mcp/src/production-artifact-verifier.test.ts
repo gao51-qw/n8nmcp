@@ -160,6 +160,20 @@ describe("production knowledge artifact verifier", () => {
     expect(result.status).toBe(0);
   });
 
+  it("accepts community trust counters and rejects malformed ones", () => {
+    const artifacts = createArtifacts();
+    writeStats(artifacts.statsPath, {
+      ...validStats(),
+      communityVerifiedNodes: 2141,
+      communityParsedNodes: 29,
+      communityListedPackages: 4,
+    });
+    expect(runVerifier(artifacts).status).toBe(0);
+
+    writeStats(artifacts.statsPath, { ...validStats(), communityVerifiedNodes: -1 });
+    expect(runVerifier(artifacts).status).not.toBe(0);
+  });
+
   it("rejects stats whose template count is stale", () => {
     const artifacts = createArtifacts({}, { templates: 1 });
 

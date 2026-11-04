@@ -31,6 +31,38 @@ function ftsEscape(q: string): string {
     .join(" OR ");
 }
 
+// Community trust metadata (scripts/4-build-db.ts, 7b-add-community-nodes.ts).
+// Older databases have no such columns; everything there is official.
+const TRUST_LEVELS = ["official", "verified", "parsed"] as const;
+
+function nodeColumns(): Set<string> {
+  try {
+    return new Set((db.prepare("PRAGMA table_info(nodes)").all() as Array<{ name: string }>).map((c) => c.name));
+  } catch {
+    return new Set();
+  }
+}
+
+function hasTable(name: string): boolean {
+  return !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name);
+}
+
+type TrustFields = { source: string; trust_level: string; package_version: string | null };
+
+function trustOf(row: Partial<TrustFields>): TrustFields {
+  return {
+    source: row.source ?? "official",
+    trust_level: row.trust_level ?? "official",
+    package_version: row.package_version ?? null,
+  };
+}
+
+/** `<package>.<node>` → package, for community node types. */
+function packageOfNodeType(nodeType: string): string | null {
+  const dot = nodeType.lastIndexOf(".");
+  return dot > 0 ? nodeType.slice(0, dot) : null;
+}
+
 export function searchWorkflowTemplates(input: { query: string; limit?: number }) {
   const query = input.query.trim();
   if (!query) throw new Error("Template search query must not be empty");
@@ -96,11 +128,19 @@ export function registerAllTools(server: McpServer) {
       category: z.string().optional(),
       is_ai_tool: z.boolean().optional(),
       is_trigger: z.boolean().optional(),
+      include_community: z.boolean().default(true),
+      trust_level: z.enum(TRUST_LEVELS).optional(),
       limit: z.number().int().min(1).max(500).default(100),
     },
     async (args) => {
       const where: string[] = [];
       const params: any[] = [];
+      const trust = nodeColumns().has("trust_level");
+      if (trust && args.include_community === false) where.push("source = 'official'");
+      if (trust && args.trust_level) {
+        where.push("trust_level = ?");
+        params.push(args.trust_level);
+      }
       if (args.package_name) {
         where.push("package_name = ?");
         params.push(args.package_name);
@@ -117,8 +157,11 @@ export function registerAllTools(server: McpServer) {
         where.push("is_trigger = ?");
         params.push(args.is_trigger ? 1 : 0);
       }
+      const trustColumns = trust
+        ? "source, trust_level, package_version"
+        : "'official' AS source, 'official' AS trust_level, NULL AS package_version";
       const sql = `SELECT node_type, package_name, display_name, description, category, version,
-        is_ai_tool, is_trigger, is_webhook FROM nodes
+        is_ai_tool, is_trigger, is_webhook, ${trustColumns} FROM nodes
         ${where.length ? "WHERE " + where.join(" AND ") : ""}
         ORDER BY package_name, node_type LIMIT ?`;
       params.push(args.limit);
@@ -129,22 +172,39 @@ export function registerAllTools(server: McpServer) {
 
   server.tool(
     "search_nodes",
-    "Full-text search across node_type, display_name, description, and documentation.",
+    "Full-text search across node_type, display_name, description, and documentation. " +
+      "Results include community nodes with their trust_level: verified (reviewed by n8n), " +
+      "parsed (read from the npm package, not reviewed) or official.",
     {
       query: z.string().min(1),
+      include_community: z.boolean().default(true),
+      trust_level: z.enum(TRUST_LEVELS).optional(),
       limit: z.number().int().min(1).max(100).default(20),
     },
-    async ({ query, limit }) => {
+    async ({ query, include_community, trust_level, limit }) => {
       const fts = ftsEscape(query);
+      const trust = nodeColumns().has("trust_level");
+      const filters: string[] = [];
+      const params: unknown[] = [fts];
+      if (trust && include_community === false) filters.push("n.source = 'official'");
+      if (trust && trust_level) {
+        filters.push("n.trust_level = ?");
+        params.push(trust_level);
+      }
+      const trustColumns = trust
+        ? "n.source, n.trust_level, n.package_version"
+        : "'official' AS source, 'official' AS trust_level, NULL AS package_version";
+      params.push(limit);
       const rows = db
         .prepare(
           `SELECT n.node_type, n.package_name, n.display_name, n.description, n.category,
-                  n.is_ai_tool, n.is_trigger, n.is_webhook
+                  n.is_ai_tool, n.is_trigger, n.is_webhook, ${trustColumns}
              FROM nodes_fts f JOIN nodes n
                ON n.node_type = f.node_type AND n.package_name = f.package_name
-            WHERE nodes_fts MATCH ? ORDER BY rank LIMIT ?`,
+            WHERE nodes_fts MATCH ? ${filters.map((f) => `AND ${f}`).join(" ")}
+            ORDER BY rank LIMIT ?`,
         )
-        .all(fts, limit);
+        .all(...params);
       return text({ query, count: rows.length, results: rows });
     },
   );
@@ -554,6 +614,7 @@ export function registerAllTools(server: McpServer) {
         is_webhook: !!r.is_webhook,
         properties: parseProps(r.properties_json),
         credentials: JSON.parse(r.credentials_json || "[]"),
+        ...trustOf(r as Partial<TrustFields>),
       });
     },
   );
@@ -574,6 +635,8 @@ export function registerAllTools(server: McpServer) {
         description: r.description,
         is_ai_tool: !!r.is_ai_tool,
         essentials: JSON.parse(r.essentials_json || "[]"),
+        package_name: r.package_name,
+        ...trustOf(r as Partial<TrustFields>),
       });
     },
   );
@@ -872,14 +935,61 @@ export function registerAllTools(server: McpServer) {
     return { ok: errors.length === 0, errors, warnings };
   }
 
+  /** Adds the caveats that come with community schemas. */
+  function withTrustWarnings(node: NodeRow, result: ReturnType<typeof validateNodeProps>) {
+    const trust = trustOf(node as Partial<TrustFields>);
+    if (trust.source !== "community") return { ...result, trust_level: trust.trust_level };
+    const warnings = [...result.warnings];
+    if (trust.trust_level === "parsed") {
+      warnings.push({
+        property: "*",
+        message: "community node not reviewed by n8n; schema was read from the npm package",
+      });
+    }
+    if (parseProps(node.properties_json).length === 0) {
+      warnings.push({
+        property: "*",
+        message: "community node has no parameter schema; parameters were not validated",
+      });
+    }
+    return { ...result, warnings, trust_level: trust.trust_level };
+  }
+
+  /**
+   * Unknown node type. If it belongs to a community package we know about but
+   * could not read a schema for ("listed"), that is a warning, not an error.
+   */
+  function unknownNodeResult(nodeType: string) {
+    const pkg = packageOfNodeType(nodeType);
+    if (pkg && hasTable("community_packages")) {
+      const listed = db
+        .prepare("SELECT package_name, version FROM community_packages WHERE package_name = ?")
+        .get(pkg) as { package_name: string; version: string } | undefined;
+      if (listed) {
+        return {
+          ok: true,
+          errors: [] as Array<{ property: string; message: string }>,
+          warnings: [
+            {
+              property: "*",
+              message: `community package ${listed.package_name}@${listed.version} is known but its node schema is not; parameters were not validated`,
+            },
+          ],
+          trust_level: "listed",
+        };
+      }
+    }
+    return null;
+  }
+
   server.tool(
     "validate_node_minimal",
     "Check only required fields are present.",
     { node_type: z.string(), parameters: z.record(z.unknown()).default({}), package_name: z.string().optional() },
     async ({ node_type, parameters, package_name }) => {
       const r = fetchNode(node_type, package_name);
-      if (!r) return text({ ok: false, error: `node not found: ${node_type}` });
-      return text(validateNodeProps(r, parameters, "minimal"));
+      if (!r) return text(unknownNodeResult(node_type) ?? { ok: false, error: `node not found: ${node_type}` });
+      return text(withTrustWarnings(r, validateNodeProps(r, parameters, "minimal")));
     },
   );
 
@@ -889,8 +999,8 @@ export function registerAllTools(server: McpServer) {
     { node_type: z.string(), parameters: z.record(z.unknown()).default({}), package_name: z.string().optional() },
     async ({ node_type, parameters, package_name }) => {
       const r = fetchNode(node_type, package_name);
-      if (!r) return text({ ok: false, error: `node not found: ${node_type}` });
-      return text(validateNodeProps(r, parameters, "operation"));
+      if (!r) return text(unknownNodeResult(node_type) ?? { ok: false, error: `node not found: ${node_type}` });
+      return text(withTrustWarnings(r, validateNodeProps(r, parameters, "operation")));
     },
   );
 
@@ -904,10 +1014,10 @@ export function registerAllTools(server: McpServer) {
         const type = String(n.type ?? "").replace(/^n8n-nodes-base\./, "");
         const row = fetchNode(type);
         if (!row) {
-          out.push({ node: n.name, type, result: { error: "unknown node_type" } });
+          out.push({ node: n.name, type, result: unknownNodeResult(type) ?? { error: "unknown node_type" } });
           continue;
         }
-        out.push({ node: n.name, type, result: validateNodeProps(row, n.parameters ?? {}, "full") });
+        out.push({ node: n.name, type, result: withTrustWarnings(row, validateNodeProps(row, n.parameters ?? {}, "full")) });
       }
       const errCount = out.reduce((a, b) => a + (("errors" in b.result ? b.result.errors.length : 1)), 0);
       return text({ ok: errCount === 0, total: out.length, errors_total: errCount, nodes: out });

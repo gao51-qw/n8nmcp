@@ -10,6 +10,8 @@
     "start": "node dist/src/server.js",
     "build:nodes": "tsx scripts/1-fetch-packages.ts && tsx scripts/2-parse-nodes.ts && tsx scripts/3-parse-docs.ts && tsx scripts/4-build-db.ts",
     "build:nodes:official": "tsx scripts/1-fetch-packages.ts --official-only && tsx scripts/2-parse-nodes.ts && tsx scripts/3-parse-docs.ts && tsx scripts/4-build-db.ts",
+    "discover:community": "tsx scripts/0-discover-community-packages.ts",
+    "build:community": "npm run discover:community && tsx scripts/7b-add-community-nodes.ts --with-parsed",
     "fetch:templates": "tsx scripts/5-fetch-official-templates.ts",
     "build:templates": "tsx scripts/5-build-templates.ts",
     "emit:stats": "tsx scripts/6-emit-stats.ts",

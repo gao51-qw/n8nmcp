@@ -78,6 +78,24 @@ Verified external discovery: `list_verified_external_nodes`, `search_verified_ex
 
 External node candidates are imported into `external_node_candidates`, not into the official `nodes` table. `verified_external_nodes` contains only candidates that passed this project's local static metadata checks. This validation is intentionally fast: it does not install npm packages, execute node code, make network calls, or prove package safety/runtime compatibility.
 
+## Community Nodes
+
+`npm run build:community` adds community nodes from first-party sources to a database produced by the official build. CI runs it as its own step right after `npm run build:nodes:official`:
+
+1. `scripts/0-discover-community-packages.ts` reads n8n's reviewed list (`api.n8n.io/api/community-nodes`) and searches npm for the `n8n-community-node-package` keyword. Output: `.tmp/community/discovery.json`.
+2. `scripts/7b-add-community-nodes.ts --with-parsed` writes them into `data/nodes.db`.
+
+| `trust_level` | Source | Package code |
+|---|---|---|
+| `official` | n8n-io/n8n repository | parsed statically |
+| `verified` | reviewed by n8n; schema from n8n's record, SRI checksum kept | not downloaded |
+| `parsed` | not reviewed; popular (≥ 50 downloads/week) and published within 24 months | tarball pinned to the discovered version, SRI-checked, files-only extraction, parsed statically with ts-morph, never imported or run |
+| `listed` (packages only) | known package without a readable node schema | validation warns instead of erroring |
+
+Community nodes use their workflow type, `<package>.<node>`. `search_nodes` and `list_nodes` accept `include_community` and `trust_level`. Results and `get_node_info` / `get_node_essentials` report `source`, `trust_level` and `package_version`. Validation adds a warning for `parsed` nodes and for nodes without a parameter schema. The gateway treats those warnings as a block on automatic activation.
+
+The step runs in one transaction, and the quality gate in `packages.json` (`min_community_nodes`, `min_verified_nodes`) is checked before commit. If it fails, the build fails, the official database is untouched and CI publishes nothing. For a quick local check, use `tsx scripts/7b-add-community-nodes.ts --with-parsed --limit-parsed=25 --skip-gate`. A 2026-11-04 trial produced 2,141 verified nodes from 1,623 packages, 899 parse candidates, and 29 parsed nodes from the first 25 of those.
+
 ## Importing External Candidate Nodes
 
 If `czlonkowski/n8n-mcp` has been unpacked at `../../n8n-mcp-main`, import its node metadata as a candidate pool:

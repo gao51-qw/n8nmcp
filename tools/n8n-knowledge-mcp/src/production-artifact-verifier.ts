@@ -125,6 +125,9 @@ const optionalStatsCountFields = [
   "verifiedExternalNodes",
   "verifiedExternalCommunityNodes",
   "verifiedExternalToolVariantNodes",
+  "communityVerifiedNodes",
+  "communityParsedNodes",
+  "communityListedPackages",
 ] as const;
 
 function readStats(path: string): ProductionStats {

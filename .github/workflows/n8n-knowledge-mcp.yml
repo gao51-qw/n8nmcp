@@ -33,6 +33,13 @@ jobs:
       - name: Build node database
         run: npm run build:nodes:official
 
+      # Verified nodes from n8n's reviewed list plus popular unreviewed npm
+      # packages (SRI-checked, parsed statically). The community quality gate
+      # runs inside one transaction: if it fails, this step fails and nothing
+      # is published, so production keeps the previous image.
+      - name: Add community nodes
+        run: npm run build:community
+
       - name: Fetch official templates
         id: official
         continue-on-error: true
