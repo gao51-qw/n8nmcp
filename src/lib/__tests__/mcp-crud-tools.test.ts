@@ -561,6 +561,91 @@ describe("Workflow CRUD Tools", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it("executes an active workflow through its production webhook and reports the execution", async () => {
+      mockN8nResponse({
+        id: "workflow-large",
+        name: "Large workflow",
+        active: true,
+        nodes: [
+          {
+            name: "Webhook",
+            type: "n8n-nodes-base.webhook",
+            parameters: { httpMethod: "POST", path: "/orders" },
+          },
+        ],
+        connections: {},
+      });
+      mockN8nResponse({ data: [{ id: "exec-1" }] }); // latest execution before triggering
+      mockN8nResponse({ received: true }); // webhook response
+      mockN8nResponse({
+        data: [
+          {
+            id: "exec-2",
+            status: "success",
+            finished: true,
+            data: {
+              resultData: {
+                lastNodeExecuted: "Set",
+                runData: { Set: [{ data: { main: [[{ json: { ok: true } }]] } }] },
+              },
+            },
+          },
+        ],
+      });
+
+      const result = await runTool(mockN8nInstance, "execute_workflow", {
+        id: "workflow-large",
+        data: { orderId: 42 },
+        confirm: true,
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(4);
+      expect(String(mockFetch.mock.calls[0][0])).toContain("/api/v1/workflows/workflow-large");
+      expect(String(mockFetch.mock.calls[1][0])).toContain(
+        "/api/v1/executions?workflowId=workflow-large&limit=1",
+      );
+      // No Public API execute endpoint exists: the run goes to the production webhook,
+      // with the caller's data and without the API key.
+      expect(String(mockFetch.mock.calls[2][0])).toBe("https://test.n8n.io/webhook/orders");
+      expect(getFetchInit(2).method).toBe("POST");
+      expect(JSON.parse(getFetchInit(2).body)).toEqual({ orderId: 42 });
+      expect(getFetchInit(2).headers).not.toHaveProperty("X-N8N-API-KEY");
+      expect(result).toMatchObject({
+        success: true,
+        workflowId: "workflow-large",
+        webhook: { method: "POST", body: { received: true } },
+        execution: { id: "exec-2", status: "success", finished: true, output: { ok: true } },
+      });
+    });
+
+    it("refuses to execute an inactive workflow instead of calling a non-existent API endpoint", async () => {
+      mockN8nResponse({
+        id: "workflow-large",
+        active: false,
+        nodes: [{ name: "Webhook", type: "n8n-nodes-base.webhook", parameters: { path: "x" } }],
+        connections: {},
+      });
+
+      await expect(
+        runTool(mockN8nInstance, "execute_workflow", { id: "workflow-large", confirm: true }),
+      ).rejects.toThrow(/not active/);
+      expect(mockFetch).toHaveBeenCalledTimes(1); // only the workflow read
+    });
+
+    it("refuses to execute a workflow without a webhook trigger", async () => {
+      mockN8nResponse({
+        id: "workflow-large",
+        active: true,
+        nodes: validNodes,
+        connections: {},
+      });
+
+      await expect(
+        runTool(mockN8nInstance, "execute_workflow", { id: "workflow-large", confirm: true }),
+      ).rejects.toThrow(/no enabled Webhook trigger/);
+      expect(mockFetch).toHaveBeenCalledTimes(1); // only the workflow read
+    });
+
     it("requires explicit confirmation before applying a workflow patch", async () => {
       await expect(
         runTool(mockN8nInstance, "apply_workflow_patch", {

@@ -218,26 +218,33 @@ export class OrchestratedToolsService {
         },
         confirmation: dependencies.confirmationService ?? createConfirmationService(),
         runWorkflow: async (workflowId, workflow, testData) => {
-          const execution = (await n8n(
-            this.inst,
-            `/api/v1/workflows/${encodeURIComponent(workflowId)}/run`,
-            {
-              method: "POST",
-              body: JSON.stringify({ workflowData: workflow, runData: testData }),
-            },
-          )) as {
-            finished?: boolean;
-            data?: {
-              resultData?: {
-                error?: unknown;
-                lastNodeExecuted?: { data: { main: Array<Record<string, unknown>> } };
-              };
+          // The pipeline has just activated the workflow; trigger its production
+          // webhook and read the resulting execution back from the Public API.
+          const {
+            latestExecutionId,
+            resolveWebhookTrigger,
+            triggerWorkflowWebhook,
+            waitForNewExecution,
+          } = await import("./n8n-execution.server");
+          resolveWebhookTrigger(workflow, { assumeActive: true }); // fail fast
+          const request = (path: string, init?: RequestInit) => n8n(this.inst, path, init);
+          const previousExecutionId = await latestExecutionId(request, workflowId);
+          await triggerWorkflowWebhook(this.inst.base_url, workflow, testData, {
+            assumeActive: true,
+          });
+          const execution = await waitForNewExecution(request, workflowId, {
+            excludeId: previousExecutionId,
+          });
+          if (!execution) {
+            return {
+              finished: false,
+              error: "No execution was recorded after triggering the production webhook",
             };
-          };
+          }
           return {
             finished: execution.finished,
-            error: execution.data?.resultData?.error,
-            output: execution.data?.resultData?.lastNodeExecuted?.data.main[0] ?? null,
+            error: execution.error ?? undefined,
+            output: execution.output,
           };
         },
         activateWorkflow: async (workflowId) => {

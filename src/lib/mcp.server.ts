@@ -390,12 +390,41 @@ export async function runTool(
     }
     case "get_workflow":
       return n8n(inst, `/api/v1/workflows/${encodeURIComponent(String(args.id))}`);
-    case "execute_workflow":
+    case "execute_workflow": {
+      if (!args.id) throw new Error("id (workflow id) is required");
+      const id = String(args.id);
       await requireConfirmation(args, "Execute workflow", {}, context);
-      return n8n(inst, `/api/v1/workflows/${encodeURIComponent(String(args.id))}/execute`, {
-        method: "POST",
-        body: JSON.stringify(args.data ?? {}),
+      // The Public API has no execution endpoint: run the workflow through its
+      // production webhook and report the execution n8n recorded for it.
+      const {
+        latestExecutionId,
+        resolveWebhookTrigger,
+        triggerWorkflowWebhook,
+        waitForNewExecution,
+      } = await import("./n8n-execution.server");
+      const workflow = (await n8n(
+        inst,
+        `/api/v1/workflows/${encodeURIComponent(id)}`,
+      )) as Parameters<typeof triggerWorkflowWebhook>[1];
+      resolveWebhookTrigger(workflow); // fail fast before touching executions
+      const request = (path: string, init?: RequestInit) => n8n(inst, path, init);
+      const previousExecutionId = await latestExecutionId(request, id);
+      const webhook = await triggerWorkflowWebhook(inst.base_url, workflow, asObj(args.data));
+      const execution = await waitForNewExecution(request, id, {
+        excludeId: previousExecutionId,
       });
+      return {
+        success: true,
+        workflowId: id,
+        webhook,
+        execution,
+        message: execution
+          ? execution.finished
+            ? `Execution ${execution.id ?? "?"} finished with status ${execution.status ?? "unknown"}.`
+            : `Execution ${execution.id ?? "?"} is still running; check it with list_executions.`
+          : "Webhook accepted the request but no new execution was recorded yet; check list_executions.",
+      };
+    }
     case "list_executions": {
       const qs = new URLSearchParams();
       if (args.workflowId) qs.set("workflowId", String(args.workflowId));

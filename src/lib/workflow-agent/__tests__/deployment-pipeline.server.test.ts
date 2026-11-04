@@ -43,8 +43,8 @@ function createHarness(overrides: Record<string, unknown> = {}) {
 }
 
 describe("WorkflowDeploymentPipeline", () => {
-  it("loads, validates, confirms, smoke-tests, evaluates, then activates", async () => {
-    const { pipeline, events } = createHarness();
+  it("loads, validates, confirms, activates, then smoke-tests through the live webhook", async () => {
+    const { pipeline, events, dependencies } = createHarness();
 
     const result = await pipeline.deploy({
       userId: "user-1",
@@ -55,13 +55,17 @@ describe("WorkflowDeploymentPipeline", () => {
     });
 
     expect(result.success).toBe(true);
+    expect(result.results.activation).toEqual({ success: true, error: null, rolledBack: false });
+    // The Public API cannot execute a workflow, so the smoke test can only run
+    // against the production webhook of an activated workflow.
     expect(events).toEqual([
       "load-draft",
       "knowledge-validate",
       "consume-confirmation",
-      "smoke-test",
       "activate",
+      "smoke-test",
     ]);
+    expect(dependencies.deactivateWorkflow).not.toHaveBeenCalled();
   });
 
   it("binds confirmation to workflow fingerprint, test data, rules, and activation", async () => {
@@ -108,8 +112,8 @@ describe("WorkflowDeploymentPipeline", () => {
     expect(dependencies.runWorkflow).not.toHaveBeenCalled();
   });
 
-  it("does not activate when smoke output rules fail", async () => {
-    const { pipeline, dependencies } = createHarness();
+  it("deactivates again when smoke output rules fail", async () => {
+    const { pipeline, dependencies, events } = createHarness();
 
     const result = await pipeline.deploy({
       userId: "user-1",
@@ -120,7 +124,50 @@ describe("WorkflowDeploymentPipeline", () => {
 
     expect(result.success).toBe(false);
     expect(result.results.test.error).toMatch(/Validation failed/);
-    expect(dependencies.activateWorkflow).not.toHaveBeenCalled();
+    expect(result.message).toMatch(/workflow was deactivated/);
+    expect(result.results.activation).toEqual({ success: false, error: null, rolledBack: true });
+    expect(dependencies.deactivateWorkflow).toHaveBeenCalledWith("wf-1");
+    expect(events.slice(-3)).toEqual(["activate", "smoke-test", "deactivate"]);
+  });
+
+  it("deactivates again when the smoke test cannot run", async () => {
+    const { pipeline, dependencies } = createHarness({
+      runWorkflow: vi.fn(async () => {
+        throw new Error("Workflow wf-1 has no enabled Webhook trigger node with a path.");
+      }),
+    });
+
+    const result = await pipeline.deploy({
+      userId: "user-1",
+      workflowId: "wf-1",
+      testData: { sample: true },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.results.test.error).toMatch(/Webhook trigger/);
+    expect(result.message).toBe("Smoke test failed; workflow was deactivated.");
+    expect(dependencies.deactivateWorkflow).toHaveBeenCalledWith("wf-1");
+  });
+
+  it("reports a still-active workflow when the safety deactivation fails", async () => {
+    const { pipeline } = createHarness({
+      runWorkflow: vi.fn(async () => ({ finished: true, error: "boom" })),
+      deactivateWorkflow: vi.fn(async () => {
+        throw new Error("deactivation unavailable");
+      }),
+    });
+
+    const result = await pipeline.deploy({
+      userId: "user-1",
+      workflowId: "wf-1",
+      testData: { sample: true },
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.results.activation.success).toBe(true);
+    expect(result.results.activation.rolledBack).toBe(false);
+    expect(result.results.activation.error).toMatch(/safety deactivation failed/);
+    expect(result.message).toMatch(/still active/);
   });
 
   it("deactivates after an activation error to preserve a safe inactive state", async () => {
@@ -138,6 +185,7 @@ describe("WorkflowDeploymentPipeline", () => {
     });
 
     expect(result.success).toBe(false);
+    expect(dependencies.runWorkflow).not.toHaveBeenCalled();
     expect(dependencies.deactivateWorkflow).toHaveBeenCalledWith("wf-1");
     expect(events.at(-1)).toBe("deactivate");
   });

@@ -106,13 +106,18 @@ const RAW_LOCAL_TOOLS = [
   },
   {
     name: "execute_workflow",
-    description: "Trigger a workflow execution. Returns execution ID for tracking.",
+    description:
+      "Run an ACTIVE workflow through its production Webhook trigger and return the execution n8n recorded (the n8n Public API has no execution endpoint, so only webhook-triggered workflows can be run this way). Inactive workflows or workflows without a Webhook trigger are rejected with guidance.",
     inputSchema: {
       type: "object",
       required: ["id"],
       properties: {
         id: { type: "string", description: "Workflow ID to execute" },
-        data: { type: "object", description: "Optional input data passed to the workflow" },
+        data: {
+          type: "object",
+          description:
+            "Optional input sent to the Webhook trigger (JSON body for POST/PUT/PATCH webhooks, query parameters for GET)",
+        },
         confirm: {
           type: "boolean",
           description: "Required: set to true to confirm this workflow execution.",

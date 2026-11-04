@@ -480,14 +480,55 @@ describe("OrchestratedToolsService", () => {
       name: "Test Workflow",
       active: false,
       nodes: [
-        { id: "node1", type: "trigger" },
-        { id: "node2", type: "action" },
+        {
+          id: "node1",
+          name: "Webhook",
+          type: "n8n-nodes-base.webhook",
+          parameters: { httpMethod: "POST", path: "smoke", responseMode: "onReceived" },
+        },
+        { id: "node2", name: "Action", type: "action" },
       ],
       connections: {},
     };
 
-    async function issueDeployConfirmationToken(params: Record<string, unknown>) {
-      safeFetchPublicUrl.mockResolvedValueOnce(jsonResponse(workflow));
+    /** An execution record as `/executions?includeData=true` returns it. */
+    function executionRecord(id: string, output: Record<string, unknown>) {
+      return {
+        id,
+        status: "success",
+        finished: true,
+        data: {
+          resultData: {
+            lastNodeExecuted: "Action",
+            runData: { Action: [{ data: { main: [[{ json: output }]] } }] },
+          },
+        },
+      };
+    }
+
+    const SMOKE_PATHS = [
+      "/api/v1/workflows/test-wf-1",
+      "/api/v1/workflows/test-wf-1/activate",
+      "/api/v1/executions?workflowId=test-wf-1&limit=1",
+      "/webhook/smoke",
+      "/api/v1/executions?workflowId=test-wf-1&limit=1&includeData=true",
+    ];
+
+    /** Queue the n8n responses for: GET workflow, activate, previous execution, webhook, execution. */
+    function mockSmokeTest(execution: unknown) {
+      safeFetchPublicUrl
+        .mockResolvedValueOnce(jsonResponse(workflow)) // GET workflow
+        .mockResolvedValueOnce(jsonResponse({ success: true })) // POST activate
+        .mockResolvedValueOnce(jsonResponse({ data: [{ id: "exec-0" }] })) // previous execution
+        .mockResolvedValueOnce(jsonResponse({ received: true })) // POST production webhook
+        .mockResolvedValueOnce(jsonResponse({ data: [execution] })); // GET execution with data
+    }
+
+    async function issueDeployConfirmationToken(
+      params: Record<string, unknown>,
+      draft: unknown = workflow,
+    ) {
+      safeFetchPublicUrl.mockResolvedValueOnce(jsonResponse(draft));
       try {
         await service.deployAndTestWorkflow(params as never);
       } catch (error) {
@@ -530,21 +571,7 @@ describe("OrchestratedToolsService", () => {
       expect(confirmationToken).toMatch(/^mcp_confirm_/);
       expect(safeFetchPublicUrl).not.toHaveBeenCalled();
 
-      safeFetchPublicUrl
-        .mockResolvedValueOnce(jsonResponse(workflow)) // GET workflow
-        .mockResolvedValueOnce(
-          jsonResponse({
-            finished: true,
-            data: {
-              resultData: {
-                lastNodeExecuted: {
-                  data: { main: [{ status: "success", email: "test@example.com" }] },
-                },
-              },
-            },
-          }),
-        ) // POST run
-        .mockResolvedValueOnce(jsonResponse({ success: true })); // POST activate
+      mockSmokeTest(executionRecord("exec-1", { status: "success", email: "test@example.com" }));
 
       const result = (await service.deployAndTestWorkflow({
         ...deployArgs,
@@ -555,7 +582,7 @@ describe("OrchestratedToolsService", () => {
         results: {
           validation: { passed: boolean };
           activation: { success: boolean };
-          test: { success: boolean };
+          test: { success: boolean; output: Record<string, unknown> | null };
         };
       };
 
@@ -563,9 +590,13 @@ describe("OrchestratedToolsService", () => {
       expect(result.results.validation.passed).toBe(true);
       expect(result.results.activation.success).toBe(true);
       expect(result.results.test.success).toBe(true);
+      expect(result.results.test.output).toEqual({
+        status: "success",
+        email: "test@example.com",
+      });
     });
 
-    it("runs smoke test before activating when test data is supplied", async () => {
+    it("activates first, then smoke-tests through the production webhook", async () => {
       const deployArgs = {
         workflowId: "test-wf-1",
         testData: { test: true },
@@ -573,21 +604,7 @@ describe("OrchestratedToolsService", () => {
       const confirmationToken = await issueDeployConfirmationToken(deployArgs);
       expect(confirmationToken).toMatch(/^mcp_confirm_/);
 
-      safeFetchPublicUrl
-        .mockResolvedValueOnce(jsonResponse(workflow)) // GET workflow
-        .mockResolvedValueOnce(
-          jsonResponse({
-            finished: true,
-            data: {
-              resultData: {
-                lastNodeExecuted: {
-                  data: { main: [{ status: "success" }] },
-                },
-              },
-            },
-          }),
-        ) // POST run
-        .mockResolvedValueOnce(jsonResponse({ success: true })); // POST activate
+      mockSmokeTest(executionRecord("exec-1", { status: "success" }));
 
       const result = (await service.deployAndTestWorkflow({
         ...deployArgs,
@@ -596,11 +613,14 @@ describe("OrchestratedToolsService", () => {
       } as never)) as { success: boolean };
 
       expect(result.success).toBe(true);
-      expect(calledPaths().slice(0, 3)).toEqual([
-        "/api/v1/workflows/test-wf-1",
-        "/api/v1/workflows/test-wf-1/run",
-        "/api/v1/workflows/test-wf-1/activate",
-      ]);
+      expect(calledPaths()).toEqual(SMOKE_PATHS);
+
+      // The webhook call carries the smoke-test data but never the Public API key.
+      const [webhookUrl, webhookInit] = safeFetchPublicUrl.mock.calls[3] as [string, RequestInit];
+      expect(webhookUrl).toBe(`${INST.base_url}/webhook/smoke`);
+      expect(webhookInit.method).toBe("POST");
+      expect(JSON.parse(String(webhookInit.body))).toEqual({ test: true });
+      expect(webhookInit.headers).not.toHaveProperty("X-N8N-API-KEY");
     });
 
     it("fails validation when the workflow has no nodes", async () => {
@@ -665,11 +685,11 @@ describe("OrchestratedToolsService", () => {
       expect(result.message).toContain("Validation warnings block automatic activation");
       expect(result.results.validation.passed).toBe(true);
       expect(result.results.validation.warnings.length).toBeGreaterThan(0);
-      expect(calledPaths()).not.toContain("/api/v1/workflows/warn-wf/run");
-      expect(calledPaths()).not.toContain("/api/v1/workflows/warn-wf/activate");
+      // Nothing is activated or triggered: the only n8n call is the workflow read.
+      expect(calledPaths()).toEqual(["/api/v1/workflows/warn-wf"]);
     });
 
-    it("does not activate when the smoke test fails", async () => {
+    it("deactivates the workflow again when the smoke test execution fails", async () => {
       const deployArgs = {
         workflowId: "test-wf-1",
         testData: { test: true },
@@ -679,22 +699,60 @@ describe("OrchestratedToolsService", () => {
       expect(confirmationToken).toMatch(/^mcp_confirm_/);
       expect(safeFetchPublicUrl).not.toHaveBeenCalled();
 
-      safeFetchPublicUrl
-        .mockResolvedValueOnce(jsonResponse(workflow)) // GET
-        .mockResolvedValueOnce(
-          jsonResponse({ finished: false, data: { resultData: { error: "Test failed" } } }),
-        ); // run
+      mockSmokeTest({
+        id: "exec-1",
+        status: "error",
+        finished: true,
+        data: { resultData: { error: { message: "Test failed" } } },
+      });
+      safeFetchPublicUrl.mockResolvedValueOnce(jsonResponse({ success: true })); // POST deactivate
 
       const result = (await service.deployAndTestWorkflow({
         ...deployArgs,
         confirm: true,
         confirmationToken,
-      } as never)) as { success: boolean; message: string };
+      } as never)) as {
+        success: boolean;
+        message: string;
+        results: { test: { error: string | null }; activation: { rolledBack: boolean } };
+      };
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain("not activated");
-      expect(calledPaths()).not.toContain("/api/v1/workflows/test-wf-1/activate");
-      expect(calledPaths()).not.toContain("/api/v1/workflows/test-wf-1/deactivate");
+      expect(result.message).toBe("Smoke test failed; workflow was deactivated.");
+      expect(result.results.test.error).toBe("Test failed");
+      expect(result.results.activation.rolledBack).toBe(true);
+      expect(calledPaths()).toEqual([...SMOKE_PATHS, "/api/v1/workflows/test-wf-1/deactivate"]);
+    });
+
+    it("deactivates the workflow again when it has no webhook trigger to smoke-test", async () => {
+      const deployArgs = { workflowId: "test-wf-1", testData: { test: true } };
+      const manualWorkflow = {
+        ...workflow,
+        nodes: [{ id: "node1", name: "Manual", type: "n8n-nodes-base.manualTrigger" }],
+      };
+      // The confirmation token is bound to the workflow fingerprint, so issue it for this draft.
+      const confirmationToken = await issueDeployConfirmationToken(deployArgs, manualWorkflow);
+      expect(confirmationToken).toMatch(/^mcp_confirm_/);
+
+      safeFetchPublicUrl
+        .mockResolvedValueOnce(jsonResponse(manualWorkflow)) // GET workflow
+        .mockResolvedValueOnce(jsonResponse({ success: true })) // POST activate
+        .mockResolvedValueOnce(jsonResponse({ success: true })); // POST deactivate
+
+      const result = (await service.deployAndTestWorkflow({
+        ...deployArgs,
+        confirm: true,
+        confirmationToken,
+      } as never)) as { success: boolean; message: string; results: { test: { error: string } } };
+
+      expect(result.success).toBe(false);
+      expect(result.results.test.error).toMatch(/no enabled Webhook trigger/);
+      expect(result.message).toBe("Smoke test failed; workflow was deactivated.");
+      expect(calledPaths()).toEqual([
+        "/api/v1/workflows/test-wf-1",
+        "/api/v1/workflows/test-wf-1/activate",
+        "/api/v1/workflows/test-wf-1/deactivate",
+      ]);
     });
 
     it("validates output against rules and fails on mismatch", async () => {
@@ -708,18 +766,8 @@ describe("OrchestratedToolsService", () => {
       expect(confirmationToken).toMatch(/^mcp_confirm_/);
       expect(safeFetchPublicUrl).not.toHaveBeenCalled();
 
-      safeFetchPublicUrl.mockResolvedValueOnce(jsonResponse(workflow)).mockResolvedValueOnce(
-        jsonResponse({
-          finished: true,
-          data: {
-            resultData: {
-              lastNodeExecuted: {
-                data: { main: [{ status: "fail", email: "test@example.com" }] },
-              },
-            },
-          },
-        }),
-      );
+      mockSmokeTest(executionRecord("exec-1", { status: "fail", email: "test@example.com" }));
+      safeFetchPublicUrl.mockResolvedValueOnce(jsonResponse({ success: true })); // POST deactivate
 
       const result = (await service.deployAndTestWorkflow({
         ...deployArgs,
@@ -729,10 +777,10 @@ describe("OrchestratedToolsService", () => {
 
       expect(result.success).toBe(false);
       expect(result.results.test.error).toContain("Validation failed");
-      expect(calledPaths()).not.toContain("/api/v1/workflows/test-wf-1/activate");
+      expect(calledPaths()).toContain("/api/v1/workflows/test-wf-1/deactivate");
     });
 
-    it("does not roll back when rollbackOnFailure is false", async () => {
+    it("deactivates on failure even when the deprecated rollbackOnFailure flag is false", async () => {
       const deployArgs = {
         workflowId: "test-wf-1",
         testData: { test: true },
@@ -742,20 +790,22 @@ describe("OrchestratedToolsService", () => {
       expect(confirmationToken).toMatch(/^mcp_confirm_/);
       expect(safeFetchPublicUrl).not.toHaveBeenCalled();
 
-      safeFetchPublicUrl
-        .mockResolvedValueOnce(jsonResponse(workflow))
-        .mockResolvedValueOnce(
-          jsonResponse({ finished: false, data: { resultData: { error: "Test failed" } } }),
-        );
+      mockSmokeTest({
+        id: "exec-1",
+        status: "error",
+        finished: true,
+        data: { resultData: { error: "Test failed" } },
+      });
+      safeFetchPublicUrl.mockResolvedValueOnce(jsonResponse({ success: true })); // POST deactivate
 
-      await service.deployAndTestWorkflow({
+      const result = (await service.deployAndTestWorkflow({
         ...deployArgs,
         confirm: true,
         confirmationToken,
-      } as never);
+      } as never)) as { success: boolean };
 
-      expect(calledPaths()).not.toContain("/api/v1/workflows/test-wf-1/deactivate");
-      expect(calledPaths()).not.toContain("/api/v1/workflows/test-wf-1/activate");
+      expect(result.success).toBe(false);
+      expect(calledPaths()).toContain("/api/v1/workflows/test-wf-1/deactivate");
     });
   });
 

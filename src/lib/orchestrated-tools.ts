@@ -312,9 +312,9 @@ Example: "Create a chatbot that answers product questions and escalates to suppo
 This tool:
 1. Validates workflow configuration
 2. Activates the workflow
-3. Runs test execution with sample data
-4. Verifies the output
-5. Returns deployment status + test results
+3. Runs a smoke test by calling the workflow's production Webhook trigger with the sample data (the n8n Public API has no execution endpoint, so the workflow needs a Webhook trigger node)
+4. Verifies the output of the recorded execution
+5. Deactivates the workflow again if the smoke test fails, and returns deployment status + test results
 
 Perfect for:
 - Pre-production checks
@@ -358,7 +358,8 @@ Example: "Deploy this workflow and test it with a sample order"`,
         },
         rollbackOnFailure: {
           type: "boolean",
-          description: "Deactivate workflow if test fails",
+          description:
+            "Deprecated and ignored: a failed smoke test always deactivates the workflow again.",
           default: true,
         },
         confirm: {

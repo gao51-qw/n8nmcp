@@ -62,7 +62,7 @@ export type DeploymentResult = {
       output: Record<string, unknown> | null;
       error: string | null;
     };
-    activation: { success: boolean; error: string | null };
+    activation: { success: boolean; error: string | null; rolledBack: boolean };
   };
 };
 
@@ -114,39 +114,12 @@ export class WorkflowDeploymentPipeline {
       confirmationToken: input.confirmationToken,
     });
 
-    let execution: SmokeExecution;
-    try {
-      execution = await this.dependencies.runWorkflow(input.workflowId, workflow, input.testData);
-    } catch (error) {
-      result.results.test.error = errorMessage(error);
-      result.message = "Smoke test failed; workflow was not activated.";
-      return result;
-    }
-
-    result.results.test.output = execution.output ?? null;
-    result.results.test.success = execution.finished === true && execution.error === undefined;
-    if (!result.results.test.success) {
-      result.results.test.error = errorMessage(
-        execution.error ?? "Workflow execution did not finish",
-      );
-      result.message = "Smoke test failed; workflow was not activated.";
-      return result;
-    }
-
-    const ruleError = evaluateRules(result.results.test.output, rules);
-    if (ruleError) {
-      result.results.test.success = false;
-      result.results.test.error = ruleError;
-      result.message = "Smoke-test output validation failed; workflow was not activated.";
-      return result;
-    }
-
+    // The n8n Public API cannot start an execution; the smoke test goes through the
+    // workflow's production webhook, which n8n only registers while the workflow is
+    // active. So activate first, smoke-test, and deactivate again on any failure.
     try {
       await this.dependencies.activateWorkflow(input.workflowId);
       result.results.activation.success = true;
-      result.success = true;
-      result.message = "Workflow tested and activated successfully.";
-      return result;
     } catch (error) {
       result.results.activation.error = errorMessage(error);
       try {
@@ -157,6 +130,55 @@ export class WorkflowDeploymentPipeline {
       result.message = "Activation failed; a safety deactivation was attempted.";
       return result;
     }
+
+    let execution: SmokeExecution;
+    try {
+      execution = await this.dependencies.runWorkflow(input.workflowId, workflow, input.testData);
+    } catch (error) {
+      result.results.test.error = errorMessage(error);
+      return this.deactivateAfterFailure(result, input.workflowId, "Smoke test failed");
+    }
+
+    result.results.test.output = execution.output ?? null;
+    result.results.test.success = execution.finished === true && execution.error === undefined;
+    if (!result.results.test.success) {
+      result.results.test.error = errorMessage(
+        execution.error ?? "Workflow execution did not finish",
+      );
+      return this.deactivateAfterFailure(result, input.workflowId, "Smoke test failed");
+    }
+
+    const ruleError = evaluateRules(result.results.test.output, rules);
+    if (ruleError) {
+      result.results.test.success = false;
+      result.results.test.error = ruleError;
+      return this.deactivateAfterFailure(
+        result,
+        input.workflowId,
+        "Smoke-test output validation failed",
+      );
+    }
+
+    result.success = true;
+    result.message = "Workflow activated and smoke-tested successfully.";
+    return result;
+  }
+
+  private async deactivateAfterFailure(
+    result: DeploymentResult,
+    workflowId: string,
+    reason: string,
+  ): Promise<DeploymentResult> {
+    try {
+      await this.dependencies.deactivateWorkflow(workflowId);
+      result.results.activation.success = false;
+      result.results.activation.rolledBack = true;
+      result.message = `${reason}; workflow was deactivated.`;
+    } catch (error) {
+      result.results.activation.error = `safety deactivation failed: ${errorMessage(error)}`;
+      result.message = `${reason}; safety deactivation failed, the workflow is still active.`;
+    }
+    return result;
   }
 }
 
@@ -168,7 +190,7 @@ function emptyResult(workflowFingerprint: string): DeploymentResult {
     results: {
       validation: { passed: false, errors: [], warnings: [] },
       test: { success: false, output: null, error: null },
-      activation: { success: false, error: null },
+      activation: { success: false, error: null, rolledBack: false },
     },
   };
 }
