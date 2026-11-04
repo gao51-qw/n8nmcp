@@ -155,19 +155,115 @@ describe("parseNodePackage", () => {
     );
   });
 
-  it("surfaces community dynamic-import failures", async () => {
+  it("parses community nodes statically without executing package code", async () => {
     const root = await temporaryDirectory();
+    await mkdir(join(root, "dist", "nodes", "Acme"), { recursive: true });
     await writeFile(
-      join(root, "Broken.node.js"),
-      'import "deliberately-absent-node-package";\nexport class Broken {}\n',
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "n8n-nodes-acme",
+        n8n: { nodes: ["dist/nodes/Acme/Acme.node.js"] },
+      }),
+    );
+    await writeFile(
+      join(root, "dist", "nodes", "Acme", "Acme.node.js"),
+      `"use strict";
+       throw new Error("community node JavaScript must never execute");
+       class Acme {
+         constructor() {
+           this.description = {
+             displayName: "Acme",
+             name: "acme",
+             group: ["transform"],
+             version: [1, 2],
+             description: "Talk to Acme",
+             properties: [{ displayName: "Resource", name: "resource", type: "options", default: "" }],
+           };
+         }
+       }
+       exports.Acme = Acme;`,
+    );
+    await writeFile(
+      join(root, "dist", "nodes", "Acme", "Acme.node.json"),
+      JSON.stringify({ categories: ["Productivity"] }),
     );
 
-    const result = await parseNodePackage(communityPackage(root));
+    const result = await parseNodePackage(communityPackage(root, "n8n-nodes-acme"));
+
+    expect(result.failures).toEqual([]);
+    expect(result.expectedNodeCount).toBe(1);
+    expect(result.nodes).toHaveLength(1);
+    expect(result.nodes[0]).toMatchObject({
+      node_type: "n8n-nodes-acme.acme",
+      package_name: "n8n-nodes-acme",
+      display_name: "Acme",
+      description: "Talk to Acme",
+      version: "2",
+      category: "transform",
+    });
+    expect(JSON.parse(result.nodes[0]!.properties_json)).toEqual([
+      { displayName: "Resource", name: "resource", type: "options", default: "" },
+    ]);
+  });
+
+  it("falls back to *.node.js files and skips node_modules", async () => {
+    const root = await temporaryDirectory();
+    await mkdir(join(root, "dist"), { recursive: true });
+    await mkdir(join(root, "node_modules", "dep"), { recursive: true });
+    await writeFile(join(root, "package.json"), JSON.stringify({ name: "n8n-nodes-walk" }));
+    await writeFile(
+      join(root, "dist", "Walk.node.js"),
+      `class Walk { description = { displayName: "Walk", name: "walk", version: 1 }; }`,
+    );
+    await writeFile(
+      join(root, "node_modules", "dep", "Dep.node.js"),
+      `class Dep { description = { displayName: "Dep", name: "dep", version: 1 }; }`,
+    );
+
+    const result = await parseNodePackage(communityPackage(root, "n8n-nodes-walk"));
+
+    expect(result.nodes.map((node) => node.node_type)).toEqual(["n8n-nodes-walk.walk"]);
+    expect(result.expectedNodeCount).toBeNull();
+  });
+
+  it("refuses manifest entries that escape the package root", async () => {
+    const root = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    await writeFile(
+      join(outside, "Evil.node.js"),
+      `class Evil { description = { displayName: "Evil", name: "evil", version: 1 }; }`,
+    );
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "n8n-nodes-escape",
+        n8n: { nodes: [relative(root, join(outside, "Evil.node.js")).split("\\").join("/")] },
+      }),
+    );
+
+    const result = await parseNodePackage(communityPackage(root, "n8n-nodes-escape"));
 
     expect(result.nodes).toEqual([]);
-    expect(result.failures).toHaveLength(1);
-    expect(result.failures[0]).toMatchObject({ sourcePath: "Broken.node.js" });
-    expect(result.failures[0]?.message).toMatch(/cannot find package|ERR_MODULE_NOT_FOUND/i);
+    expect(result.failures[0]?.message).toMatch(/outside the package root/);
+  });
+
+  it("reports node files without a statically readable description", async () => {
+    const root = await temporaryDirectory();
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ name: "n8n-nodes-dynamic", n8n: { nodes: ["Dynamic.node.js"] } }),
+    );
+    await writeFile(
+      join(root, "Dynamic.node.js"),
+      `const build = require("./build"); class Dynamic { constructor() { this.description = build(); } }`,
+    );
+
+    const result = await parseNodePackage(communityPackage(root, "n8n-nodes-dynamic"));
+
+    expect(result.nodes).toEqual([]);
+    expect(result.failures).toEqual([
+      { sourcePath: "Dynamic.node.js", message: "no statically readable node description" },
+    ]);
   });
 });
 
@@ -239,9 +335,9 @@ function officialPackage(root: string): NodePackageReference {
   };
 }
 
-function communityPackage(root: string): NodePackageReference {
+function communityPackage(root: string, name = "n8n-nodes-community"): NodePackageReference {
   return {
-    name: "n8n-nodes-community-broken",
+    name,
     version: "1.0.0",
     dir: root,
     source: "community",

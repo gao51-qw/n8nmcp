@@ -1,8 +1,9 @@
 import { existsSync } from "node:fs";
-import { readFile, readdir } from "node:fs/promises";
-import { relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { readdir } from "node:fs/promises";
+import { relative, resolve, sep } from "node:path";
 import {
+  enrichDescriptionWithCodexMetadata,
+  extractNodeDescriptionFromSource,
   parseGitHubSourceNodePackage,
   type GitHubNodePackageReference,
 } from "./github-source-node-parser.js";
@@ -99,6 +100,14 @@ async function parseOfficialNodePackage(
   return { nodes, expectedNodeCount: knownNames.length, failures: [] };
 }
 
+/**
+ * Community packages are untrusted npm code. They are parsed statically: each
+ * node file is read through the package-root reader (so symlinks and `..`
+ * entries cannot escape the extracted tarball) and its `description` object
+ * literal is extracted with ts-morph. Package code is never imported or run.
+ * Node files come from package.json `n8n.nodes`, falling back to a walk for
+ * `*.node.js` when the manifest lists none.
+ */
 async function parseCommunityNodePackage(
   pkg: NodePackageReference,
 ): Promise<NodePackageParseResult> {
@@ -106,30 +115,79 @@ async function parseCommunityNodePackage(
   const failures: NodeParseFailure[] = [];
   if (!existsSync(pkg.dir)) return { nodes, expectedNodeCount: null, failures };
 
-  for await (const file of walk(pkg.dir)) {
-    if (!/\.node\.(js|json)$/.test(file)) continue;
-    let description: NodeDescription | null;
+  const reader = await createPackageRootReader(pkg.name, pkg.dir);
+  const manifestEntries = await communityManifestNodePaths(reader);
+  const sourcePaths = manifestEntries ?? (await walkNodeFiles(pkg.dir));
+
+  for (const sourcePath of sourcePaths) {
+    let source: string;
     try {
-      description = await loadCommunityNodeDescription(file);
+      source = await reader.readText(sourcePath, "community node path");
     } catch (error) {
-      failures.push({
-        sourcePath: relative(pkg.dir, file),
-        message: error instanceof Error ? error.message : String(error),
-      });
+      failures.push({ sourcePath, message: error instanceof Error ? error.message : String(error) });
       continue;
     }
-    if (!description?.name) continue;
-
-    let sourceExcerpt = "";
-    try {
-      sourceExcerpt = (await readFile(file, "utf8")).slice(0, 50_000);
-    } catch {}
-    nodes.push(
-      toParsedNode(pkg, description, relative(pkg.dir, file), sourceExcerpt),
-    );
+    const extracted = extractNodeDescriptionFromSource(source, sourcePath);
+    if (!extracted || typeof extracted.name !== "string") {
+      failures.push({ sourcePath, message: "no statically readable node description" });
+      continue;
+    }
+    const codexPath = sourcePath.replace(/\.js$/, ".json");
+    const codex = await readCodexIfExists(reader, codexPath);
+    const description = enrichDescriptionWithCodexMetadata(extracted, codex) as NodeDescription;
+    nodes.push({
+      ...toParsedNode(pkg, description, sourcePath, source.slice(0, 50_000)),
+      node_type: communityNodeType(pkg.name, String(description.name)),
+    });
   }
 
-  return { nodes, expectedNodeCount: null, failures };
+  return {
+    nodes,
+    expectedNodeCount: manifestEntries ? manifestEntries.length : null,
+    failures,
+  };
+}
+
+/** Workflows reference community nodes as `<package>.<name>`. */
+export function communityNodeType(packageName: string, name: string): string {
+  return name.startsWith(`${packageName}.`) ? name : `${packageName}.${name}`;
+}
+
+async function communityManifestNodePaths(reader: PackageRootReader): Promise<string[] | null> {
+  const raw = await reader.readTextIfExists("package.json", "package manifest");
+  if (raw === null) return null;
+  let manifest: unknown;
+  try {
+    manifest = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const entries = isRecord(manifest) && isRecord(manifest.n8n) ? manifest.n8n.nodes : null;
+  if (!Array.isArray(entries)) return null;
+  const paths = entries.filter((entry): entry is string => typeof entry === "string" && !!entry.trim());
+  return paths.length > 0 ? paths : null;
+}
+
+async function readCodexIfExists(
+  reader: PackageRootReader,
+  codexPath: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const raw = await reader.readTextIfExists(codexPath, "community codex path");
+    if (raw === null) return null;
+    const value = JSON.parse(raw) as unknown;
+    return isRecord(value) ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+async function walkNodeFiles(root: string): Promise<string[]> {
+  const files: string[] = [];
+  for await (const file of walk(root)) {
+    if (/\.node\.js$/.test(file)) files.push(relative(root, file).split(sep).join("/"));
+  }
+  return files.sort();
 }
 
 async function readOfficialMetadata(
@@ -212,6 +270,16 @@ function metadataParityError(
   );
 }
 
+/** Builds a node row from a node description (shared with the community DB step). */
+export function parsedNodeFromDescription(
+  pkg: Pick<NodePackageReference, "name" | "version">,
+  description: Record<string, unknown>,
+  sourcePath: string,
+  sourceExcerpt = "",
+): ParsedNode {
+  return toParsedNode(pkg as NodePackageReference, description as NodeDescription, sourcePath, sourceExcerpt);
+}
+
 function toParsedNode(
   pkg: NodePackageReference,
   description: NodeDescription,
@@ -251,27 +319,6 @@ function categoryOf(description: NodeDescription): string | null {
   if (typeof description?.group === "string") return description.group;
   const categories = description?.codex?.categories;
   if (Array.isArray(categories) && categories.length) return String(categories[0]);
-  return null;
-}
-
-async function loadCommunityNodeDescription(file: string): Promise<NodeDescription | null> {
-  if (file.endsWith(".node.json")) {
-    return JSON.parse(await readFile(file, "utf8")) as NodeDescription;
-  }
-
-  const module = await import(pathToFileURL(file).href);
-  for (const key of Object.keys(module)) {
-    const nodeClass = (module as any)[key];
-    if (typeof nodeClass !== "function") continue;
-    try {
-      const instance = new nodeClass();
-      if (instance?.description?.name) return instance.description;
-    } catch {
-      const prototypeDescription = nodeClass.prototype?.description;
-      if (prototypeDescription?.name) return prototypeDescription;
-    }
-  }
-  if ((module as any).default?.description?.name) return (module as any).default.description;
   return null;
 }
 
