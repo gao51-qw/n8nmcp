@@ -1160,18 +1160,22 @@ export { LOCAL_TOOLS, TOOLS };
 
 /**
  * Merge local tools with upstream knowledge/management tools (czlonkowski/n8n-mcp).
- * Local definitions win on name collisions.
+ * Local definitions win on name collisions. The result is sorted by name so
+ * tools/list is deterministic (MCP 2026-07-28 asks for this to keep client
+ * caches and LLM prompt caches stable).
  */
 export async function getMergedTools(): Promise<
   Array<{ name: string; description?: string; inputSchema?: unknown }>
 > {
   const upstream: UpstreamTool[] = await listUpstreamTools(false);
   const merged: Array<{ name: string; description?: string; inputSchema?: unknown }> = [...TOOLS];
+  const seen = new Set(LOCAL_NAMES);
   for (const t of upstream) {
-    if (!t?.name || LOCAL_NAMES.has(t.name)) continue;
+    if (!t?.name || seen.has(t.name)) continue;
+    seen.add(t.name);
     merged.push(t);
   }
-  return merged;
+  return merged.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
 }
 
 export type DispatchResult = {

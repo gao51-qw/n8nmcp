@@ -3,7 +3,8 @@ import type { JsonRpcReq } from "./mcp-types";
 export const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Mcp-Session-Id",
+  "Access-Control-Allow-Headers":
+    "Content-Type, Authorization, Accept, Mcp-Session-Id, MCP-Protocol-Version, Mcp-Method, Mcp-Name",
   "Access-Control-Max-Age": "86400",
 } as const;
 

@@ -1,5 +1,10 @@
 // MCP Streamable HTTP gateway endpoint handler.
-// Spec: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
+//
+// Dual-era: legacy clients (initialize handshake, 2025-06-18) and modern
+// clients (per-request _meta, 2026-07-28) share this endpoint and the same
+// tool dispatch. mcp-protocol.server.ts decides the era per request.
+// Specs: https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
+//        https://modelcontextprotocol.io/specification/2026-07-28/basic/transports/streamable-http
 import { randomBytes } from "node:crypto";
 import {
   authenticateBearer,
@@ -23,6 +28,46 @@ import {
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
 import { createExpiringStore } from "@/lib/expiring-store";
+import {
+  classifyRequest,
+  discoverResult,
+  LEGACY_PROTOCOL_VERSION,
+  looksModern,
+  type ModernRequest,
+  modernErrorStatus,
+  modernResult,
+  SERVER_INFO,
+  supportsFormElicitation,
+} from "@/lib/mcp-protocol.server";
+import {
+  confirmationFingerprint,
+  InvalidRequestStateError,
+  redeemRequestState,
+  signRequestState,
+  type VerifiedRequestState,
+  verifyRequestState,
+} from "@/lib/mcp-request-state.server";
+
+/** Protocol context of one JSON-RPC message. */
+type Era = { era: "legacy" } | ModernRequest;
+
+const SERVER_NOTES = () =>
+  isUpstreamConfigured()
+    ? "local management + self-hosted n8n-knowledge-mcp upstream"
+    : "local-only (upstream knowledge base not configured)";
+
+/** Cache hint for tools/list: the tool set changes only on deploys. */
+const TOOLS_LIST_TTL_MS = 300_000;
+/** Key of the single confirmation in an InputRequiredResult. */
+const CONFIRM_INPUT_KEY = "confirm";
+/** Methods that exist only in the legacy (initialize-based) protocol. */
+const LEGACY_ONLY_METHODS = new Set([
+  "initialize",
+  "notifications/initialized",
+  "ping",
+  "logging/setLevel",
+  "notifications/elicitation/complete",
+]);
 
 const ROBOTS_NOINDEX = "noindex,nofollow";
 const CLIENT_CAPABILITIES_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
@@ -194,6 +239,87 @@ function resolveToolContext(
   };
 }
 
+/**
+ * Tool context for a modern (2026-07-28) tools/call. Confirmation uses Multi
+ * Round-Trip Requests: the first call is answered with an InputRequiredResult
+ * (see the ElicitationRequiredError branch in handleRpc) and the client
+ * retries with `inputResponses` plus the signed `requestState`. No process
+ * memory is needed beyond the redeemed-nonce set. Clients that do not declare
+ * form elicitation get no requestElicitation and fall back to the
+ * confirmation-token flow, exactly like legacy clients without elicitation.
+ */
+function resolveModernToolContext(
+  userId: string,
+  tool: string,
+  args: Record<string, unknown>,
+  modern: ModernRequest,
+  params: Record<string, unknown>,
+): { toolContext: ToolContext } | { error: string } {
+  const canElicit = supportsFormElicitation(modern.clientCapabilities);
+  const clientCapabilities = { elicitation: canElicit };
+  if (!canElicit) return { toolContext: { clientCapabilities } };
+
+  let verified: VerifiedRequestState | null = null;
+  if (params.requestState !== undefined) {
+    try {
+      verified = verifyRequestState(params.requestState, { userId, tool, args });
+    } catch (error) {
+      if (error instanceof InvalidRequestStateError) return { error: error.message };
+      throw error;
+    }
+  }
+  const responses = asRecord(params.inputResponses);
+
+  return {
+    toolContext: {
+      clientCapabilities,
+      requestElicitation: async (elicitationRequest: ElicitationRequest) => {
+        if (verified && verified.fingerprint === confirmationFingerprint(elicitationRequest)) {
+          const answer = asRecord(responses[verified.key]);
+          if (
+            answer.action === "accept" ||
+            answer.action === "decline" ||
+            answer.action === "cancel"
+          ) {
+            redeemRequestState(verified);
+            // Decline/cancel yield an empty answer so confirmation fails closed.
+            return answer.action === "accept" ? asRecord(answer.content) : {};
+          }
+        }
+        // No (usable) answer for this confirmation yet: ask for it. Per MRTR,
+        // a missing response is answered with a fresh InputRequiredResult.
+        throw new ElicitationRequiredError(CONFIRM_INPUT_KEY, elicitationRequest);
+      },
+    },
+  };
+}
+
+function inputRequiredResult(
+  userId: string,
+  tool: string,
+  args: Record<string, unknown>,
+  error: ElicitationRequiredError,
+) {
+  const { title, description, details, schema } = error.request;
+  return {
+    resultType: "input_required",
+    inputRequests: {
+      [error.elicitationId]: {
+        method: "elicitation/create",
+        params: {
+          mode: "form",
+          message: [title, description, details].filter(Boolean).join("\n\n"),
+          requestedSchema: schema,
+        },
+      },
+    },
+    requestState: signRequestState(
+      { userId, tool, args },
+      { key: error.elicitationId, fingerprint: confirmationFingerprint(error.request) },
+    ),
+  };
+}
+
 function withNoIndex(response: Response): Response {
   response.headers.set("X-Robots-Tag", ROBOTS_NOINDEX);
   return response;
@@ -232,8 +358,24 @@ async function handleRpc(
   source: { ip: string; ua: string; request_id: string },
   request: Request,
   sessionId: string | null,
+  era: Era = { era: "legacy" },
 ): Promise<unknown> {
   if (!ctx) return rpcError(req.id, -32001, "Unauthorized");
+  const modern = era.era === "modern" ? era : null;
+  const protocolLog = {
+    protocol_version: modern?.version ?? LEGACY_PROTOCOL_VERSION,
+    ...(modern?.mcpName ? { mcp_name: modern.mcpName } : {}),
+    ...(modern?.clientInfo?.name ? { client_name: modern.clientInfo.name } : {}),
+  };
+
+  // 2026-07-28 removed the handshake, ping, logging/setLevel and the
+  // elicitation completion notification; server/discover is modern-only.
+  if (modern && LEGACY_ONLY_METHODS.has(req.method)) {
+    return rpcError(req.id, -32601, `Method not found: ${req.method}`);
+  }
+  if (!modern && req.method === "server/discover") {
+    return rpcError(req.id, -32601, `Method not found: ${req.method}`);
+  }
 
   switch (req.method) {
     case "initialize":
@@ -242,20 +384,17 @@ async function handleRpc(
         storeSessionCapabilities(ctx.user_id, sessionId, request, capabilities);
       }
       return rpcResult(req.id, {
-        protocolVersion: "2025-06-18",
+        protocolVersion: LEGACY_PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: {
-          name: "n8n-mcp-gateway",
-          version: "0.2.0",
-          notes: isUpstreamConfigured()
-            ? "local management + self-hosted n8n-knowledge-mcp upstream"
-            : "local-only (upstream knowledge base not configured)",
-        },
+        serverInfo: { ...SERVER_INFO, notes: SERVER_NOTES() },
       });
 
     case "ping":
     case "notifications/initialized":
       return rpcResult(req.id, {});
+
+    case "server/discover":
+      return rpcResult(req.id, discoverResult(SERVER_NOTES()));
 
     case "tools/list": {
       const t0 = Date.now();
@@ -269,8 +408,11 @@ async function handleRpc(
         request_id: source.request_id,
         latency_ms: Date.now() - t0,
         tool_count: tools.length,
+        ...protocolLog,
       });
-      return rpcResult(req.id, { tools });
+      // ttlMs/cacheScope are required by 2026-07-28 and ignored by older
+      // clients. "private": the result is served per authenticated key.
+      return rpcResult(req.id, { tools, ttlMs: TOOLS_LIST_TTL_MS, cacheScope: "private" });
     }
 
     case "notifications/elicitation/complete": {
@@ -296,7 +438,26 @@ async function handleRpc(
       const name = String(params.name ?? "");
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const started = Date.now();
-      const toolContext = resolveToolContext(ctx.user_id, request, sessionId, params);
+      let toolContext: ToolContext;
+      if (modern) {
+        const resolved = resolveModernToolContext(ctx.user_id, name, args, modern, params);
+        if ("error" in resolved) {
+          log.warn("mcp.gateway.request", {
+            method: "tools/call",
+            tool: name,
+            user_id: ctx.user_id,
+            key_id: ctx.key_id,
+            request_id: source.request_id,
+            status: "invalid_request_state",
+            err: resolved.error,
+            ...protocolLog,
+          });
+          return rpcError(req.id, -32602, `Invalid params: ${resolved.error}`);
+        }
+        toolContext = resolved.toolContext;
+      } else {
+        toolContext = resolveToolContext(ctx.user_id, request, sessionId, params);
+      }
       const inst = await getDefaultInstance(ctx.user_id);
 
       try {
@@ -335,7 +496,21 @@ async function handleRpc(
             status: "needs_instance",
             upstream: result.upstream,
             category: result.category,
+            ...protocolLog,
           });
+          // 2026-07-28 reserves -32002 (old "resource not found") and forbids
+          // emitting it, so modern clients get a tool error the model can read.
+          if (modern) {
+            return rpcResult(req.id, {
+              content: [
+                {
+                  type: "text",
+                  text: "No n8n instance is configured for this account. Add one in the dashboard, then retry.",
+                },
+              ],
+              isError: true,
+            });
+          }
           return rpcError(req.id, -32002, "No n8n instance configured for this user");
         }
 
@@ -369,6 +544,7 @@ async function handleRpc(
           status: outcome.success === false ? "error" : "ok",
           upstream: result.upstream,
           category: result.category,
+          ...protocolLog,
         });
 
         if (outcome.success === false) {
@@ -387,6 +563,19 @@ async function handleRpc(
       } catch (e) {
         const msg = e instanceof Error ? e.message : "tool failed";
         const safeMsg = sanitizedToolErrorMessage(msg);
+        if (e instanceof ElicitationRequiredError && modern) {
+          log.info("mcp.gateway.request", {
+            method: "tools/call",
+            tool: name,
+            user_id: ctx.user_id,
+            key_id: ctx.key_id,
+            request_id: source.request_id,
+            latency_ms: Date.now() - started,
+            status: "input_required",
+            ...protocolLog,
+          });
+          return rpcResult(req.id, inputRequiredResult(ctx.user_id, name, args, e));
+        }
         if (e instanceof ElicitationRequiredError) {
           return rpcResult(req.id, {
             isError: true,
@@ -430,6 +619,7 @@ async function handleRpc(
           status: "error",
           err: msg,
           sentry_event_id: sentryEventId,
+          ...protocolLog,
         });
         return rpcResult(req.id, {
           content: [
@@ -489,6 +679,75 @@ export async function mcpGet(request: Request) {
   );
 }
 
+/**
+ * Applies the short-window throttle and, for billable methods, the daily
+ * quota. Returns the JSON-RPC error to send, or null when the call may run.
+ * Enforced per RPC so a batch of N tool calls costs N tokens.
+ */
+async function throttle(
+  auth: NonNullable<Awaited<ReturnType<typeof authenticateBearer>>>,
+  r: JsonRpcReq,
+): Promise<ReturnType<typeof rpcError> | null> {
+  if (!(await checkShortWindowQuota(auth.user_id))) {
+    await recordCall({
+      user_id: auth.user_id,
+      tool_name: null,
+      status: "rate_limited",
+      latency_ms: 0,
+      error_message: "short-window throttle",
+    });
+    return rpcError(r.id ?? null, -32003, "Rate limit exceeded (60 req / 10s)");
+  }
+
+  if (isBillableMethod(r.method)) {
+    // Re-read before each billable call; recordCall() in handleRpc has already
+    // incremented usage for any prior call in a sequential batch.
+    const quota = await checkDailyQuota(auth);
+    if (!quota.ok) {
+      await recordCall({
+        user_id: auth.user_id,
+        tool_name: null,
+        status: "rate_limited",
+        latency_ms: 0,
+        error_message: `daily quota exceeded (${quota.used}/${quota.limit})`,
+      });
+      return rpcError(r.id ?? null, -32004, `Daily quota exceeded (${quota.used}/${quota.limit})`);
+    }
+  }
+  return null;
+}
+
+function isValidMessage(r: unknown): r is JsonRpcReq {
+  const candidate = r as JsonRpcReq | null;
+  return !!candidate && candidate.jsonrpc === "2.0" && typeof candidate.method === "string";
+}
+
+/**
+ * Serves one modern (2026-07-28) request statelessly: no session headers,
+ * results carry resultType + serverInfo, and protocol errors use the HTTP
+ * statuses the Streamable HTTP binding requires.
+ */
+async function serveModern(
+  r: JsonRpcReq,
+  era: ModernRequest,
+  auth: NonNullable<Awaited<ReturnType<typeof authenticateBearer>>>,
+  source: { ip: string; ua: string; request_id: string },
+  request: Request,
+  requestId: string,
+): Promise<Response> {
+  // 2026-07-28 defines no client-to-server notifications over HTTP; accept and ignore.
+  if (r.id === undefined || r.id === null) {
+    return withRequestId(new Response(null, { status: 202, headers: CORS }), requestId);
+  }
+
+  const out = (await throttle(auth, r)) ?? (await handleRpc(r, auth, source, request, null, era));
+  const payload = out as { result?: unknown; error?: { code?: number } };
+  if (payload.error) {
+    return withRequestId(jsonResp(payload, modernErrorStatus(payload.error.code ?? 0)), requestId);
+  }
+  return withRequestId(jsonResp({ ...payload, result: modernResult(payload.result) }), requestId);
+}
+
 export async function mcpPost(request: Request) {
   const requestId = getRequestId(request);
   const auth = await authenticateBearer(request);
@@ -503,20 +762,47 @@ export async function mcpPost(request: Request) {
     );
   }
 
-  let body: JsonRpcReq | JsonRpcReq[];
+  let body: unknown;
   try {
     body = await request.json();
   } catch {
     return withRequestId(jsonResp(rpcError(null, -32700, "Parse error"), 400), requestId);
   }
 
+  if (!Array.isArray(body) && isValidMessage(body)) {
+    const era = classifyRequest(body, request.headers);
+    if (era.era === "invalid") {
+      const { status, code, message, data } = era.error;
+      return withRequestId(
+        jsonResp(rpcError(body.id ?? null, code, message, data), status),
+        requestId,
+      );
+    }
+    if (era.era === "modern") {
+      return serveModern(body, era, auth, source, request, requestId);
+    }
+  }
+
   const wantsSse = (request.headers.get("accept") ?? "").includes("text/event-stream");
   const isBatch = Array.isArray(body);
-  const batch: JsonRpcReq[] = Array.isArray(body) ? body : [body];
+  const batch = (Array.isArray(body) ? body : [body]) as JsonRpcReq[];
 
   if (batch.length === 0) {
     return withRequestId(
       jsonResp(rpcError(null, -32600, "Invalid Request: empty batch"), 400),
+      requestId,
+    );
+  }
+  // Modern Streamable HTTP carries exactly one message per POST.
+  if (
+    isBatch &&
+    (looksModern(null, request.headers) || batch.some((r) => looksModern(r, request.headers)))
+  ) {
+    return withRequestId(
+      jsonResp(
+        rpcError(null, -32600, "Invalid Request: batches are not supported in protocol 2026-07-28"),
+        400,
+      ),
       requestId,
     );
   }
@@ -534,47 +820,16 @@ export async function mcpPost(request: Request) {
   const responses: unknown[] = [];
 
   for (const r of batch) {
-    if (!r || r.jsonrpc !== "2.0" || typeof r.method !== "string") {
-      responses.push(rpcError(r?.id ?? null, -32600, "Invalid Request"));
+    if (!isValidMessage(r)) {
+      responses.push(rpcError((r as JsonRpcReq | null)?.id ?? null, -32600, "Invalid Request"));
       continue;
     }
     const isNotification = r.id === undefined || r.id === null;
 
-    // Throttle/quota are enforced PER RPC inside the batch, so N tool calls cost
-    // N tokens — not one decision amortized across the whole array. The daily
-    // quota is re-read before each billable call; recordCall() in handleRpc has
-    // already incremented usage for any prior call in this sequential loop.
-    if (!(await checkShortWindowQuota(auth.user_id))) {
-      await recordCall({
-        user_id: auth.user_id,
-        tool_name: null,
-        status: "rate_limited",
-        latency_ms: 0,
-        error_message: "short-window throttle",
-      });
-      const err = rpcError(r.id ?? null, -32003, "Rate limit exceeded (60 req / 10s)");
-      if (!isNotification) responses.push(err);
+    const limited = await throttle(auth, r);
+    if (limited) {
+      if (!isNotification) responses.push(limited);
       continue;
-    }
-
-    if (isBillableMethod(r.method)) {
-      const quota = await checkDailyQuota(auth);
-      if (!quota.ok) {
-        await recordCall({
-          user_id: auth.user_id,
-          tool_name: null,
-          status: "rate_limited",
-          latency_ms: 0,
-          error_message: `daily quota exceeded (${quota.used}/${quota.limit})`,
-        });
-        const err = rpcError(
-          r.id ?? null,
-          -32004,
-          `Daily quota exceeded (${quota.used}/${quota.limit})`,
-        );
-        if (!isNotification) responses.push(err);
-        continue;
-      }
     }
 
     const out = await handleRpc(r, auth, source, request, sessionId);

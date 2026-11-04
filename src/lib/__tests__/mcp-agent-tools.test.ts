@@ -59,6 +59,28 @@ describe("active MCP workflow agent tools", () => {
     upstreamMocks.isUpstreamConfigured.mockReturnValue(false);
   });
 
+  it("lists tools in a stable name order with local tools winning collisions", async () => {
+    const upstream = [
+      { name: "zz_upstream_tool", description: "upstream z" },
+      { name: "aa_upstream_tool", description: "upstream a" },
+      { name: "validate_node", description: "upstream copy of a local tool" },
+      { name: "aa_upstream_tool", description: "duplicate from upstream" },
+    ];
+    upstreamMocks.listUpstreamTools.mockResolvedValue(upstream as never);
+    const { getMergedTools } = await import("../mcp.server");
+
+    const first = (await getMergedTools()).map((tool) => tool.name);
+    upstreamMocks.listUpstreamTools.mockResolvedValue([...upstream].reverse() as never);
+    const second = await getMergedTools();
+
+    expect(first).toEqual([...first].sort());
+    expect(second.map((tool) => tool.name)).toEqual(first);
+    expect(first.filter((name) => name === "aa_upstream_tool")).toHaveLength(1);
+    expect(second.find((tool) => tool.name === "validate_node")?.description).not.toBe(
+      "upstream copy of a local tool",
+    );
+  });
+
   it("routes authoritative knowledge tools to their upstream implementations", async () => {
     upstreamMocks.isUpstreamConfigured.mockReturnValue(true);
     upstreamMocks.callUpstreamTool.mockResolvedValue({
