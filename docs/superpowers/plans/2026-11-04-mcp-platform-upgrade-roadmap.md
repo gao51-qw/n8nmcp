@@ -73,20 +73,20 @@
 - Create: `src/lib/mcp-protocol.server.ts`（`detectProtocol(req, headers)`、`SUPPORTED_PROTOCOL_VERSIONS = ["2026-07-28", "2025-06-18"]`、`serverInfoMeta()`）
 - Test: `src/lib/__tests__/mcp-protocol.server.test.ts`
 
-- [ ] 实现 `server/discover`：返回支持的版本列表、能力（`tools`、`extensions: {}`）、`serverInfo`。
-- [ ] 新协议请求缺少版本或版本不支持 → `UnsupportedProtocolVersionError`（`-32022`）。
-- [ ] 旧协议请求无 `_meta` 版本 → 继续走 `initialize` 路径，不变。
-- [ ] 每个结果附 `_meta["io.modelcontextprotocol/serverInfo"]`，并带 `resultType: "complete"`（旧协议客户端会忽略多余字段，可无条件加）。
-- [ ] 测试：新旧两种请求分别命中对应路径；未知版本报 `-32022`。
+- [x] 实现 `server/discover`：返回支持的版本列表、能力（`tools`、`extensions: {}`）、`serverInfo`。
+- [x] 新协议请求缺少版本或版本不支持 → `UnsupportedProtocolVersionError`（`-32022`）。
+- [x] 旧协议请求无 `_meta` 版本 → 继续走 `initialize` 路径，不变。
+- [x] 每个结果附 `_meta["io.modelcontextprotocol/serverInfo"]`，并带 `resultType: "complete"`（旧协议客户端会忽略多余字段，可无条件加）。
+- [x] 测试：新旧两种请求分别命中对应路径；未知版本报 `-32022`。
 
 ### Task 1.2：请求头与能力来源
 
 **Files:** `src/lib/mcp-route.server.ts`、`src/lib/mcp-transport.server.ts`、`src/lib/__tests__/mcp-route.server.test.ts`
 
-- [ ] 新协议：客户端能力从 `_meta["io.modelcontextprotocol/clientCapabilities"]` 读取，不再读 `clientCapabilitySessions`；旧协议保持会话缓存。
-- [ ] 校验 `Mcp-Method` 头与 JSON-RPC `method` 一致，不一致返回 `HeaderMismatchError`（`-32020`）；仅对新协议强制。
-- [ ] CORS 允许头增加 `Mcp-Method`、`Mcp-Name`、`MCP-Protocol-Version`；Caddy 配置（`deploy/Caddyfile`）确认不剥离这些头。
-- [ ] 日志（`log.info("mcp.gateway.request")`）记录协议版本和 `Mcp-Name`。
+- [x] 新协议：客户端能力从 `_meta["io.modelcontextprotocol/clientCapabilities"]` 读取，不再读 `clientCapabilitySessions`；旧协议保持会话缓存。
+- [x] 校验 `Mcp-Method` 头与 JSON-RPC `method` 一致，不一致返回 `HeaderMismatchError`（`-32020`）；仅对新协议强制。
+- [x] CORS 允许头增加 `Mcp-Method`、`Mcp-Name`、`MCP-Protocol-Version`；Caddy 配置（`deploy/Caddyfile`）确认不剥离这些头。
+- [x] 日志（`log.info("mcp.gateway.request")`）记录协议版本和 `Mcp-Name`。
 
 ### Task 1.3：MRTR 取代服务端发起的 elicitation
 
@@ -96,31 +96,39 @@
 - Modify: `src/lib/workflow-agent/confirmation.server.ts`（确认挑战与 `requestState` 关联）
 - Test: `src/lib/__tests__/mcp-route.server.test.ts`、`src/lib/workflow-agent/__tests__/confirmation.server.test.ts`
 
-- [ ] 新协议下，工具需要确认时不抛 `ElicitationRequiredError`，改为返回 `{ resultType: "input_required", inputRequests: [{ type: "elicitation", id, message, requestedSchema }], requestState }`。
-- [ ] `requestState` 为服务端签发的不透明串，内含用户 id + 确认指纹（title+description 哈希）+ 过期时间，HMAC 签名（密钥派生自 `APP_ENCRYPTION_KEY`），不依赖进程内存。
-- [ ] 客户端重试原请求时携带 `inputResponses` 与 `requestState`：校验签名、用户、指纹、过期；`action: "decline"|"cancel"` 一律视为未确认（fail-closed）。
-- [ ] 旧协议路径保留阶段 E 的实现（已签发 id + `notifications/elicitation/complete`）。
-- [ ] 测试覆盖：accept 成功、decline 失败、`requestState` 篡改/跨用户/过期、指纹不匹配、同一 `requestState` 不可复用（通过单次使用表或 nonce）。
+- [x] 新协议下，工具需要确认时不抛 `ElicitationRequiredError`，改为返回 `{ resultType: "input_required", inputRequests: [{ type: "elicitation", id, message, requestedSchema }], requestState }`。
+- [x] `requestState` 为服务端签发的不透明串，内含用户 id + 确认指纹（title+description 哈希）+ 过期时间，HMAC 签名（密钥派生自 `APP_ENCRYPTION_KEY`），不依赖进程内存。
+- [x] 客户端重试原请求时携带 `inputResponses` 与 `requestState`：校验签名、用户、指纹、过期；`action: "decline"|"cancel"` 一律视为未确认（fail-closed）。
+- [x] 旧协议路径保留阶段 E 的实现（已签发 id + `notifications/elicitation/complete`）。
+- [x] 测试覆盖：accept 成功、decline 失败、`requestState` 篡改/跨用户/过期、指纹不匹配、同一 `requestState` 不可复用（通过单次使用表或 nonce）。
 
 ### Task 1.4：`tools/list` 可缓存性与确定性
 
 **Files:** `src/lib/mcp.server.ts`（`getMergedTools`）、`src/lib/mcp-upstream.server.ts`、`src/lib/__tests__/mcp-tool-metadata.test.ts`
 
-- [ ] `getMergedTools()` 按名称稳定排序；上游 Knowledge 工具与本地工具合并后顺序固定。
-- [ ] 返回 `ttlMs`（建议 300000）与 `cacheScope: "private"`（工具集按用户层级可能不同）。
-- [ ] 为所有工具补 `outputSchema`，工具结果同时返回 `structuredContent`（2025-06-18 已支持，当前只返回 text）。
-- [ ] 测试：两次调用顺序相同；每个工具都有 `title`、`inputSchema`、`outputSchema`。
+- [x] `getMergedTools()` 按名称稳定排序；上游 Knowledge 工具与本地工具合并后顺序固定。
+- [x] 返回 `ttlMs`（建议 300000）与 `cacheScope: "private"`（工具集按用户层级可能不同）。
+- [ ] 为所有工具补 `outputSchema`，工具结果同时返回 `structuredContent`（2025-06-18 已支持，当前只返回 text）。 **推迟：** 没有真实 schema 的通用 `outputSchema` 对客户端无用，且一旦声明就要求 `structuredContent` 严格匹配；按工具逐个补真实 schema，放到阶段 5 与工具面一起做。
+- [ ] 测试：两次调用顺序相同；每个工具都有 `title`、`inputSchema`、`outputSchema`。 顺序部分已完成（`mcp-agent-tools.test.ts`），`outputSchema` 部分随上一条推迟。
 
 ### Task 1.5：移除/门控旧方法
 
-- [ ] 新协议下 `initialize`、`notifications/initialized`、`ping`、`logging/setLevel` 返回 `-32601`（method not found）；旧协议保持。
-- [ ] 日志等级从 `_meta["io.modelcontextprotocol/logLevel"]` 读取，没有时不发 `notifications/message`。
-- [ ] 资源未找到错误码统一为 `-32602`。
+- [x] 新协议下 `initialize`、`notifications/initialized`、`ping`、`logging/setLevel` 返回 `-32601`（method not found）；旧协议保持。
+- [x] 日志等级从 `_meta["io.modelcontextprotocol/logLevel"]` 读取，没有时不发 `notifications/message`。
+- [x] 资源未找到错误码统一为 `-32602`。
 
 ### Task 1.6：文档与客户端验证
 
-- [ ] 更新 `src/app/(marketing)/docs/getting-started/page.tsx`、`docs/tools/page.tsx`、`llms.txt` 生成逻辑（`src/lib/geo-content.ts`）中的连接说明，给出新旧协议两种配置。
-- [ ] 用 Claude Code、Cursor 最新版本各做一次真实连接测试（tools/list、一次需要确认的 `delete_workflow`），记录在 `docs/audits/mcp-protocol-2026-07-28-verification.md`。
+- [x] 更新 `src/app/(marketing)/docs/getting-started/page.tsx`、`docs/tools/page.tsx`、`llms.txt` 生成逻辑（`src/lib/geo-content.ts`）中的连接说明，给出新旧协议两种配置。
+- [ ] 用 Claude Code、Cursor 最新版本各做一次真实连接测试（tools/list、一次需要确认的 `delete_workflow`），记录在 `docs/audits/mcp-protocol-2026-07-28-verification.md`。 需要已部署的版本和平台 key；自动化与本地冒烟结果及待办清单见 `docs/audits/mcp-protocol-2026-07-28-verification.md`。
+
+**完成说明（2026-11-04）：**
+- 版本协商、`server/discover`、头校验和结果封装放在新文件 `src/lib/mcp-protocol.server.ts`，没有改 `mcp-types.ts`。错误码常量也定义在那里。
+- MRTR 的 `requestState` 在 `src/lib/mcp-request-state.server.ts`，用 HMAC-SHA256 签名，密钥由 `APP_ENCRYPTION_KEY` 经 HKDF 派生。它绑定用户、工具名、参数摘要、确认指纹、5 分钟过期和 nonce。MRTR 本身无状态，所以 `confirmation.server.ts` 不需要改；未声明 form elicitation 的客户端继续走确认令牌流程。
+- nonce 单次使用目前只在单进程内保证，多副本下的全局保证放到阶段 6（确认状态落库）。
+- `server/discover` 和 `-32022` 的 `supported` 只列 `2026-07-28`：这两个列表是告诉现代客户端 `_meta` 里该写什么；`2025-06-18` 只能通过 `initialize` 进入。
+- 新协议下无 n8n 实例改为工具错误结果（规范禁止再发 `-32002`）；批量请求返回 400。
+- 测试：新增 66 个（协议、requestState、现代路由），加 1 个排序测试；对用户绑定和排序做了变异测试。全量 77 个文件、730 个测试通过。
 
 **阶段验收：** 新旧客户端均能列出工具并完成一次需确认的操作；`npm test` 全绿；`architecture-guards.test.ts` 通过。
 
@@ -307,6 +315,11 @@
 - [ ] 更新 `docs/tools` 页面与 `llms.txt`；`site-navigation.test.ts` 的路由清单不受影响。
 
 **阶段验收：** 与 czlonkowski 28 工具逐项对照表写入 `docs/audits/tool-parity-2026.md`，缺口仅剩有意不做的项（如 `n8n_manage_credentials` 的写操作）。
+
+### Task 5.x：输出 schema（从阶段 1 Task 1.4 移入）
+
+- [ ] 为每个本地工具写真实的 `outputSchema`，工具结果同时返回匹配的 `structuredContent`，并保留 JSON 文本块以兼容旧客户端。
+- [ ] 测试：每个工具都有 `title`、`inputSchema`、`outputSchema`，并且样例输出能通过各自 schema 的校验。
 
 ---
 

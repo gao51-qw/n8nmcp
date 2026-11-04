@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { canonicalUrl } from "@/lib/site-domains";
+import { MCP_ENDPOINT_URL, canonicalUrl } from "@/lib/site-domains";
 
 export const metadata: Metadata = {
   title: "Getting Started",
@@ -14,6 +14,16 @@ const steps = [
   "Create a platform API key for the AI client that will call the hosted MCP endpoint.",
   "Configure the client with the MCP URL and platform key, then test a safe read-only workflow tool.",
 ];
+
+const clientConfig = `{
+  "mcpServers": {
+    "n8n-mcp": {
+      "type": "http",
+      "url": "${MCP_ENDPOINT_URL}",
+      "headers": { "Authorization": "Bearer nmcp_your_platform_key" }
+    }
+  }
+}`;
 
 export default function GettingStartedPage() {
   return (
@@ -34,6 +44,30 @@ export default function GettingStartedPage() {
           </li>
         ))}
       </ol>
+
+      <h2 className="mt-14 text-2xl font-semibold">How do you configure the MCP client?</h2>
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+        Use Streamable HTTP with the hosted endpoint and send the platform key as a Bearer token.
+        Most clients accept a configuration like this; the exact file and field names depend on the
+        client.
+      </p>
+      <pre className="mt-4 overflow-x-auto rounded-lg border border-border bg-muted p-4 text-xs leading-5">
+        <code>{clientConfig}</code>
+      </pre>
+
+      <h2 className="mt-14 text-2xl font-semibold">Which MCP protocol versions are supported?</h2>
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+        The same endpoint serves clients on MCP 2026-07-28, which sends its protocol version and
+        capabilities with every request, and clients on MCP 2025-06-18, which open with an{" "}
+        <code>initialize</code> handshake. The client picks its version automatically; no
+        configuration change is needed.
+      </p>
+      <p className="mt-4 text-sm leading-6 text-muted-foreground">
+        Destructive tools such as deleting a workflow always need your confirmation. Clients on
+        2026-07-28 that support elicitation show a confirmation form and retry the call with your
+        answer. Other clients receive a single-use confirmation token that is valid for five minutes
+        and must be sent back with <code>{`{"confirm": true}`}</code>.
+      </p>
     </main>
   );
 }

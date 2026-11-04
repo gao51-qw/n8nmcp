@@ -26,6 +26,8 @@ VS Code, Zed and other MCP-compatible AI clients through one hosted gateway URL.
 - Primary users: automation teams, n8n operators, AI agent builders
 - Supported clients: Claude, ChatGPT, Cursor, Windsurf, VS Code, Zed and MCP-compatible clients
 - Security: encrypted n8n API keys, per-user platform keys, SSRF-protected outbound requests
+- MCP protocol: Streamable HTTP; versions 2026-07-28 (stateless) and 2025-06-18 (initialize handshake) on the same endpoint
+- Authentication: Authorization: Bearer <platform API key>
 `;
 }
 
@@ -42,6 +44,7 @@ function docsBody() {
 - MCP tools reference: ${canonicalUrl("/tools", "docs")}
 - FAQ: ${canonicalUrl("/faq", "docs")}
 - MCP endpoint: ${MCP_ENDPOINT_URL}
+- MCP protocol versions: 2026-07-28 and 2025-06-18 on the same endpoint
 `;
 }
 
