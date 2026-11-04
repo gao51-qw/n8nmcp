@@ -29,13 +29,9 @@ describe("dedicated mail identity", () => {
 
   it("removes retired public mailbox identities from active source", () => {
     const activeFiles = [
-      "src/components/marketing-footer.tsx",
+      "src/components/site-footer.tsx",
+      "src/lib/site-contact.ts",
       "src/lib/seo-jsonld.ts",
-      "src/i18n/locales/docs/de.ts",
-      "src/i18n/locales/docs/en.ts",
-      "src/i18n/locales/docs/es.ts",
-      "src/i18n/locales/docs/ja.ts",
-      "src/i18n/locales/docs/zh.ts",
     ];
     const source = activeFiles.map(read).join("\n");
 
