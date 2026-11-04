@@ -237,36 +237,42 @@
 ### Task 3.1：候选发现
 
 **Files:**
-- Create: `tools/n8n-knowledge-mcp/scripts/7a-discover-community-packages.ts`
+- Create: `tools/n8n-knowledge-mcp/scripts/0-discover-community-packages.ts`（它在流水线最前面运行，所以编号为 0）、`src/community-sources.ts`
 - Modify: `tools/n8n-knowledge-mcp/src/package-fetch-policy.ts`
 - Test: `tools/n8n-knowledge-mcp/src/community-discovery.test.ts`
 
-- [ ] 通过 npm registry 搜索关键字 `n8n-community-node-package`，分页拉取，记录 `name`、`version`、`dist.tarball`、`dist.integrity`、周下载量、最近发布时间。
-- [ ] 过滤：仅 `registry.npmjs.org` 的 tarball（已有 trusted-host 规则）、必须有 SRI、发布时间 < 24 个月、周下载 ≥ 50 或在 n8n 官方 verified 列表内。
-- [ ] 输出 `data/community-candidates.json`，带发现时间戳。
+- [x] npm 按关键字 `n8n-community-node-package` 分页搜索（搜索结果自带周下载量），另外拉取 n8n 官方审核列表 `api.n8n.io/api/community-nodes`（包名、审核版本、SRI checksum、完整 nodeDescription）。npm 搜索翻到约 5,250 个不重复包后只会返回重复结果，这是关键字搜索的实际上限。
+- [x] 过滤条件：包名合法、不在黑名单、不在审核列表、24 个月内有发布、周下载 ≥ 50，按下载量排序后最多 1,500 个；tarball 只接受可信 npm 主机且必须有 SRI。阈值写在 `packages.json`。
+- [x] 输出写到 `.tmp/community/discovery.json`（属于构建中间产物，不进版本库），带生成时间与筛选策略。
 
 ### Task 3.2：静态解析与验证等级
 
 **Files:** `tools/n8n-knowledge-mcp/src/node-package-parser.ts`、`package-supply-chain.ts`、`external-node-validation.ts`、`scripts/8-verify-external-nodes.ts`
 
-- [ ] 下载 tarball → SRI 校验 → 解压到隔离目录（已有 `package-root-reader.ts` 的包根约束）→ 静态解析 `n8n.nodes` 入口，不执行包代码。
-- [ ] 验证等级：`verified`（n8n 官方 verified 列表 + 解析成功 + 有 description）、`parsed`（解析成功）、`listed`（仅元数据）。
-- [ ] 写入 `nodes` 表的独立列 `source`（`official|community`）与 `trust_level`；FTS 同步。
-- [ ] 质量门：`community_parsed ≥ 1500`、`verified ≥ 300`，否则 CI 失败不发布。
+- [x] 修复了一个安全问题：原来的 `loadCommunityNodeDescription` 会 `import()` 社区包并 `new` 节点类，相当于构建时执行任意 npm 代码。现在改为通过 package-root reader 读文件，再用已有的 ts-morph 提取器做静态解析，并优先使用 `package.json` 的 `n8n.nodes`。tarball 固定为发现时的版本，先校验 SRI，解压时只保留普通文件和目录（`src/community-fetch.ts`）。
+- [x] 等级：`verified`（n8n 审核过，schema 取自 n8n 自己的记录，不下载包代码）、`parsed`（静态解析成功但未经审核）、`listed`（只针对包：已知包但读不出节点 schema）。
+- [x] `nodes` 表新增 `source`、`trust_level`、`package_version`、`package_integrity` 四列，另建 `community_packages` 表；FTS 同步写入。社区节点的 `node_type` 用 workflow 里的完整类型 `<package>.<node>`。
+- [x] 质量门：社区节点 ≥ 1500 且 verified ≥ 300，在同一个事务里提交前检查，不达标就回滚并让 CI 失败，官方库不受影响，不会发布。
 
 ### Task 3.3：服务端暴露
 
 **Files:** `tools/n8n-knowledge-mcp/src/tools/*.ts`、`src/lib/mcp-upstream.server.ts`、`src/lib/workflow-agent/knowledge-client.server.ts`
 
-- [ ] `search_nodes` 增加 `include_community`（默认 true）与 `trust_level` 过滤；结果带 `source`、`trust_level`、`package_name`。
-- [ ] `validate_node` / `validate_workflow` 对 `listed` 等级节点只给警告"schema 未验证"，不报错；对 `parsed/verified` 正常校验。
-- [ ] 创建管线（`creation-pipeline.server.ts`）：使用非 verified 社区节点时，草稿允许但部署门禁要求显式确认。
+- [x] `search_nodes` 增加 `include_community`（默认 true）与 `trust_level` 过滤；结果带 `source`、`trust_level`、`package_name`。
+- [x] `validate_node` / `validate_workflow` 对 `listed` 等级节点只给警告"schema 未验证"，不报错；对 `parsed/verified` 正常校验。
+- [x] 创建管线现在能解析 `<社区包>.<节点>` 类型，并按完整类型交给 Knowledge 校验：verified 与官方节点同等对待；parsed/listed 会带 warning，草稿可以创建，但现有规则会阻止自动激活；未知类型报错。
 
 ### Task 3.4：刷新与发布
 
-- [ ] `.github/workflows/n8n-knowledge-mcp.yml` 增加每周定时任务：发现 → 解析 → 验证 → 质量门 → 构建镜像。
-- [ ] `stats.json` 与 `/health` 输出社区节点计数；营销页节点数改为从 stats 读取（避免写死）。
-- [ ] 与 n8n 版本同步：核心节点以 n8n 2.46 为基线，记录 `n8nVersion` 到 stats。
+- [x] 原来就有每周任务（周一 02:00 UTC），在 "Build node database" 之后新增 "Add community nodes" 步骤（`npm run build:community`）。本地的 `build:knowledge` 脚本保持仅官方：它被你未提交修改过的 `build-artifact-contract.test.ts` 锁定，我没有动那个文件。
+- [x] `stats.json` 新增 `communityVerifiedNodes`、`communityParsedNodes`、`communityListedPackages`（verifier 把它们列为可选整数字段），`/health` 的 `statsCount()` 新增 `community_*` 计数。营销页本来就没有写死节点数，这一项不需要改。
+- [ ] 与 n8n 版本同步（`n8nVersion` 写入 stats）**未做**：verifier 对 stats 字段有严格白名单，加字符串字段需要先扩展它的类型校验；留待后续。
+
+**完成说明（2026-11-04）：**
+- 实测（只读公开 API，DB 用副本）：发现 2,141 个 verified 节点（1,623 个包）和 899 个待解析候选；用前 25 个候选试跑 `7b`，得到 29 个 parsed 节点，4 个包为 listed，质量门通过，官方 562 个节点不变。
+- 在 Node 20 下重建了 `better-sqlite3`。原先 node_modules 里的二进制是给 Node 22 编译的，导致 58 个基线测试失败。改动只在 `node_modules`。
+- Knowledge MCP 共 26 个文件、274 个测试通过（新增 40 个）；根项目共 83 个文件、780 个测试通过。
+- 生产环境还没有跑过带 `--with-parsed` 的完整构建（899 个 tarball）；首次 CI 跑完后再核对阶段验收。
 
 **阶段验收：** 生产 stats 显示 `communityNodes ≥ 1500`；`search_nodes("notion community")` 命中社区包；Knowledge MCP 测试全绿。
 
