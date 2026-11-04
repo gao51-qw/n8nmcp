@@ -22,18 +22,25 @@ import {
   toolBusinessOutcome,
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
+import { createExpiringStore } from "@/lib/expiring-store";
 
 const ROBOTS_NOINDEX = "noindex,nofollow";
 const CLIENT_CAPABILITIES_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
-const ELICITATION_RESPONSE_TTL_MS = 5 * 60_000;
-const clientCapabilitySessions = new Map<
-  string,
-  { capabilities: ToolContext["clientCapabilities"]; expiresAt: number }
->();
-const elicitationResponses = new Map<
-  string,
-  { response: Record<string, unknown>; expiresAt: number }
->();
+const ELICITATION_TTL_MS = 5 * 60_000;
+const MAX_TRACKED_SESSIONS = 10_000;
+const MAX_TRACKED_ELICITATIONS = 10_000;
+const clientCapabilitySessions = createExpiringStore<ToolContext["clientCapabilities"]>({
+  maxEntries: MAX_TRACKED_SESSIONS,
+});
+// Elicitations the server has issued, keyed by user + id. A completion is only
+// accepted for an id issued to the same user, and a replay only satisfies the
+// exact request (title + description) that id was issued for.
+const issuedElicitations = createExpiringStore<{ fingerprint: string }>({
+  maxEntries: MAX_TRACKED_ELICITATIONS,
+});
+const elicitationResponses = createExpiringStore<Record<string, unknown>>({
+  maxEntries: MAX_TRACKED_ELICITATIONS,
+});
 
 type ElicitationRequest = {
   title: string;
@@ -50,22 +57,34 @@ function buildElicitationId() {
   return `elicitation_${randomBytes(12).toString("base64url")}`;
 }
 
-function storeElicitationResponse(elicitationId: string, response: Record<string, unknown>) {
-  elicitationResponses.set(elicitationId, {
-    response,
-    expiresAt: Date.now() + ELICITATION_RESPONSE_TTL_MS,
-  });
+function elicitationKey(userId: string, elicitationId: string) {
+  return `${userId}:${elicitationId}`;
 }
 
-function popElicitationResponse(elicitationId: string): Record<string, unknown> | null {
-  const entry = elicitationResponses.get(elicitationId);
-  if (!entry) return null;
-  if (entry.expiresAt < Date.now()) {
-    elicitationResponses.delete(elicitationId);
-    return null;
+function elicitationFingerprint(request: ElicitationRequest) {
+  return JSON.stringify([request.title, request.description]);
+}
+
+/**
+ * Normalises a `notifications/elicitation/complete` payload.
+ *
+ * MCP shape: `{ action: "accept" | "decline" | "cancel", content?: {...} }`.
+ * Decline/cancel are recorded as an empty response so confirmation checks
+ * (`confirm === true`) fail closed. The pre-spec shape `{ action: {...} }`
+ * is still accepted as an implicit accept.
+ */
+function parseElicitationCompletion(
+  params: Record<string, unknown>,
+): Record<string, unknown> | null {
+  const action = params.action;
+  if (typeof action === "string") {
+    if (action === "decline" || action === "cancel") return {};
+    if (action !== "accept") return null;
+    const content = asRecord(params.content);
+    return Object.keys(content).length > 0 ? content : null;
   }
-  elicitationResponses.delete(elicitationId);
-  return entry.response;
+  const legacy = asRecord(action);
+  return Object.keys(legacy).length > 0 ? legacy : null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -102,10 +121,7 @@ function storeSessionCapabilities(
   capabilities: ToolContext["clientCapabilities"],
 ) {
   const key = buildSessionKey(userId, request, sessionId);
-  clientCapabilitySessions.set(key, {
-    capabilities,
-    expiresAt: Date.now() + CLIENT_CAPABILITIES_SESSION_TTL_MS,
-  });
+  clientCapabilitySessions.set(key, capabilities, CLIENT_CAPABILITIES_SESSION_TTL_MS);
 }
 
 function loadSessionCapabilities(
@@ -113,14 +129,7 @@ function loadSessionCapabilities(
   sessionId: string | null,
   request: Request,
 ): ToolContext["clientCapabilities"] | null {
-  const key = buildSessionKey(userId, request, sessionId);
-  const record = clientCapabilitySessions.get(key);
-  if (!record) return null;
-  if (record.expiresAt < Date.now()) {
-    clientCapabilitySessions.delete(key);
-    return null;
-  }
-  return record.capabilities;
+  return clientCapabilitySessions.get(buildSessionKey(userId, request, sessionId)) ?? null;
 }
 
 function resolveToolContext(
@@ -136,36 +145,42 @@ function resolveToolContext(
     ...capabilityCandidate,
   };
 
-  const directElicitationResponse = asRecord(requestParams).elicitationResponse;
-  if (directElicitationResponse && typeof directElicitationResponse === "object") {
-    const pendingId = String(asRecord(directElicitationResponse).elicitationId || "").trim();
-    if (pendingId) {
-      const storedResponse = popElicitationResponse(pendingId);
-      if (storedResponse) {
-        return {
-          clientCapabilities,
-          requestElicitation: async () => storedResponse,
-        };
-      }
-      return {
-        clientCapabilities,
-        requestElicitation: async () => {
+  // A replay must name an elicitation the server issued to this user. Inline
+  // answers without an issued id are ignored: accepting them would let a
+  // client skip the confirmation prompt entirely.
+  const replay = asRecord(asRecord(requestParams).elicitationResponse);
+  const replayId = String(replay.elicitationId ?? "").trim();
+  if (replayId) {
+    const key = elicitationKey(userId, replayId);
+    return {
+      clientCapabilities,
+      requestElicitation: async (elicitationRequest: ElicitationRequest) => {
+        const issued = issuedElicitations.take(key);
+        const response = elicitationResponses.take(key);
+        if (!issued || !response) {
           throw new Error(
-            `Missing elicitation response for ${pendingId}. Re-run notifications/elicitation/complete.`,
+            `Missing elicitation response for ${replayId}. Re-run notifications/elicitation/complete.`,
           );
-        },
-      };
-    }
+        }
+        if (issued.fingerprint !== elicitationFingerprint(elicitationRequest)) {
+          throw new Error(
+            `Elicitation ${replayId} was issued for a different request; retry without elicitationResponse to get a new one.`,
+          );
+        }
+        return response;
+      },
+    };
   }
 
   const requestElicitation =
     clientCapabilities?.elicitation === true
       ? async (elicitationRequest: ElicitationRequest) => {
-          if (directElicitationResponse && typeof directElicitationResponse === "object") {
-            return directElicitationResponse as Record<string, unknown>;
-          }
-
           const elicitationId = buildElicitationId();
+          issuedElicitations.set(
+            elicitationKey(userId, elicitationId),
+            { fingerprint: elicitationFingerprint(elicitationRequest) },
+            ELICITATION_TTL_MS,
+          );
           throw new ElicitationRequiredError(elicitationId, {
             ...elicitationRequest,
             details: `Provide confirmation via notifications/elicitation/complete. Then retry with elicitationResponse: {elicitationId: "${elicitationId}"}.`,
@@ -261,14 +276,18 @@ async function handleRpc(
     case "notifications/elicitation/complete": {
       const params = asRecord(req.params);
       const elicitationId = String(params.elicitationId ?? "").trim();
-      const completion = asRecord(params.action);
       if (!elicitationId) {
         return rpcError(req.id, -32602, "Missing elicitationId");
       }
-      if (!completion || Object.keys(completion).length === 0) {
+      const completion = parseElicitationCompletion(params);
+      if (!completion) {
         return rpcError(req.id, -32602, "Missing elicitation response payload");
       }
-      storeElicitationResponse(elicitationId, completion);
+      const key = elicitationKey(ctx.user_id, elicitationId);
+      if (!issuedElicitations.get(key)) {
+        return rpcError(req.id, -32602, "Unknown or expired elicitationId");
+      }
+      elicitationResponses.set(key, completion, ELICITATION_TTL_MS);
       return rpcResult(req.id, { ok: true, elicitationId });
     }
 

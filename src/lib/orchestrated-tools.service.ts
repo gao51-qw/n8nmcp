@@ -25,9 +25,9 @@ import {
 import { classifyRepairEvidence } from "./workflow-agent/repair-pipeline.server";
 
 /**
- * 澶嶅悎宸ュ叿瀹炵幇鏈嶅姟
+ * Composite workflow tools service.
  *
- * 灏嗗涓師瀛愭搷浣滅粍鍚堟垚楂樼骇鍔熻兘
+ * Combines basic n8n API operations into higher-level workflow builders.
  */
 
 type Inst = {
@@ -64,7 +64,7 @@ async function n8n(inst: Inst, path: string, init?: RequestInit) {
 }
 
 /**
- * n8n 鑺傜偣淇℃伅锛堝父鐢ㄨ妭鐐癸級
+ * n8n node type identifiers (commonly used nodes).
  */
 const COMMON_NODES = {
   scheduleTrigger: {
@@ -98,7 +98,7 @@ const COMMON_NODES = {
 };
 
 /**
- * 澶嶅悎宸ュ叿鏈嶅姟
+ * Composite tools service.
  */
 type N8nWorkflowNode = {
   id: string;
@@ -110,7 +110,8 @@ type N8nWorkflowNode = {
   [key: string]: unknown;
 };
 
-/** Shape returned by the n8n workflow create/get endpoints (loosely typed 鈥? *  we only depend on a handful of fields and mutate `active` locally). */
+/** Shape returned by the n8n workflow create/get endpoints (loosely typed:
+ *  we only depend on a handful of fields and mutate `active` locally). */
 type N8nWorkflowResult = {
   id: string;
   active?: boolean;
@@ -119,7 +120,7 @@ type N8nWorkflowResult = {
   [key: string]: unknown;
 };
 
-/** n8n connection graph: source node 鈫?output port 鈫?list of downstream links. */
+/** n8n connection graph: source node → output port → list of downstream links. */
 type N8nConnections = Record<
   string,
   { main: Array<Array<{ node: string; type: string; index: number }>> }
@@ -132,7 +133,7 @@ type N8nExecutionRow = {
   data?: { resultData?: { error?: { message?: string }; lastNodeExecuted?: string } };
 };
 
-/** Output of analyzeErrors: error category 鈫?aggregated detail. */
+/** Output of analyzeErrors: error category → aggregated detail. */
 type ErrorPatterns = Record<string, { count: number; nodes: string[]; sample: string }>;
 
 /** A single suggested fix's action payload. */
@@ -366,7 +367,8 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 1. 鍒涘缓瀹氭椂宸ヤ綔娴?   */
+   * 1. Create a scheduled workflow.
+   */
   async createScheduledWorkflow(params: {
     name: string;
     schedule: string;
@@ -378,15 +380,15 @@ export class OrchestratedToolsService {
       throw new Error("actionConfig (object) is required");
     }
 
-    // 1. 瑙ｆ瀽璁″垝琛ㄨ揪寮?
+    // 1. Parse the schedule expression
     const cronExpression = this.parseToCron(params.schedule);
     const nextRun = this.getNextRunTime(cronExpression);
 
-    // 2. 鍒涘缓鑺傜偣閰嶇疆
+    // 2. Build the node configuration
     const nodes = [];
     const connections: N8nConnections = {};
 
-    // 瑙﹀彂鍣ㄨ妭鐐?
+    // Trigger node
     nodes.push({
       id: "schedule_trigger",
       name: "Schedule Trigger",
@@ -404,7 +406,7 @@ export class OrchestratedToolsService {
       },
     });
 
-    // 鍔ㄤ綔鑺傜偣锛堟牴鎹?action 绫诲瀷锛?
+    // Action node (depends on the action type)
     let actionNode;
     switch (params.action) {
       case "send_email":
@@ -423,12 +425,12 @@ export class OrchestratedToolsService {
     actionNode.position = [450, 300];
     nodes.push(actionNode);
 
-    // 杩炴帴鑺傜偣
+    // Connect the nodes
     connections["Schedule Trigger"] = {
       main: [[{ node: actionNode.name, type: "main", index: 0 }]],
     };
 
-    // 3. 鍒涘缓宸ヤ綔娴?
+    // 3. Create the workflow
     const workflow = {
       name: params.name,
       nodes,
@@ -457,8 +459,10 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 2. 鍒涘缓 Webhook 宸ヤ綔娴?   *
-   * 鏈€娴佽鐨勫伐浣滄祦绫诲瀷锛?   */
+   * 2. Create a webhook workflow.
+   *
+   * The most common workflow type.
+   */
   async createWebhookWorkflow(params: {
     name: string;
     path?: string;
@@ -470,7 +474,7 @@ export class OrchestratedToolsService {
     const nodes = [];
     const connections: N8nConnections = {};
 
-    // 1. Webhook 瑙﹀彂鍣?
+    // 1. Webhook trigger
     nodes.push({
       id: "webhook",
       name: "Webhook",
@@ -489,7 +493,7 @@ export class OrchestratedToolsService {
     let lastNodeName = "Webhook";
     let xPosition = 450;
 
-    // 2. 澶勭悊姝ラ锛堝鏋滄湁锛?
+    // 2. Processing steps (if any)
     if (params.processing && params.processing.length > 0) {
       for (let i = 0; i < params.processing.length; i++) {
         const step = params.processing[i];
@@ -510,7 +514,7 @@ export class OrchestratedToolsService {
         processingNode.position = [xPosition, 300];
         nodes.push(processingNode);
 
-        // 杩炴帴鍒颁笂涓€涓妭鐐?
+        // Connect to the previous node
         connections[lastNodeName] = {
           main: [[{ node: processingNode.name, type: "main", index: 0 }]],
         };
@@ -520,7 +524,7 @@ export class OrchestratedToolsService {
       }
     }
 
-    // 3. 鍝嶅簲鑺傜偣
+    // 3. Respond node
     nodes.push({
       id: "respond",
       name: "Respond to Webhook",
@@ -536,12 +540,12 @@ export class OrchestratedToolsService {
       },
     });
 
-    // 杩炴帴鍒板搷搴旇妭鐐?
+    // Connect to the respond node
     connections[lastNodeName] = {
       main: [[{ node: "Respond to Webhook", type: "main", index: 0 }]],
     };
 
-    // 4. 鍒涘缓宸ヤ綔娴?
+    // 4. Create the workflow
     const workflow = {
       name: params.name,
       nodes,
@@ -561,7 +565,7 @@ export class OrchestratedToolsService {
     if (!creation.success || !creation.workflow) return this.creationFailure(creation);
     const created = creation.workflow as N8nWorkflowResult;
 
-    // 6. 鏋勯€?webhook URL
+    // 6. Build the webhook URL
     const webhookUrl = this.buildWebhookUrl(this.inst.base_url, created.id, params.path);
 
     return {
@@ -573,10 +577,10 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 3. 鍒涘缓閭欢鑷姩鍖栧伐浣滄祦
+   * 3. Create an email automation workflow.
    *
-   * 鏀寔澶氱瑙﹀彂鍣細webhook, schedule, database
-   * 鏈€甯哥敤鐨勮嚜鍔ㄥ寲鍦烘櫙涔嬩竴
+   * Supports webhook, schedule and manual triggers.
+   * One of the most common automation scenarios.
    */
   async createEmailWorkflow(params: {
     name: string;
@@ -606,7 +610,7 @@ export class OrchestratedToolsService {
     let scheduledNextRun: string | undefined;
     let xPosition = 250;
 
-    // 1. 鍒涘缓瑙﹀彂鍣ㄨ妭鐐?
+    // 1. Create the trigger node
     switch (params.trigger) {
       case "schedule": {
         const cronExpression = this.parseToCron(params.triggerConfig?.schedule || "every day");
@@ -668,7 +672,7 @@ export class OrchestratedToolsService {
           ? "Webhook"
           : "Manual Trigger";
 
-    // 2. 娣诲姞鏉′欢杩囨护鑺傜偣锛堝鏋滄湁鏉′欢锛?
+    // 2. Add a condition filter node (if conditions are given)
     if (params.conditions && params.conditions.length > 0) {
       const filterNodeId = "filter";
       nodes.push({
@@ -696,12 +700,12 @@ export class OrchestratedToolsService {
       xPosition += 200;
     }
 
-    // 3. 鍒涘缓閭欢鍙戦€佽妭鐐?
+    // 3. Create the send-email node
     const emailNodeId = "send_email";
     const emailNode = this.createEmailNode(emailNodeId, params.email);
     emailNode.position = [xPosition, 300];
 
-    // 娣诲姞闄勪欢閰嶇疆锛堝鏋滄湁锛?
+    // Add attachment configuration (if any)
     if (params.email.attachments && params.email.attachments.length > 0) {
       emailNode.parameters.attachments = params.email.attachments.map((att) => ({
         property: att.name,
@@ -712,12 +716,12 @@ export class OrchestratedToolsService {
 
     nodes.push(emailNode);
 
-    // 杩炴帴鑺傜偣
+    // Connect the nodes
     connections[lastNodeName] = {
       main: [[{ node: emailNode.name, type: "main", index: 0 }]],
     };
 
-    // 4. 鍒涘缓宸ヤ綔娴?
+    // 4. Create the workflow
     const workflow = {
       name: params.name,
       nodes,
@@ -737,13 +741,13 @@ export class OrchestratedToolsService {
     if (!creation.success || !creation.workflow) return this.creationFailure(creation);
     const created = creation.workflow as N8nWorkflowResult;
 
-    // 6. 鏋勫缓鍝嶅簲
+    // 6. Build the response
     const response: Record<string, unknown> = {
       ...creation,
       message: `Inactive email workflow draft created. It will send to ${params.email.to} after deployment.`,
     };
 
-    // 娣诲姞瑙﹀彂鍣ㄧ壒瀹氫俊鎭?
+    // Add trigger-specific details
     if (params.trigger === "schedule") {
       response.schedule = params.triggerConfig?.schedule || "every day";
       response.nextRun = scheduledNextRun;
@@ -760,9 +764,9 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 4. AI 鑱婂ぉ鏈哄櫒浜哄伐浣滄祦
+   * 4. AI chatbot workflow.
    *
-   * 2026 骞寸ぞ鍖烘渶楂樿姹傦紒闆嗘垚 AI 妯″瀷瀹炵幇鏅鸿兘瀵硅瘽
+   * Wires an AI model into a conversational reply flow.
    */
   async createAIChatbotWorkflow(params: {
     name: string;
@@ -783,9 +787,9 @@ export class OrchestratedToolsService {
       humanEmailCredentials?: Record<string, unknown>;
     };
     features?: {
-      humanHandoff?: boolean; // 浜哄伐鎺ョ
-      sentimentAnalysis?: boolean; // 鎯呮劅鍒嗘瀽
-      contextMemory?: boolean; // 涓婁笅鏂囪蹇?
+      humanHandoff?: boolean; // Human handoff
+      sentimentAnalysis?: boolean; // Sentiment analysis
+      contextMemory?: boolean; // Conversation context memory
     };
     activate?: boolean;
   }) {
@@ -813,7 +817,7 @@ export class OrchestratedToolsService {
     const connections: N8nConnections = {};
     let xPosition = 250;
 
-    // 1. 鍒涘缓鎺ュ彛瑙﹀彂鍣ㄨ妭鐐?
+    // 1. Create the interface trigger node
     let triggerNodeName: string;
     let webhookUrl: string | undefined;
 
@@ -864,7 +868,7 @@ export class OrchestratedToolsService {
           )
         : undefined;
 
-    // 2. 鎻愬彇鐢ㄦ埛娑堟伅鑺傜偣
+    // 2. Extract the user message
     const extractNodeId = "extract_message";
     nodes.push({
       id: extractNodeId,
@@ -901,7 +905,7 @@ export class OrchestratedToolsService {
     lastNodeName = "Extract Message";
     xPosition += 200;
 
-    // 3. 鎯呮劅鍒嗘瀽鑺傜偣锛堝彲閫夛級
+    // 3. Sentiment analysis node (optional)
     if (params.features?.sentimentAnalysis) {
       const sentimentNodeId = "sentiment_analysis";
       nodes.push({
@@ -951,7 +955,7 @@ export class OrchestratedToolsService {
       xPosition += 200;
     }
 
-    // 4. AI 鍝嶅簲鑺傜偣
+    // 4. AI response node
     const aiNodeId = "ai_response";
     let aiNode: N8nWorkflowNode;
 
@@ -1087,7 +1091,7 @@ export class OrchestratedToolsService {
     lastNodeName = aiNode.name;
     xPosition += 200;
 
-    // 5. 浜哄伐鎺ョ妫€娴嬭妭鐐癸紙鍙€夛級
+    // 5. Human handoff detection node (optional)
     if (params.features?.humanHandoff) {
       const handoffCheckId = "handoff_check";
       nodes.push({
@@ -1119,7 +1123,7 @@ export class OrchestratedToolsService {
         main: [[{ node: "Check for Human Handoff", type: "main", index: 0 }]],
       };
 
-      // 浜哄伐鎺ョ閫氱煡鑺傜偣
+      // Human handoff notification node
       const notifyHumanId = "notify_human";
       nodes.push({
         id: notifyHumanId,
@@ -1148,7 +1152,7 @@ export class OrchestratedToolsService {
       xPosition += 200;
     }
 
-    // 6. 鏍煎紡鍖栧搷搴旇妭鐐?
+    // 6. Format the response
     const formatNodeId = "format_response";
     nodes.push({
       id: formatNodeId,
@@ -1181,7 +1185,7 @@ export class OrchestratedToolsService {
     lastNodeName = "Format Response";
     xPosition += 200;
 
-    // 7. 鍝嶅簲鑺傜偣锛堟牴鎹帴鍙ｇ被鍨嬶級
+    // 7. Respond node (depends on the interface type)
     if (params.interface === "webhook") {
       const respondNodeId = "respond";
       nodes.push({
@@ -1204,7 +1208,7 @@ export class OrchestratedToolsService {
       };
     }
 
-    // 8. 鍒涘缓宸ヤ綔娴?
+    // 8. Create the workflow
     const workflow = {
       name: params.name,
       nodes,
@@ -1224,7 +1228,7 @@ export class OrchestratedToolsService {
     if (!creation.success || !creation.workflow) return this.creationFailure(creation);
     const created = creation.workflow as N8nWorkflowResult;
 
-    // 11. 鏋勫缓鍝嶅簲
+    // 11. Build the response
     const response: Record<string, unknown> = {
       ...creation,
       message: `Inactive AI chatbot workflow draft created with ${params.aiProvider}. Deploy and test it before activation.`,
@@ -1250,8 +1254,10 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 5. 鑷姩淇宸ヤ綔娴侀敊璇?   *
-   * 浣跨敤 AI 鍒嗘瀽骞朵慨澶嶅父瑙侀敊璇?   */
+   * 5. Diagnose and fix workflow errors.
+   *
+   * Uses AI to analyse and fix common errors.
+   */
   async fixWorkflowErrors(
     params: {
       workflowId: string;
@@ -1270,10 +1276,10 @@ export class OrchestratedToolsService {
     // Validate and encode workflowId
     const workflowId = encodeURIComponent(String(params.workflowId));
 
-    // 1. 鑾峰彇宸ヤ綔娴?
+    // 1. Fetch the workflow
     const workflow = (await n8n(this.inst, `/api/v1/workflows/${workflowId}`)) as N8nWorkflowResult;
 
-    // 2. 鑾峰彇鏈€杩戠殑鎵ц閿欒
+    // 2. Fetch recent failed executions
     const executions = (await n8n(
       this.inst,
       `/api/v1/executions?workflowId=${workflowId}&status=error&limit=5`,
@@ -1286,7 +1292,7 @@ export class OrchestratedToolsService {
       };
     }
 
-    // 3. 鏀堕泦閿欒淇℃伅
+    // 3. Collect error details
     const errors = executions.map((exec) => ({
       executionId: exec.id,
       error: exec.data?.resultData?.error?.message || "Unknown error",
@@ -1324,18 +1330,18 @@ export class OrchestratedToolsService {
 
     /* Retired full-workflow repair implementation:
 
-    // 4. 鍒嗘瀽閿欒妯″紡
+    // 4. Analyse error patterns
     const errorAnalysis = this.analyzeErrors(errors);
 
-    // 5. 鐢熸垚淇寤鸿
+    // 5. Generate fix suggestions
     const fixes = this.generateFixes(workflow, errorAnalysis);
 
-    // 6. 濡傛灉 autoFix=true锛屽簲鐢ㄤ慨澶?
+    // 6. Apply fixes when autoFix=true
     let applied = false;
     let fixedWorkflow = null;
 
     if (params.autoFix === true && fixes.length > 0) {
-      // 瀹夊叏妫€鏌ワ細涓嶈嚜鍔ㄤ慨鏀圭敓浜у伐浣滄祦
+      // Safety check: never auto-modify production workflows
       if (workflow.active) {
         return {
           success: false,
@@ -1345,10 +1351,10 @@ export class OrchestratedToolsService {
         };
       }
 
-      // 搴旂敤淇
+      // Apply fixes
       fixedWorkflow = this.applyFixes(workflow, fixes);
 
-      // 鏇存柊宸ヤ綔娴?
+      // Update the workflow
       await n8n(this.inst, `/api/v1/workflows/${workflowId}`, {
         method: "PUT",
         body: JSON.stringify(fixedWorkflow),
@@ -1375,7 +1381,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 6. 閮ㄧ讲骞舵祴璇曞伐浣滄祦
+   * 6. Deploy and test a workflow.
    */
   async deployAndTestWorkflow(
     params: {
@@ -1419,13 +1425,14 @@ export class OrchestratedToolsService {
   }
 
   // ============================================
-  // 杈呭姪鏂规硶
+  // Helper methods
   // ============================================
 
   /**
-   * 瑙ｆ瀽涓?Cron 琛ㄨ揪寮?   */
+   * Parse a schedule into a cron expression.
+   */
   private parseToCron(schedule: string): string {
-    // 绠€鍗曠殑浜虹被鍙鏍煎紡杞崲
+    // Simple human-readable formats
     const patterns: Record<string, string> = {
       "every minute": "* * * * *",
       "every hour": "0 * * * *",
@@ -1442,7 +1449,7 @@ export class OrchestratedToolsService {
       return patterns[normalized];
     }
 
-    // 鍋囪宸茬粡鏄?cron 琛ㄨ揪寮?
+    // Assume the value is already a cron expression
     return schedule;
   }
 
@@ -1463,7 +1470,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鍒涘缓閭欢鑺傜偣
+   * Create an email node.
    */
   private createEmailNode(id: string, config: Record<string, unknown>): N8nWorkflowNode {
     const node: N8nWorkflowNode = {
@@ -1488,7 +1495,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鍒涘缓 HTTP 鑺傜偣
+   * Create an HTTP node.
    */
   private createHttpNode(id: string, config: Record<string, unknown>): N8nWorkflowNode {
     const url = typeof config.url === "string" ? config.url.trim() : "";
@@ -1510,7 +1517,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鍒涘缓 Slack 鑺傜偣
+   * Create a Slack node.
    */
   private createSlackNode(id: string, config: Record<string, unknown>): N8nWorkflowNode {
     return {
@@ -1528,7 +1535,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鍒涘缓 Set 鑺傜偣锛堟暟鎹浆鎹級
+   * Create a Set node (data transform).
    */
   private createSetNode(id: string, config: Record<string, unknown>): N8nWorkflowNode {
     return {
@@ -1548,7 +1555,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鍒涘缓 IF 鑺傜偣锛堟潯浠跺垽鏂級
+   * Create an IF node (condition check).
    */
   private createIfNode(id: string, config: Record<string, unknown>): N8nWorkflowNode {
     return {
@@ -1565,14 +1572,14 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鐢熸垚 Webhook ID
+   * Generate a webhook ID.
    */
   private generateWebhookId(): string {
     return Math.random().toString(36).substring(2, 15);
   }
 
   /**
-   * 鏋勯€?Webhook URL
+   * Build the webhook URL.
    */
   private buildWebhookUrl(baseUrl: string, workflowId: string, path?: string): string {
     const cleanBase = baseUrl.replace(/\/$/, "");
@@ -1581,7 +1588,8 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鑾峰彇涓嬫杩愯鏃堕棿锛堢畝鍖栫増锛?   */
+   * Get the next run time (simplified).
+   */
   private getNextRunTime(cronExpression: string, currentDate = new Date()): string {
     try {
       return CronExpressionParser.parse(cronExpression, { currentDate })
@@ -1594,7 +1602,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 楠岃瘉杈撳嚭
+   * Validate the output.
    */
   private validateOutput(
     output: Record<string, unknown>,
@@ -1617,13 +1625,13 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鍒嗘瀽閿欒妯″紡
+   * Analyse error patterns.
    */
   private analyzeErrors(errors: Array<{ error: string; node?: string }>) {
     const errorPatterns: Record<string, { count: number; nodes: string[]; sample: string }> = {};
 
     for (const err of errors) {
-      // 褰掔被閿欒绫诲瀷
+      // Classify the error type
       let category = "unknown";
       const errorMsg = err.error.toLowerCase();
 
@@ -1659,7 +1667,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 鐢熸垚淇寤鸿
+   * Generate fix suggestions.
    */
   private generateFixes(workflow: N8nWorkflowResult, errorAnalysis: ErrorPatterns) {
     const fixes: Array<{
@@ -1751,7 +1759,7 @@ export class OrchestratedToolsService {
   }
 
   /**
-   * 搴旂敤淇鍒板伐浣滄祦
+   * Apply fixes to the workflow.
    */
   private applyFixes(
     workflow: N8nWorkflowResult,
@@ -1784,7 +1792,7 @@ export class OrchestratedToolsService {
           break;
         }
 
-        // 鍏朵粬淇绫诲瀷闇€瑕佹墜鍔ㄥ鐞嗭紝鍙湪鍏冩暟鎹腑鏍囪
+        // Other fix types need manual handling; only tag the node
         default:
           node._fixApplied = fix.type;
       }

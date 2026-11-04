@@ -620,364 +620,159 @@ describe("mcp route elicitation transport", () => {
   });
 
   describe("notifications/elicitation/complete endpoint", () => {
-    it("stores a completed elicitation response for replay", async () => {
-      const req = new Request("https://example.com/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "2",
-          method: "notifications/elicitation/complete",
-          params: {
-            elicitationId: "elicitation_abc",
-            action: { confirm: true },
-          },
+    const confirmSchema = {
+      type: "object" as const,
+      properties: { confirm: { type: "boolean" } },
+      required: ["confirm"],
+    };
+
+    async function rpc(id: string, method: string, params: Record<string, unknown>) {
+      const response = await mcpPost(
+        new Request("https://example.com/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
         }),
-      });
-
-      const response = await mcpPost(req);
-      const payload = await response.json();
-
+      );
       expect(response.status).toBe(200);
+      return response.json();
+    }
+
+    /** The mocked tool asks to confirm deleting `args.id` and echoes the answer. */
+    function confirmingTool() {
+      mcpServerMocks.dispatchTool.mockImplementation(async (_name, args, _inst, ctx) => {
+        const response = await ctx.requestElicitation?.({
+          title: "Delete workflow",
+          description: `Delete workflow ${String(args.id)}`,
+          schema: confirmSchema,
+        });
+        return { output: response, upstream: false, category: "local", needsInstance: false };
+      });
+    }
+
+    function callTool(id: string, workflowId: string, elicitationResponse?: unknown) {
+      return rpc(id, "tools/call", {
+        name: "delete_workflow",
+        clientCapabilities: { elicitation: true },
+        arguments: { id: workflowId },
+        ...(elicitationResponse === undefined ? {} : { elicitationResponse }),
+      });
+    }
+
+    async function issueElicitation(workflowId: string): Promise<string> {
+      confirmingTool();
+      const payload = await callTool(`issue-${workflowId}`, workflowId);
+      expect(payload).toMatchObject({ result: { code: "elicitation_required" } });
+      return payload.result.request.elicitationId as string;
+    }
+
+    function complete(id: string, params: Record<string, unknown>) {
+      return rpc(id, "notifications/elicitation/complete", params);
+    }
+
+    const accept = { action: "accept", content: { confirm: true } };
+
+    it("accepts the MCP accept shape for an issued elicitation and replays it", async () => {
+      const elicitationId = await issueElicitation("wf-1");
+      expect(elicitationId).toMatch(/^elicitation_/);
+
+      await expect(complete("c1", { elicitationId, ...accept })).resolves.toMatchObject({
+        result: { ok: true, elicitationId },
+      });
+
+      const payload = await callTool("r1", "wf-1", { elicitationId });
       expect(payload).toMatchObject({
-        jsonrpc: "2.0",
-        id: "2",
-        result: {
-          ok: true,
-          elicitationId: "elicitation_abc",
-        },
-      });
-    });
-
-    describe("tools/call replay behavior", () => {
-      it("replays completed elicitation response for a subsequent tool call", async () => {
-        const completeReq = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "3",
-            method: "notifications/elicitation/complete",
-            params: {
-              elicitationId: "elicitation_replay_1",
-              action: { confirm: true },
-            },
-          }),
-        });
-
-        await mcpPost(completeReq);
-
-        mcpServerMocks.dispatchTool.mockImplementation(async (_name, _args, _inst, ctx) => {
-          const response = await ctx.requestElicitation?.({
-            title: "Delete workflow",
-            description: "Delete workflow wf-2",
-            schema: {
-              type: "object",
-              properties: { confirm: { type: "boolean" } },
-              required: ["confirm"],
-            },
-          });
-          if (response?.confirm !== true) {
-            throw new Error("unexpected response");
-          }
-          return { output: { ok: true }, upstream: false, category: "local", needsInstance: false };
-        });
-
-        const callReq = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "4",
-            method: "tools/call",
-            params: {
-              name: "delete_workflow",
-              clientCapabilities: { elicitation: true },
-              arguments: { id: "wf-2" },
-              elicitationResponse: { elicitationId: "elicitation_replay_1" },
-            },
-          }),
-        });
-
-        const callResponse = await mcpPost(callReq);
-        const callPayload = await callResponse.json();
-        expect(callPayload).toMatchObject({
-          jsonrpc: "2.0",
-          id: "4",
-          result: {
-            content: [{ type: "text", text: expect.stringContaining('"ok": true') }],
-            isError: false,
-          },
-        });
-      });
-
-      it("returns an explicit error when replaying a missing elicitation response", async () => {
-        mcpServerMocks.dispatchTool.mockImplementation(async (_name, _args, _inst, ctx) => {
-          const response = await ctx.requestElicitation?.({
-            title: "Delete workflow",
-            description: "Delete workflow wf-3",
-            schema: {
-              type: "object",
-              properties: { confirm: { type: "boolean" } },
-              required: ["confirm"],
-            },
-          });
-          return { output: response, upstream: false, category: "local", needsInstance: false };
-        });
-
-        const callReq = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "5",
-            method: "tools/call",
-            params: {
-              name: "delete_workflow",
-              clientCapabilities: { elicitation: true },
-              arguments: { id: "wf-3" },
-              elicitationResponse: { elicitationId: "missing_elicitation" },
-            },
-          }),
-        });
-
-        const callResponse = await mcpPost(callReq);
-        const callPayload = await callResponse.json();
-        expect(callResponse.status).toBe(200);
-        expect(callPayload).toMatchObject({
-          jsonrpc: "2.0",
-          id: "5",
-          result: {
-            content: [
-              {
-                type: "text",
-                text: expect.stringContaining(
-                  "Missing elicitation response for missing_elicitation",
-                ),
-              },
-            ],
-            isError: true,
-          },
-        });
-      });
-
-      it("rejects elicitation completion requests without elicitationId", async () => {
-        const req = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "6",
-            method: "notifications/elicitation/complete",
-            params: {
-              action: { confirm: true },
-            },
-          }),
-        });
-
-        const response = await mcpPost(req);
-        const payload = await response.json();
-        expect(response.status).toBe(200);
-        expect(payload).toMatchObject({
-          jsonrpc: "2.0",
-          id: "6",
-          error: {
-            code: -32602,
-            message: "Missing elicitationId",
-          },
-        });
-      });
-
-      it("rejects elicitation completion requests without action", async () => {
-        const req = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "7",
-            method: "notifications/elicitation/complete",
-            params: {
-              elicitationId: "elicitation_abc",
-            },
-          }),
-        });
-
-        const response = await mcpPost(req);
-        const payload = await response.json();
-        expect(response.status).toBe(200);
-        expect(payload).toMatchObject({
-          jsonrpc: "2.0",
-          id: "7",
-          error: {
-            code: -32602,
-            message: "Missing elicitation response payload",
-          },
-        });
-      });
-
-      it("rejects elicitation completion requests with non-object action", async () => {
-        const req = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "7b",
-            method: "notifications/elicitation/complete",
-            params: {
-              elicitationId: "elicitation_abc",
-              action: true,
-            },
-          }),
-        });
-
-        const response = await mcpPost(req);
-        const payload = await response.json();
-        expect(response.status).toBe(200);
-        expect(payload).toMatchObject({
-          jsonrpc: "2.0",
-          id: "7b",
-          error: {
-            code: -32602,
-            message: "Missing elicitation response payload",
-          },
-        });
-      });
-    });
-
-    it("treats an empty elicitationResponse object as direct response payload", async () => {
-      mcpServerMocks.dispatchTool.mockImplementation(async (_name, _args, _inst, ctx) => {
-        const response = await ctx.requestElicitation?.({
-          title: "Delete workflow",
-          description: "Delete workflow wf-4",
-          schema: {
-            type: "object",
-            properties: { confirm: { type: "boolean" } },
-            required: ["confirm"],
-          },
-        });
-        return {
-          output: { gotResponse: response },
-          upstream: false,
-          category: "local",
-          needsInstance: false,
-        };
-      });
-
-      const callReq = new Request("https://example.com/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "8",
-          method: "tools/call",
-          params: {
-            name: "delete_workflow",
-            clientCapabilities: { elicitation: true },
-            arguments: { id: "wf-4" },
-            elicitationResponse: {},
-          },
-        }),
-      });
-
-      const callResponse = await mcpPost(callReq);
-      const callPayload = await callResponse.json();
-      expect(callPayload).toMatchObject({
-        jsonrpc: "2.0",
-        id: "8",
-        result: {
-          content: [{ type: "text", text: expect.stringContaining('"gotResponse"') }],
-          isError: false,
-        },
-      });
-    });
-
-    it("expires an elicitation response after one replay", async () => {
-      const completeReq = new Request("https://example.com/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "9",
-          method: "notifications/elicitation/complete",
-          params: {
-            elicitationId: "single_use_replay",
-            action: { confirm: true },
-          },
-        }),
-      });
-      await mcpPost(completeReq);
-
-      mcpServerMocks.dispatchTool.mockImplementation(async (_name, _args, _inst, ctx) => {
-        const response = await ctx.requestElicitation?.({
-          title: "Delete workflow",
-          description: "Delete workflow wf-5",
-          schema: {
-            type: "object",
-            properties: { confirm: { type: "boolean" } },
-            required: ["confirm"],
-          },
-        });
-        return {
-          output: response,
-          upstream: false,
-          category: "local",
-          needsInstance: false,
-        };
-      });
-
-      const callReq = new Request("https://example.com/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "10",
-          method: "tools/call",
-          params: {
-            name: "delete_workflow",
-            clientCapabilities: { elicitation: true },
-            arguments: { id: "wf-5" },
-            elicitationResponse: { elicitationId: "single_use_replay" },
-          },
-        }),
-      });
-
-      const firstCall = await mcpPost(callReq);
-      const firstPayload = await firstCall.json();
-      expect(firstPayload).toMatchObject({
-        jsonrpc: "2.0",
-        id: "10",
         result: {
           content: [{ type: "text", text: expect.stringContaining('"confirm": true') }],
           isError: false,
         },
       });
+    });
 
-      const secondCallReq = new Request("https://example.com/mcp", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          jsonrpc: "2.0",
-          id: "10",
-          method: "tools/call",
-          params: {
-            name: "delete_workflow",
-            clientCapabilities: { elicitation: true },
-            arguments: { id: "wf-5" },
-            elicitationResponse: { elicitationId: "single_use_replay" },
-          },
-        }),
+    it("still accepts the pre-spec action object as an implicit accept", async () => {
+      const elicitationId = await issueElicitation("wf-legacy");
+      await complete("c2", { elicitationId, action: { confirm: true } });
+
+      const payload = await callTool("r2", "wf-legacy", { elicitationId });
+      expect(payload.result.content[0].text).toContain('"confirm": true');
+    });
+
+    it("records decline and cancel as an empty answer so confirmation fails closed", async () => {
+      for (const action of ["decline", "cancel"]) {
+        const elicitationId = await issueElicitation(`wf-${action}`);
+        await expect(complete(`c-${action}`, { elicitationId, action })).resolves.toMatchObject({
+          result: { ok: true },
+        });
+        const payload = await callTool(`r-${action}`, `wf-${action}`, { elicitationId });
+        expect(payload.result.isError).toBe(false);
+        expect(payload.result.content[0].text).not.toContain("confirm");
+      }
+    });
+
+    it("ignores an inline answer that does not name an issued elicitation", async () => {
+      confirmingTool();
+      const payload = await callTool("inline", "wf-inline", { confirm: true });
+      expect(payload).toMatchObject({
+        result: { isError: true, code: "elicitation_required" },
       });
+    });
 
-      const secondCall = await mcpPost(secondCallReq);
-      const secondPayload = await secondCall.json();
-      expect(secondPayload).toMatchObject({
-        jsonrpc: "2.0",
-        id: "10",
+    it("rejects completion of an id the server never issued", async () => {
+      await expect(
+        complete("c3", { elicitationId: "elicitation_forged", ...accept }),
+      ).resolves.toMatchObject({
+        error: { code: -32602, message: "Unknown or expired elicitationId" },
+      });
+    });
+
+    it("rejects completion of an id issued to another user", async () => {
+      const elicitationId = await issueElicitation("wf-owner");
+      mcpServerMocks.authenticateBearer.mockResolvedValueOnce({
+        user_id: "user-2",
+        key_id: "key-2",
+      });
+      await expect(complete("c4", { elicitationId, ...accept })).resolves.toMatchObject({
+        error: { code: -32602, message: "Unknown or expired elicitationId" },
+      });
+    });
+
+    it("does not let one confirmation satisfy a different request", async () => {
+      const elicitationId = await issueElicitation("wf-a");
+      await complete("c5", { elicitationId, ...accept });
+
+      const payload = await callTool("r5", "wf-b", { elicitationId });
+      expect(payload).toMatchObject({
+        result: {
+          content: [
+            { type: "text", text: expect.stringContaining("issued for a different request") },
+          ],
+          isError: true,
+        },
+      });
+    });
+
+    it("replays a completed elicitation only once", async () => {
+      const elicitationId = await issueElicitation("wf-once");
+      await complete("c6", { elicitationId, ...accept });
+
+      const first = await callTool("r6a", "wf-once", { elicitationId });
+      expect(first.result.isError).toBe(false);
+
+      const second = await callTool("r6b", "wf-once", { elicitationId });
+      expect(second.result.content[0].text).toContain(
+        `Missing elicitation response for ${elicitationId}`,
+      );
+    });
+
+    it("returns an explicit error when replaying an unknown elicitation", async () => {
+      confirmingTool();
+      const payload = await callTool("r7", "wf-3", { elicitationId: "missing_elicitation" });
+      expect(payload).toMatchObject({
         result: {
           content: [
             {
               type: "text",
-              text: expect.stringContaining("Missing elicitation response for single_use_replay"),
+              text: expect.stringContaining("Missing elicitation response for missing_elicitation"),
             },
           ],
           isError: true,
@@ -985,83 +780,46 @@ describe("mcp route elicitation transport", () => {
       });
     });
 
-    it("expires an elicitation response after TTL", async () => {
+    it("expires an elicitation response after its TTL", async () => {
       const nowSpy = vi.spyOn(Date, "now");
       const baseline = Date.now();
-
       try {
         nowSpy.mockReturnValue(baseline);
-        const completeReq = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "11",
-            method: "notifications/elicitation/complete",
-            params: {
-              elicitationId: "expiring_elicitation",
-              action: { confirm: true },
-            },
-          }),
-        });
-        await mcpPost(completeReq);
+        const elicitationId = await issueElicitation("wf-ttl");
+        await complete("c8", { elicitationId, ...accept });
 
-        const delayed = baseline + 6 * 60 * 1000 + 1;
-        nowSpy.mockReturnValue(delayed);
-
-        mcpServerMocks.dispatchTool.mockImplementation(async (_name, _args, _inst, ctx) => {
-          const response = await ctx.requestElicitation?.({
-            title: "Delete workflow",
-            description: "Delete workflow wf-6",
-            schema: {
-              type: "object",
-              properties: { confirm: { type: "boolean" } },
-              required: ["confirm"],
-            },
-          });
-          return {
-            output: response,
-            upstream: false,
-            category: "local",
-            needsInstance: false,
-          };
-        });
-
-        const callReq = new Request("https://example.com/mcp", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            jsonrpc: "2.0",
-            id: "12",
-            method: "tools/call",
-            params: {
-              name: "delete_workflow",
-              clientCapabilities: { elicitation: true },
-              arguments: { id: "wf-6" },
-              elicitationResponse: { elicitationId: "expiring_elicitation" },
-            },
-          }),
-        });
-
-        const payload = await (await mcpPost(callReq)).json();
-        expect(payload).toMatchObject({
-          jsonrpc: "2.0",
-          id: "12",
-          result: {
-            content: [
-              {
-                type: "text",
-                text: expect.stringContaining(
-                  "Missing elicitation response for expiring_elicitation",
-                ),
-              },
-            ],
-            isError: true,
-          },
-        });
+        nowSpy.mockReturnValue(baseline + 6 * 60 * 1000 + 1);
+        const payload = await callTool("r8", "wf-ttl", { elicitationId });
+        expect(payload.result.content[0].text).toContain(
+          `Missing elicitation response for ${elicitationId}`,
+        );
       } finally {
         nowSpy.mockRestore();
       }
+    });
+
+    it.each([
+      ["without elicitationId", { ...accept }, "Missing elicitationId"],
+      ["without action", { elicitationId: "e1" }, "Missing elicitation response payload"],
+      [
+        "with a boolean action",
+        { elicitationId: "e1", action: true },
+        "Missing elicitation response payload",
+      ],
+      [
+        "accept without content",
+        { elicitationId: "e1", action: "accept" },
+        "Missing elicitation response payload",
+      ],
+      [
+        "with an unknown action",
+        { elicitationId: "e1", action: "maybe" },
+        "Missing elicitation response payload",
+      ],
+    ])("rejects completion %s", async (_label, params, message) => {
+      await expect(complete("bad", params)).resolves.toMatchObject({
+        error: { code: -32602, message },
+      });
     });
   });
 

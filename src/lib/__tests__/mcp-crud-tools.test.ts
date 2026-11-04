@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { runTool } from "../mcp.server";
+import { dispatchTool, runTool } from "../mcp.server";
 
 // Mock SSRF guard
 vi.mock("../ssrf-guard.server", () => ({
@@ -318,12 +318,11 @@ describe("Workflow CRUD Tools", () => {
   });
 
   describe("validate_workflow", () => {
-    it("should delegate to upstream knowledge base", async () => {
-      // This test would need more setup to mock the upstream
-      // For now, we test that it requires the workflow parameter
-      await expect(runTool(mockN8nInstance, "validate_workflow", {})).rejects.toThrow(
-        "workflow (object) is required",
-      );
+    it("requires the workflow parameter before delegating upstream", async () => {
+      // validate_workflow is routed by dispatchTool; runTool has no case for it.
+      await expect(
+        dispatchTool("validate_workflow", {}, mockN8nInstance, { user_id: "user-1" }),
+      ).rejects.toThrow("workflow (object) is required");
     });
   });
 

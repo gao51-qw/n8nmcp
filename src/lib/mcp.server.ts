@@ -1,6 +1,7 @@
 // MCP Streamable HTTP gateway helpers (server-only).
 // Auth: Bearer nmcp_<...> from `Authorization` header → SHA-256 → platform_api_keys lookup.
 // Rate limit: database-backed short-window limiter + daily quota check via usage_daily.
+import { pruneExpired } from "@/lib/expiring-store";
 import { createHash, randomBytes } from "node:crypto";
 import type { Json } from "@/integrations/supabase/types";
 import { hashPlatformApiKey, decryptSecret } from "./crypto.server";
@@ -95,6 +96,8 @@ export class ElicitationRequiredError extends Error {
 const buckets = new Map<string, { count: number; resetAt: number }>();
 const WINDOW_MS = 10_000;
 const WINDOW_MAX = 60;
+const BUCKET_SWEEP_INTERVAL_MS = 60_000;
+let lastBucketSweep = 0;
 const TEST_CONFIRMATION_TOKEN_TTL_MS = 5 * 60_000;
 const testOnlyConfirmationChallenges = new Map<string, { token: string; expiresAt: number }>();
 const confirmationService = createConfirmationService();
@@ -135,6 +138,10 @@ export const KNOWLEDGE_TOOL_MAP = Object.freeze({
 
 export function shortWindowAllow(userId: string): boolean {
   const now = Date.now();
+  if (now - lastBucketSweep >= BUCKET_SWEEP_INTERVAL_MS) {
+    lastBucketSweep = now;
+    pruneExpired(buckets, (bucket) => bucket.resetAt, now);
+  }
   const b = buckets.get(userId);
   if (!b || b.resetAt < now) {
     buckets.set(userId, { count: 1, resetAt: now + WINDOW_MS });
@@ -572,9 +579,6 @@ export async function runTool(
       return n8n(inst, `/api/v1/workflows/${encodeURIComponent(id)}/${endpoint}`, {
         method: "POST",
       });
-    }
-    case "validate_workflow": {
-      return validateWorkflowViaUpstream(args);
     }
     case "analyze_workflow_graph": {
       if (!args.id) throw new Error("id (workflow id) is required");

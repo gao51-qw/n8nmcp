@@ -8,6 +8,7 @@ export default tseslint.config(
   {
     ignores: [
       ".agents/**",
+      "docs/archive/**",
       ".next/**",
       ".next-dev.err.log",
       ".next-dev.log",
