@@ -174,9 +174,9 @@
 - Create: `supabase/migrations/<ts>_oauth_grants.sql`
 - Test: `supabase/tests/oauth_grants.test.sql`（或现有 DB 测试约定）
 
-- [ ] `oauth_grants`：`user_id`、`client_id`、`client_name`、`scopes text[]`、`granted_at`、`last_used_at`、`revoked_at`；唯一键 `(user_id, client_id)`。
-- [ ] RLS：用户可读自己的授权列表，service role 写；无 `client_id` 的普通登录 JWT 也只读。
-- [ ] 现有业务表策略统一加 `auth.jwt()->>'client_id' IS NULL` 条件，带 `client_id` 的 agent token 不得直连 PostgREST；补数据库测试。
+- [x] `oauth_grants`：`user_id`、`client_id`、`client_name`、`scopes text[]`、`granted_at`、`last_used_at`、`revoked_at`；唯一键 `(user_id, client_id)`。
+- [x] RLS：用户可读自己的授权列表，service role 写；无 `client_id` 的普通登录 JWT 也只读。
+- [x] 现有业务表不逐条改策略，而是给 public 下每张启用 RLS 的表和 `storage.objects` 加一条 RESTRICTIVE 策略 `deny_oauth_agent_tokens`（`auth.jwt()->>'client_id' IS NULL`），与现有策略取 AND。`supabase/tests/oauth_grants.sql` 断言没有遗漏的表。**未执行：** 本机 Docker 未运行，pgTAP 尚未跑过，需在 staging 上执行 `supabase test db`。
 
 ### Task 2.2：发现端点与 401 挑战
 
@@ -185,9 +185,9 @@
 - Modify: `src/lib/site-domains.ts`（`resource` 固定为 MCP 端点 canonical URL）
 - Test: `src/app/.well-known/__tests__/metadata.test.ts`
 
-- [ ] PRM：`resource`、`authorization_servers: ["https://<ref>.supabase.co/auth/v1"]`、`scopes_supported: ["mcp:tools:read","mcp:tools:execute","mcp:workflows:write"]`、`bearer_methods_supported: ["header"]`；答复 CORS preflight。
-- [ ] 不再自建 AS metadata；issuer 由 `SUPABASE_URL` 推导。
-- [ ] 未认证的 MCP 请求返回 401 + `WWW-Authenticate: Bearer resource_metadata="…"`。
+- [x] PRM：`resource`、`authorization_servers: ["https://<ref>.supabase.co/auth/v1"]`、`scopes_supported: ["mcp:tools:read","mcp:tools:execute","mcp:workflows:write"]`、`bearer_methods_supported: ["header"]`；答复 CORS preflight。
+- [x] 不再自建 AS metadata；issuer 由 `SUPABASE_URL` 推导。
+- [x] 未认证的 MCP 请求返回 401 + `WWW-Authenticate: Bearer resource_metadata="…"`。
 
 ### Task 2.3：consent 页面与授权管理
 
@@ -197,10 +197,10 @@
 - Create: `src/app/dashboard/connected-apps/page.tsx`
 - Test: `src/app/oauth/__tests__/consent.test.tsx`
 
-- [ ] 读取 `authorization_id`，调用 `supabase.auth.oauth.getAuthorizationDetails`；展示客户端名称、redirect URI、请求的 scope。
-- [ ] 用户勾选 `mcp:*` scope（默认只读）；批准时先写 `oauth_grants`，再 `approveAuthorization`，跳 `redirect_url`；拒绝走 `denyAuthorization`。
-- [ ] 无 `authorization_id`（已同意过）直接跳转。
-- [ ] dashboard "已连接的应用"：列表、最近使用、撤销（写 `revoked_at`）。
+- [x] 读取 `authorization_id`，调用 `supabase.auth.oauth.getAuthorizationDetails`；展示客户端名称、redirect URI、请求的 scope。
+- [x] 用户勾选 `mcp:*` scope（默认只读）；批准时先写 `oauth_grants`，再 `approveAuthorization`，跳 `redirect_url`；拒绝走 `denyAuthorization`。
+- [x] 无 `authorization_id`（已同意过）直接跳转。
+- [x] dashboard "已连接的应用"：列表、最近使用、撤销（写 `revoked_at`）。
 
 ### Task 2.4：资源服务器校验
 
@@ -209,12 +209,22 @@
 - Modify: `src/lib/mcp.server.ts`（`authenticateBearer`）、`src/lib/support/auth.server.ts`
 - Test: `src/lib/oauth/__tests__/verify.server.test.ts`、`src/lib/__tests__/mcp.test.ts`
 
-- [ ] 新增依赖 `jose`；校验 `iss`、`exp`、签名；`client_id` 存在时查 `oauth_grants` 取 scope 与撤销状态，缺失或已撤销 → 401。
-- [ ] Bearer 既可是 `nmcp_` key，也可是 JWT；两者都映射到 `{ user_id, key_id|client_id, scopes }`；`nmcp_` key 视为全 scope。
-- [ ] 工具分发按 scope 检查：读类工具需 `mcp:tools:read`，执行/变更需 `mcp:tools:execute` / `mcp:workflows:write`；缺 scope 返回 403 + `WWW-Authenticate … error="insufficient_scope"`。
-- [ ] `recordCall` 与审计元数据记录认证来源（`api_key|oauth`）与 `client_id`。
-- [ ] 配额与限流按 `user_id` 计，不区分认证方式。
-- [ ] support 路由的 `getUser(token)` 改为同一本地 JWKS 校验（顺手省一次往返）。
+- [x] 新增依赖 `jose`；校验 `iss`、`exp`、签名；`client_id` 存在时查 `oauth_grants` 取 scope 与撤销状态，缺失或已撤销 → 401。
+- [x] Bearer 既可是 `nmcp_` key，也可是 JWT；两者都映射到 `{ user_id, key_id|client_id, scopes }`；`nmcp_` key 视为全 scope。
+- [x] 工具分发按 scope 检查：读类工具需 `mcp:tools:read`，执行/变更需 `mcp:tools:execute` / `mcp:workflows:write`；缺 scope 返回 403 + `WWW-Authenticate … error="insufficient_scope"`。
+- [x] `recordCall` 与审计元数据记录认证来源（`api_key|oauth`）与 `client_id`。
+- [x] 配额与限流按 `user_id` 计，不区分认证方式。
+- [ ] ~~support 路由改为本地 JWKS 校验~~ **改为：** 保留 `getUser`（它能感知服务端注销，本地校验做不到），另外在 `requireSupportUser` 中拒绝带 `client_id` 的 token，防止 agent token 调用 dashboard/support API（例如给自己扩权）。
+
+**完成说明（2026-11-04，代码部分）：**
+- 默认关闭，`MCP_OAUTH_ENABLED=1` 才生效。关闭时 PRM 返回 404，401 不带 OAuth 挑战，JWT bearer 一律拒绝，现有行为不变。
+- 新增 `src/lib/oauth/`：`config.server.ts`（issuer、JWKS、PRM URL）、`scopes.ts`（客户端可用）、`tool-scopes.server.ts`（工具 → scope）、`verify.server.ts`（`jose` 校验 + grant 查询）、`grants.server.ts`、`metadata.server.ts`。依赖 `jose@6.2.13` 精确锁定（选的是发布满两周的版本），lockfile 只新增这一项。
+- 授权详情在服务端用用户的 token 向 Supabase 拉取，`oauth_grants` 里的 client id 和名称来自 Supabase，不信任浏览器传来的值。
+- 撤销时先写 `revoked_at`（网关立即拒绝），再调用 Supabase `revokeGrant`（删除该客户端的会话和 refresh token）。
+- 顺带修复：`authenticateBearer` 里 `void supabaseAdmin…update()` 从来没有发出请求（query builder 要调用 `.then()` 才执行），`last_used_at` 一直没更新。
+- dashboard 登录跳转现在保留查询串，否则 consent 页的 `authorization_id` 会在登录后丢失。
+- 测试：新增 48 个（verify、tool-scopes、grants、metadata、路由 OAuth、`authenticateBearer`，以及 support 鉴权的 2 个拒绝用例）；scope 闸门做了变异测试。全量 83 个文件、778 个测试通过，`npm run build` 通过。
+- **仍需你来做：** Task 2.0 的 staging 验证（开启 OAuth Server/DCR、签名密钥改 ES256、Site URL 与 `/oauth/consent`），然后执行迁移、跑 `supabase test db`，再设置 `MCP_OAUTH_ENABLED=1`，最后用 Claude.ai 做阶段验收。
 
 **阶段验收：** Claude.ai（Web）通过 OAuth 连接成功并列出工具；在 dashboard 撤销后下一次调用即 401；带 `client_id` 的 token 直连 PostgREST 读不到业务数据；`nmcp_` key 路径回归测试不变。
 

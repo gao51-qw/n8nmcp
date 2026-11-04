@@ -1,1 +1,10 @@
 project_id = "rjtozkzbedlikpjnopqj"
+
+# OAuth 2.1 Server for MCP clients (roadmap Phase 2). Left commented out so
+# `supabase config push` cannot switch it on in production by accident; enable
+# it in the dashboard after the Task 2.0 staging check, or uncomment for a
+# local `supabase start`.
+# [auth.oauth_server]
+# enabled = true
+# authorization_url_path = "/oauth/consent"
+# allow_dynamic_registration = true
