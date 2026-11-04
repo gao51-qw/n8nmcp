@@ -500,12 +500,19 @@ export async function runTool(
           )}). Use preview_workflow_diff and update_partial_workflow instead.`,
         );
       }
-      // Build payload with only provided fields
-      const payload: Record<string, unknown> = {};
-      if (args.name !== undefined) payload.name = args.name;
-      // Update workflow
+      // The Public API only supports PUT with a complete workflow body, so merge the
+      // provided fields into the current workflow instead of sending a partial patch.
+      const { toWorkflowUpdatePayload } = await import("./workflow-graph");
+      const current = (await n8n(
+        inst,
+        `/api/v1/workflows/${encodeURIComponent(id)}`,
+      )) as Parameters<typeof toWorkflowUpdatePayload>[0];
+      const payload = toWorkflowUpdatePayload(
+        current,
+        args.name !== undefined ? { name: String(args.name) } : {},
+      );
       return n8n(inst, `/api/v1/workflows/${encodeURIComponent(id)}`, {
-        method: "PATCH",
+        method: "PUT",
         body: JSON.stringify(payload),
       });
     }
@@ -564,8 +571,12 @@ export async function runTool(
         },
         context,
       );
-      const { analyzeWorkflowGraph, applyWorkflowPatch, validateWorkflowPatch } =
-        await import("./workflow-graph");
+      const {
+        analyzeWorkflowGraph,
+        applyWorkflowPatch,
+        toWorkflowUpdatePayload,
+        validateWorkflowPatch,
+      } = await import("./workflow-graph");
       const workflow = (await n8n(
         inst,
         `/api/v1/workflows/${encodeURIComponent(String(args.id))}`,
@@ -584,13 +595,8 @@ export async function runTool(
 
       const patched = applyWorkflowPatch(workflow, patch);
       const updated = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(String(args.id))}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          ...workflow,
-          nodes: patched.workflow.nodes,
-          connections: patched.workflow.connections,
-          settings: patched.workflow.settings,
-        }),
+        method: "PUT",
+        body: JSON.stringify(toWorkflowUpdatePayload(patched.workflow)),
       });
 
       return {
@@ -645,6 +651,7 @@ export async function runTool(
         auditExpressionDependencies,
         createPatchDiff,
         createWorkflowRollbackPatch,
+        toWorkflowUpdatePayload,
         validateWorkflowPatch,
       } = await import("./workflow-graph");
       const workflow = (await n8n(
@@ -667,13 +674,8 @@ export async function runTool(
       const rollbackPatch = createWorkflowRollbackPatch(workflow, diff.after);
       const patched = applyWorkflowPatch(workflow, patch);
       const updated = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(String(args.id))}`, {
-        method: "PATCH",
-        body: JSON.stringify({
-          ...workflow,
-          nodes: patched.workflow.nodes,
-          connections: patched.workflow.connections,
-          settings: patched.workflow.settings,
-        }),
+        method: "PUT",
+        body: JSON.stringify(toWorkflowUpdatePayload(patched.workflow)),
       });
 
       const checks = Array.isArray(args.postApplyChecks)
@@ -694,13 +696,8 @@ export async function runTool(
           inst,
           `/api/v1/workflows/${encodeURIComponent(String(args.id))}`,
           {
-            method: "PATCH",
-            body: JSON.stringify({
-              ...workflow,
-              nodes: rolledBack.workflow.nodes,
-              connections: rolledBack.workflow.connections,
-              settings: rolledBack.workflow.settings,
-            }),
+            method: "PUT",
+            body: JSON.stringify(toWorkflowUpdatePayload(rolledBack.workflow)),
           },
         );
 
@@ -1747,7 +1744,7 @@ async function handleRollback(
 
   const before = await fetchSnapshotSafe(inst, workflowId);
   const restored = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`, {
-    method: "PATCH",
+    method: "PUT",
     body: JSON.stringify({
       name: snap.name,
       nodes: snap.nodes,
@@ -1868,9 +1865,10 @@ async function updatePartialWorkflow(
     return blocked;
   }
 
+  const { toWorkflowUpdatePayload } = await import("./workflow-graph");
   const updated = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`, {
-    method: "PATCH",
-    body: JSON.stringify(workflow),
+    method: "PUT",
+    body: JSON.stringify(toWorkflowUpdatePayload(workflow)),
   });
 
   const result = {

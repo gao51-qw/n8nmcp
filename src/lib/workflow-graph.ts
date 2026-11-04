@@ -826,6 +826,55 @@ export function cloneWorkflowAsDraft(
   return clone;
 }
 
+/**
+ * Body for `PUT /api/v1/workflows/{id}`.
+ *
+ * The n8n Public API update schema is `additionalProperties: false` with
+ * `name`, `nodes`, `connections` and `settings` required, and marks the
+ * fields n8n returns on GET (`id`, `active`, `createdAt`, `updatedAt`,
+ * `versionId`, `triggerCount`, `tags`, `shared`, ...) as read-only. Spreading
+ * a fetched workflow straight back into the request therefore fails
+ * validation, so only the writable fields are forwarded.
+ */
+export type WorkflowUpdatePayload = {
+  name: string;
+  nodes: unknown[];
+  connections: Record<string, unknown>;
+  settings: Record<string, unknown>;
+  staticData?: unknown;
+};
+
+export function toWorkflowUpdatePayload(
+  workflow: object,
+  overrides: Partial<WorkflowUpdatePayload> = {},
+): WorkflowUpdatePayload {
+  const source = workflow as Record<string, unknown>;
+  const name = overrides.name ?? source.name;
+  if (typeof name !== "string" || name.trim() === "") {
+    throw new Error("Workflow name is required to update a workflow");
+  }
+  const nodes = overrides.nodes ?? source.nodes;
+  if (!Array.isArray(nodes)) {
+    throw new Error("Workflow nodes (array) are required to update a workflow");
+  }
+  const connections = overrides.connections ?? source.connections;
+  if (!connections || typeof connections !== "object" || Array.isArray(connections)) {
+    throw new Error("Workflow connections (object) are required to update a workflow");
+  }
+  const settings = overrides.settings ?? source.settings;
+  const payload: WorkflowUpdatePayload = {
+    name,
+    nodes,
+    connections: connections as Record<string, unknown>,
+    settings:
+      settings && typeof settings === "object" && !Array.isArray(settings)
+        ? (settings as Record<string, unknown>)
+        : {},
+  };
+  if (source.staticData !== undefined) payload.staticData = source.staticData;
+  return payload;
+}
+
 function parameterEquals(a: unknown, b: unknown): boolean {
   return JSON.stringify(a ?? {}) === JSON.stringify(b ?? {});
 }

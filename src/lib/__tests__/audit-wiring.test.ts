@@ -170,7 +170,11 @@ const caller = { user_id: "u1", key_id: "k1", ip: "1.2.3.4", ua: "agent", reques
 // n8n GET returns the "before" workflow; PATCH/POST returns the "after".
 function n8nResponse(_url: string, init?: { method?: string }) {
   const method = (init?.method ?? "GET").toUpperCase();
-  const body = method === "GET" ? { id: "wf-1", name: "Before" } : { id: "wf-1", name: "New" };
+  // GET returns the full workflow (as n8n does) so update_workflow can build its PUT body.
+  const body =
+    method === "GET"
+      ? { id: "wf-1", name: "Before", active: false, nodes: [], connections: {}, settings: {} }
+      : { id: "wf-1", name: "New" };
   return Promise.resolve({ ok: true, status: 200, text: async () => JSON.stringify(body) });
 }
 

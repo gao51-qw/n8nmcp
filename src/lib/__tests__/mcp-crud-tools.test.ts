@@ -147,11 +147,24 @@ describe("Workflow CRUD Tools", () => {
     });
 
     it("should update workflow with partial fields", async () => {
+      const currentWorkflow = {
+        id: "workflow-123",
+        name: "Old Workflow",
+        active: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-02T00:00:00.000Z",
+        versionId: "v1",
+        nodes: validNodes,
+        connections: {},
+        settings: { timezone: "UTC" },
+        tags: [],
+      };
       const mockResponse = {
         id: "workflow-123",
         name: "Updated Workflow",
       };
 
+      mockN8nResponse(currentWorkflow);
       mockN8nResponse(mockResponse);
 
       const result = await runTool(mockN8nInstance, "update_workflow", {
@@ -161,9 +174,18 @@ describe("Workflow CRUD Tools", () => {
       });
 
       expect(result).toEqual(mockResponse);
-      const fetchCall = mockFetch.mock.calls[0];
-      expect(fetchCall[0]).toContain("/workflows/workflow-123");
-      expect(getFetchInit().method).toBe("PATCH");
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(String(mockFetch.mock.calls[0][0])).toContain("/workflows/workflow-123");
+      expect(getFetchInit(0).method).toBeUndefined();
+      expect(String(mockFetch.mock.calls[1][0])).toContain("/workflows/workflow-123");
+      // The Public API has no PATCH: updates are PUT with the full, writable workflow body.
+      expect(getFetchInit(1).method).toBe("PUT");
+      expect(JSON.parse(getFetchInit(1).body)).toEqual({
+        name: "Updated Workflow",
+        nodes: validNodes,
+        connections: {},
+        settings: { timezone: "UTC" },
+      });
     });
 
     it("should throw error if id is undefined", async () => {
@@ -630,7 +652,7 @@ describe("Workflow CRUD Tools", () => {
       });
       expect(mockFetch).toHaveBeenCalledTimes(2);
       expect(String(mockFetch.mock.calls[1][0])).toContain("/workflows/workflow-large");
-      expect(getFetchInit(1).method).toBe("PATCH");
+      expect(getFetchInit(1).method).toBe("PUT");
 
       const patchBody = JSON.parse(getFetchInit(1).body);
       expect(patchBody.nodes).toHaveLength(3);
@@ -812,7 +834,7 @@ describe("Workflow CRUD Tools", () => {
       expect(getFetchInit(1).method).toBe("POST");
       expect(
         mockFetch.mock.calls.every(
-          (call) => getFetchInit(mockFetch.mock.calls.indexOf(call)).method !== "PATCH",
+          (call) => getFetchInit(mockFetch.mock.calls.indexOf(call)).method !== "PUT",
         ),
       ).toBe(true);
 
@@ -1042,8 +1064,8 @@ describe("Workflow CRUD Tools", () => {
         rollback_workflow: { rolledBack: true },
       });
       expect(mockFetch).toHaveBeenCalledTimes(3);
-      expect(getFetchInit(1).method).toBe("PATCH");
-      expect(getFetchInit(2).method).toBe("PATCH");
+      expect(getFetchInit(1).method).toBe("PUT");
+      expect(getFetchInit(2).method).toBe("PUT");
 
       const rollbackBody = JSON.parse(getFetchInit(2).body);
       expect(

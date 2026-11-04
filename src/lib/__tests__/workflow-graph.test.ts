@@ -17,6 +17,7 @@ import {
   validateWorkflowPatch,
   type WorkflowPatch,
   type WorkflowShape,
+  toWorkflowUpdatePayload,
 } from "../workflow-graph";
 
 const sampleWorkflow: WorkflowShape = {
@@ -787,5 +788,47 @@ describe("workflow graph analyzer", () => {
     expect(draft.id).toBeUndefined();
     expect(draft.versionId).toBeUndefined();
     expect(draft).not.toBe(sampleWorkflow);
+  });
+});
+
+describe("toWorkflowUpdatePayload", () => {
+  const fetched = {
+    id: "wf-1",
+    name: "Fetched",
+    active: true,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.000Z",
+    versionId: "v1",
+    triggerCount: 1,
+    tags: [{ id: "t1", name: "ops" }],
+    shared: [{ role: "workflow:owner" }],
+    nodes: [{ name: "Trigger", type: "n8n-nodes-base.manualTrigger", typeVersion: 1 }],
+    connections: {},
+    settings: { executionOrder: "v1" },
+    staticData: { counter: 2 },
+  };
+
+  it("keeps only the writable Public API fields", () => {
+    expect(toWorkflowUpdatePayload(fetched)).toEqual({
+      name: "Fetched",
+      nodes: fetched.nodes,
+      connections: {},
+      settings: { executionOrder: "v1" },
+      staticData: { counter: 2 },
+    });
+  });
+
+  it("applies overrides and defaults settings to an object", () => {
+    const { staticData: _ignored, settings: _settings, ...noSettings } = fetched;
+    const payload = toWorkflowUpdatePayload(noSettings, { name: "Renamed" });
+    expect(payload.name).toBe("Renamed");
+    expect(payload.settings).toEqual({});
+    expect(payload).not.toHaveProperty("staticData");
+  });
+
+  it("fails closed when required fields are missing", () => {
+    expect(() => toWorkflowUpdatePayload({ nodes: [], connections: {} })).toThrow(/name/);
+    expect(() => toWorkflowUpdatePayload({ name: "x", connections: {} })).toThrow(/nodes/);
+    expect(() => toWorkflowUpdatePayload({ name: "x", nodes: [] })).toThrow(/connections/);
   });
 });
