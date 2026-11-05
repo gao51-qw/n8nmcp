@@ -13,6 +13,7 @@ const modules = [
     title: "Instances",
     text: "Connect and manage n8n instances.",
     icon: <Server className="h-5 w-5" />,
+    href: "/dashboard/instances",
   },
   {
     title: "API keys",
