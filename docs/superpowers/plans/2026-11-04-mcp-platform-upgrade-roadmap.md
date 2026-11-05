@@ -289,7 +289,7 @@
 - Modify: `src/app/dashboard/instances/**`（录入 token 的表单，提示在 n8n Settings → Instance-level MCP 生成）
 - Modify: `src/lib/crypto.server.ts` 调用点
 
-- [ ] token 加密存储；表单提交后调用 Task 4.2 的 `discover()` 验证连通并缓存能力。
+- [x] 这个仓库原来**没有任何创建实例的入口**：dashboard 的 Instances 卡片没有页面，也没有对应的 API。现在新增了 `src/lib/n8n-instances.server.ts`、`/api/dashboard/instances[/id]` 和 `/dashboard/instances`。添加实例时先用 API key 调一次 Public API 验证；MCP token 先用 `tools/list` 验证再保存；两者都加密存储，任何接口都不回传明文。每个账号最多 20 个实例。迁移 `20261105090000_n8n_instance_native_mcp.sql` 用的列名是 `mcp_token_encrypted/iv/tag`、`mcp_capabilities`、`mcp_checked_at`，没有 `mcp_endpoint_url`，端点固定由 base URL 推出。
 
 ### Task 4.2：原生 MCP 客户端
 
@@ -297,22 +297,28 @@
 - Create: `src/lib/n8n-native-mcp.server.ts`
 - Test: `src/lib/__tests__/n8n-native-mcp.server.test.ts`
 
-- [ ] Streamable HTTP 客户端：`server/discover` 或旧 `initialize` 自适应；带 `Authorization: Bearer <token>`、`MCP-Protocol-Version`、`Mcp-Method`、`Mcp-Name`。
-- [ ] 出站 URL 经 `assertPublicUrl`（`ssrf-guard`），禁止私网实例除非用户实例已标记为自托管内网并显式允许。
-- [ ] 封装 `callTool(name, args)`，带超时、重试一次、错误归一化。
+- [x] 客户端走旧协议的 `initialize` 握手（n8n 的 MCP 服务器是旧协议），会保存服务器返回的 `Mcp-Session-Id`，响应既可以是 JSON 也可以是 SSE；请求带上 `MCP-Protocol-Version`、`Mcp-Method`、`Mcp-Name`。暂未实现 `server/discover` 探测，等 n8n 支持 2026-07-28 后再加。
+- [x] 所有出站请求都经过 `safeFetchPublicUrl`（只允许公网地址，不跟随重定向）。"内网实例显式放行"**未做**：这需要单独的产品决策。
+- [x] `callTool` 带超时；只有标记为 `idempotent` 的只读调用才会在网络失败时重试一次，执行类调用只发一次；错误统一归为 `unauthorized/unavailable/protocol/tool` 四类。
 
 ### Task 4.3：执行路径切换
 
 **Files:** `src/lib/mcp.server.ts`（`execute_workflow`）、`src/lib/workflow-agent/deployment-pipeline.server.ts`、`src/lib/n8n-execution.server.ts`
 
-- [ ] 实例有 MCP token 且 `execute_workflow` 可用 → 优先用原生 `execute_workflow`（`mode: "manual"` 用于部署前冒烟，`production` 用于已激活工作流）；否则回退 Webhook 路径。
-- [ ] 部署管线的"激活 → 冒烟 → 失败即停用"改为"manual 冒烟（不激活）→ 通过才激活 → production 验证"，减少对生产的扰动。
-- [ ] 审计元数据记录执行来源（`native_mcp|webhook`）。
+- [x] `execute_workflow`：实例有 token 且原生工具可用时走原生路径（已激活的工作流用 `production`，未激活的草稿用 `manual`），先启动再轮询 `get_workflow_execution`。只有确定 n8n 没有启动执行时（工具报错、token 被拒、协议错误）才回退到 Webhook；网络失败时无法确定是否已执行，直接报错，不会执行两次。
+- [x] 部署管线新增 `runManualSmoke`：先以 manual 模式冒烟未激活的草稿，通过后才激活，失败时工作流从未上线。没有原生能力时返回 null，回到原来的"激活 → Webhook 冒烟 → 失败即停用"。激活后**不再**额外跑一次 production 验证，以免把副作用（比如发邮件）执行两次。
+- [x] `execute_workflow` 和 `deploy_and_test_workflow` 的调用元数据记录 `executionSource`（`native_mcp|webhook`）和 `mode`。
 
 ### Task 4.4：原生版本历史与动态值
 
-- [ ] `get_workflow_history` 增加 `source: "local"|"native"`；native 走原生 MCP，与本地审计快照合并展示。
-- [ ] 新工具 `resolve_node_options`：对需要凭据的动态下拉（如 Slack 频道、Notion 数据库）通过原生 MCP 解析，仅返回选项列表，不返回凭据。
+- [x] `get_workflow_history` 增加 `source: local|native|both`，默认 `local`，保持原行为。
+- [x] 新增只读工具 `resolve_node_options`，内部调用原生 `explore_node_resources`：只转发文档里列出的参数，只返回 name/value/url。
+
+**完成说明（2026-11-05）：**
+- n8n 原生工具签名按 n8n 官方 MCP tools reference 实现：`execute_workflow`（`workflowId`、`executionMode`、`triggerNodeName`、`inputs`）、`get_workflow_execution`、`get_workflow_history`、`explore_node_resources`。
+- 前提：n8n 只能执行打开了 "Available in MCP" 的工作流。新建草稿要么由用户打开 auto-expose（n8n 2.36+），要么逐个打开；否则会回退到 Webhook。通过 Public API 自动打开这个开关**没有做**，因为无法确认 API 是否接受这个设置。
+- 测试：新增 41 个（原生客户端、原生执行、`execute_workflow` 原生与回退、部署 manual 冒烟、实例管理、原生只读工具），根项目共 87 个文件、822 个测试通过，`npm run build` 通过。
+- **未做真实验证**：手头没有 n8n 实例和 token，阶段验收需要在一个配置了 token 的实例上跑一次 `deploy_and_test_workflow`。pgTAP（`supabase/tests/n8n_instance_native_mcp.sql`）同样尚未执行。
 
 **阶段验收：** 配置了 token 的实例上 `deploy_and_test_workflow` 不再需要 Webhook 触发器；未配置 token 的实例行为不变。
 
