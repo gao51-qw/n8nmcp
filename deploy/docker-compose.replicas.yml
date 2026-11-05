@@ -1,0 +1,16 @@
+# Opt-in override: run two app replicas behind Caddy (roadmap Phase 6 drill).
+#
+#   sudo docker compose -f docker-compose.yml -f docker-compose.replicas.yml up -d
+#
+# Before using it, .env.app must contain
+#   MCP_SHORT_WINDOW_LIMITER=supabase
+#   MCP_SHARED_STATE=supabase
+# and migration 20261105120000_mcp_ephemeral_state.sql must be applied.
+# Caddy must load-balance across the replicas: see "Running more than one app
+# replica" in DEPLOY.md for the Caddyfile change.
+services:
+  app:
+    # A fixed container_name prevents scaling; let Compose name the replicas.
+    container_name: !reset null
+    deploy:
+      replicas: 2

@@ -23,6 +23,7 @@ import {
   createConfirmationService,
 } from "./workflow-agent/confirmation.server";
 import { classifyRepairEvidence } from "./workflow-agent/repair-pipeline.server";
+import { traceHeaders } from "./trace-context.server";
 
 /**
  * Composite workflow tools service.
@@ -45,6 +46,7 @@ async function n8n(inst: Inst, path: string, init?: RequestInit) {
   const res = await safeFetchPublicUrl(url, {
     ...init,
     headers: {
+      ...traceHeaders(),
       "X-N8N-API-KEY": inst.api_key,
       "Content-Type": "application/json",
       Accept: "application/json",

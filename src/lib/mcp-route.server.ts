@@ -31,6 +31,8 @@ import {
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
 import { createExpiringStore } from "@/lib/expiring-store";
+import { mcpSharedState } from "@/lib/mcp-shared-state.server";
+import { currentTraceId, runWithTrace, traceContextFrom } from "@/lib/trace-context.server";
 import {
   classifyRequest,
   discoverResult,
@@ -45,7 +47,8 @@ import {
 import {
   confirmationFingerprint,
   InvalidRequestStateError,
-  redeemRequestState,
+  REQUEST_STATE_TTL_MS,
+  REQUEST_STATE_USED,
   signRequestState,
   type VerifiedRequestState,
   verifyRequestState,
@@ -76,19 +79,14 @@ const ROBOTS_NOINDEX = "noindex,nofollow";
 const CLIENT_CAPABILITIES_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const ELICITATION_TTL_MS = 5 * 60_000;
 const MAX_TRACKED_SESSIONS = 10_000;
-const MAX_TRACKED_ELICITATIONS = 10_000;
 const clientCapabilitySessions = createExpiringStore<ToolContext["clientCapabilities"]>({
   maxEntries: MAX_TRACKED_SESSIONS,
 });
 // Elicitations the server has issued, keyed by user + id. A completion is only
 // accepted for an id issued to the same user, and a replay only satisfies the
 // exact request (title + description) that id was issued for.
-const issuedElicitations = createExpiringStore<{ fingerprint: string }>({
-  maxEntries: MAX_TRACKED_ELICITATIONS,
-});
-const elicitationResponses = createExpiringStore<Record<string, unknown>>({
-  maxEntries: MAX_TRACKED_ELICITATIONS,
-});
+// Issued elicitations and their answers live in the shared MCP state so the
+// completion and the replay may reach any replica (mcp-shared-state.server.ts).
 
 type ElicitationRequest = {
   title: string;
@@ -103,10 +101,6 @@ type ElicitationRequest = {
 
 function buildElicitationId() {
   return `elicitation_${randomBytes(12).toString("base64url")}`;
-}
-
-function elicitationKey(userId: string, elicitationId: string) {
-  return `${userId}:${elicitationId}`;
 }
 
 function elicitationFingerprint(request: ElicitationRequest) {
@@ -199,12 +193,11 @@ function resolveToolContext(
   const replay = asRecord(asRecord(requestParams).elicitationResponse);
   const replayId = String(replay.elicitationId ?? "").trim();
   if (replayId) {
-    const key = elicitationKey(userId, replayId);
     return {
       clientCapabilities,
       requestElicitation: async (elicitationRequest: ElicitationRequest) => {
-        const issued = issuedElicitations.take(key);
-        const response = elicitationResponses.take(key);
+        const issued = await mcpSharedState().takeElicitation(userId, replayId);
+        const response = issued?.response;
         if (!issued || !response) {
           throw new Error(
             `Missing elicitation response for ${replayId}. Re-run notifications/elicitation/complete.`,
@@ -224,9 +217,10 @@ function resolveToolContext(
     clientCapabilities?.elicitation === true
       ? async (elicitationRequest: ElicitationRequest) => {
           const elicitationId = buildElicitationId();
-          issuedElicitations.set(
-            elicitationKey(userId, elicitationId),
-            { fingerprint: elicitationFingerprint(elicitationRequest) },
+          await mcpSharedState().issueElicitation(
+            userId,
+            elicitationId,
+            elicitationFingerprint(elicitationRequest),
             ELICITATION_TTL_MS,
           );
           throw new ElicitationRequiredError(elicitationId, {
@@ -246,18 +240,18 @@ function resolveToolContext(
  * Tool context for a modern (2026-07-28) tools/call. Confirmation uses Multi
  * Round-Trip Requests: the first call is answered with an InputRequiredResult
  * (see the ElicitationRequiredError branch in handleRpc) and the client
- * retries with `inputResponses` plus the signed `requestState`. No process
- * memory is needed beyond the redeemed-nonce set. Clients that do not declare
+ * retries with `inputResponses` plus the signed `requestState`. The only
+ * server-side state is the redeemed nonce, kept in the shared MCP state. Clients that do not declare
  * form elicitation get no requestElicitation and fall back to the
  * confirmation-token flow, exactly like legacy clients without elicitation.
  */
-function resolveModernToolContext(
+async function resolveModernToolContext(
   userId: string,
   tool: string,
   args: Record<string, unknown>,
   modern: ModernRequest,
   params: Record<string, unknown>,
-): { toolContext: ToolContext } | { error: string } {
+): Promise<{ toolContext: ToolContext } | { error: string }> {
   const canElicit = supportsFormElicitation(modern.clientCapabilities);
   const clientCapabilities = { elicitation: canElicit };
   if (!canElicit) return { toolContext: { clientCapabilities } };
@@ -270,6 +264,7 @@ function resolveModernToolContext(
       if (error instanceof InvalidRequestStateError) return { error: error.message };
       throw error;
     }
+    if (await mcpSharedState().isRedeemed(verified.nonce)) return { error: REQUEST_STATE_USED };
   }
   const responses = asRecord(params.inputResponses);
 
@@ -284,7 +279,10 @@ function resolveModernToolContext(
             answer.action === "decline" ||
             answer.action === "cancel"
           ) {
-            redeemRequestState(verified);
+            // Redeeming is the arbiter when two retries race (on any replica).
+            if (!(await mcpSharedState().redeem(verified.nonce, REQUEST_STATE_TTL_MS))) {
+              throw new InvalidRequestStateError(REQUEST_STATE_USED);
+            }
             // Decline/cancel yield an empty answer so confirmation fails closed.
             return answer.action === "accept" ? asRecord(answer.content) : {};
           }
@@ -398,7 +396,9 @@ async function handleRpc(
 ): Promise<unknown> {
   if (!ctx) return rpcError(req.id, -32001, "Unauthorized");
   const modern = era.era === "modern" ? era : null;
+  const traceId = currentTraceId();
   const protocolLog = {
+    ...(traceId ? { trace_id: traceId } : {}),
     protocol_version: modern?.version ?? LEGACY_PROTOCOL_VERSION,
     ...(modern?.mcpName ? { mcp_name: modern.mcpName } : {}),
     ...(modern?.clientInfo?.name ? { client_name: modern.clientInfo.name } : {}),
@@ -461,11 +461,15 @@ async function handleRpc(
       if (!completion) {
         return rpcError(req.id, -32602, "Missing elicitation response payload");
       }
-      const key = elicitationKey(ctx.user_id, elicitationId);
-      if (!issuedElicitations.get(key)) {
+      const recorded = await mcpSharedState().completeElicitation(
+        ctx.user_id,
+        elicitationId,
+        completion,
+        ELICITATION_TTL_MS,
+      );
+      if (!recorded) {
         return rpcError(req.id, -32602, "Unknown or expired elicitationId");
       }
-      elicitationResponses.set(key, completion, ELICITATION_TTL_MS);
       return rpcResult(req.id, { ok: true, elicitationId });
     }
 
@@ -501,7 +505,7 @@ async function handleRpc(
       }
       let toolContext: ToolContext;
       if (modern) {
-        const resolved = resolveModernToolContext(ctx.user_id, name, args, modern, params);
+        const resolved = await resolveModernToolContext(ctx.user_id, name, args, modern, params);
         if ("error" in resolved) {
           log.warn("mcp.gateway.request", {
             method: "tools/call",
@@ -657,6 +661,7 @@ async function handleRpc(
           tags: {
             request_id: source.request_id,
             mcp_tool: name,
+            ...(traceId ? { trace_id: traceId } : {}),
           },
           user: { id: ctx.user_id },
         });
@@ -837,6 +842,23 @@ export async function mcpPost(request: Request) {
     return withRequestId(jsonResp(rpcError(null, -32700, "Parse error"), 400), requestId);
   }
 
+  // Continue the caller's trace (headers, or _meta under 2026-07-28) for this
+  // request and every outbound call it makes.
+  const meta =
+    !Array.isArray(body) && isValidMessage(body) ? asRecord(asRecord(body.params)._meta) : null;
+  return runWithTrace(traceContextFrom(request.headers, meta), () =>
+    servePost(request, body, auth, source, sessionId, requestId),
+  );
+}
+
+async function servePost(
+  request: Request,
+  body: unknown,
+  auth: NonNullable<Awaited<ReturnType<typeof authenticateBearer>>>,
+  source: { ip: string; ua: string; request_id: string },
+  sessionId: string | null,
+  requestId: string,
+): Promise<Response> {
   if (!Array.isArray(body) && isValidMessage(body)) {
     const era = classifyRequest(body, request.headers);
     if (era.era === "invalid") {

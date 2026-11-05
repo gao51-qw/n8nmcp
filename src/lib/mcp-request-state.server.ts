@@ -5,12 +5,12 @@
 // answer and echoes `requestState` back. The state passes through the client,
 // so it is attacker-controlled input: it is HMAC-signed and bound to the
 // authenticated user, the tool name, a digest of the arguments, the
-// confirmation being asked and a short expiry. A nonce makes each state
-// redeemable once per process.
+// confirmation being asked and a short expiry. Its nonce is redeemed in the
+// shared MCP state (mcp-shared-state.server.ts), so each state works once even
+// across replicas.
 // Spec: https://modelcontextprotocol.io/specification/2026-07-28/basic/patterns/mrtr
 import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { getMasterKey } from "@/lib/crypto.server";
-import { createExpiringStore } from "@/lib/expiring-store";
 
 export const REQUEST_STATE_TTL_MS = 5 * 60_000;
 const STATE_VERSION = 1;
@@ -44,10 +44,6 @@ export type VerifiedRequestState = {
   fingerprint: string;
   nonce: string;
 };
-
-// Nonces already redeemed. Entries live as long as the state could still be
-// valid, so a state cannot be replayed within its lifetime on this process.
-const redeemedNonces = createExpiringStore<true>({ maxEntries: 50_000 });
 
 let cachedKey: Buffer | null = null;
 
@@ -147,16 +143,11 @@ export function verifyRequestState(
   if (typeof payload.exp !== "number" || payload.exp <= now) {
     throw new InvalidRequestStateError("requestState has expired");
   }
-  if (redeemedNonces.get(payload.nonce, now)) {
-    throw new InvalidRequestStateError("requestState has already been used");
-  }
   return { key: payload.key, fingerprint: payload.fp, nonce: payload.nonce };
 }
 
-/** Marks a verified state as used so it cannot be redeemed again. */
-export function redeemRequestState(state: VerifiedRequestState, now = Date.now()): void {
-  redeemedNonces.set(state.nonce, true, REQUEST_STATE_TTL_MS, now);
-}
+/** Error for a state whose nonce was already redeemed (see mcp-shared-state). */
+export const REQUEST_STATE_USED = "requestState has already been used";
 
 /** Test hook: forget the derived signing key (e.g. after changing the env key). */
 export function resetRequestStateKeyForTests(): void {

@@ -4,7 +4,6 @@ import {
   confirmationFingerprint,
   digestArguments,
   InvalidRequestStateError,
-  redeemRequestState,
   REQUEST_STATE_TTL_MS,
   resetRequestStateKeyForTests,
   signRequestState,
@@ -80,12 +79,6 @@ describe("MRTR requestState", () => {
       () => verifyRequestState(state, binding, now + REQUEST_STATE_TTL_MS + 1),
       "expired",
     );
-  });
-
-  it("can be redeemed only once", () => {
-    const state = signRequestState(binding, confirmation);
-    redeemRequestState(verifyRequestState(state, binding));
-    expectInvalid(() => verifyRequestState(state, binding), "already been used");
   });
 
   it.each([undefined, 42, "", "no-dot", "a.b.c", "x".repeat(5000)])(

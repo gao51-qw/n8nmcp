@@ -162,8 +162,16 @@ export function shortWindowAllow(userId: string): boolean {
   return true;
 }
 
+let warnedMemoryLimiter = false;
+
 export async function checkShortWindowQuota(userId: string): Promise<boolean> {
   if (process.env.MCP_SHORT_WINDOW_LIMITER === "memory") {
+    if (process.env.NODE_ENV === "production" && !warnedMemoryLimiter) {
+      warnedMemoryLimiter = true;
+      console.warn(
+        "[mcp.rate_limit] MCP_SHORT_WINDOW_LIMITER=memory counts per process; with more than one app replica each replica allows the full limit. Use the database limiter in production.",
+      );
+    }
     return shortWindowAllow(userId);
   }
 
@@ -376,9 +384,11 @@ type Inst = NonNullable<Awaited<ReturnType<typeof getDefaultInstance>>>;
 async function n8n(inst: Inst, path: string, init?: RequestInit) {
   const url = `${inst.base_url}${path}`;
   const { safeFetchPublicUrl } = await import("./ssrf-guard.server");
+  const { traceHeaders } = await import("./trace-context.server");
   const res = await safeFetchPublicUrl(url, {
     ...init,
     headers: {
+      ...traceHeaders(),
       "X-N8N-API-KEY": inst.api_key,
       "Content-Type": "application/json",
       Accept: "application/json",
@@ -2076,7 +2086,10 @@ export async function dispatchTool(
         `Knowledge tool ${name} is unavailable because the upstream knowledge MCP is not configured`,
       );
     }
-    const output = await callUpstreamTool(upstreamKnowledgeTool, args, null, caller);
+    const { cachedKnowledgeCall } = await import("./knowledge-cache.server");
+    const output = await cachedKnowledgeCall(upstreamKnowledgeTool, args, () =>
+      callUpstreamTool(upstreamKnowledgeTool, args, null, caller),
+    );
     return { output, upstream: true, category: "knowledge", needsInstance: false };
   }
 

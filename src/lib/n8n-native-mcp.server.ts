@@ -10,6 +10,7 @@
 // or an SSE stream for each response. Every request goes through the SSRF
 // guard (public targets only, no redirects).
 import { safeFetchPublicUrl } from "@/lib/ssrf-guard.server";
+import { traceHeaders } from "@/lib/trace-context.server";
 
 export const NATIVE_MCP_PATH = "/mcp-server/http";
 const CLIENT_PROTOCOL_VERSION = "2025-06-18";
@@ -109,6 +110,7 @@ export class NativeMcpClient {
 
   private headers(method: string, name?: string): Record<string, string> {
     return {
+      ...traceHeaders(),
       authorization: `Bearer ${this.options.token}`,
       "content-type": "application/json",
       accept: "application/json, text/event-stream",

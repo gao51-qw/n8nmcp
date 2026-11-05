@@ -310,6 +310,8 @@ describe("support maintenance cron route", () => {
       sla: { dueSoonCreated: 1, breachedCreated: 1 },
       attachments: { claimed: 2, removed: 2, failed: 0 },
       outbox: { claimed: 3, sent: 3, failed: 0 },
+      // MCP_SHARED_STATE is not "supabase" here, so nothing is pruned.
+      mcpStatePruned: 0,
     });
   });
 });

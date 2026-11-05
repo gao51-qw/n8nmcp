@@ -31,6 +31,7 @@ vi.mock("@/lib/logger.server", () => ({
 
 import { mcpPost } from "../mcp-route.server";
 import { resetRequestStateKeyForTests } from "../mcp-request-state.server";
+import { currentTraceId } from "../trace-context.server";
 
 const VERSION = "2026-07-28";
 const SERVER_INFO_KEY = "io.modelcontextprotocol/serverInfo";
@@ -247,6 +248,30 @@ describe("MCP 2026-07-28 requests", () => {
     expect(status).toBe(200);
     expect(body.error).toBeUndefined();
     expect(body.result).toMatchObject({ resultType: "complete", isError: true });
+  });
+
+  it("continues the caller's trace from _meta into tool dispatch", async () => {
+    let seen: string | undefined;
+    mcpServerMocks.dispatchTool.mockImplementation(async () => {
+      seen = currentTraceId();
+      return { output: { ok: true }, upstream: false, category: "local", needsInstance: false };
+    });
+    const request = modernRequest(
+      "tools/call",
+      { name: "list_workflows", arguments: {} },
+      { id: "traced" },
+    );
+    const raw = JSON.parse(await request.clone().text());
+    raw.params._meta.traceparent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+    await send(
+      new Request(request.url, {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(raw),
+      }),
+    );
+    expect(seen).toBe("4bf92f3577b34da6a3ce929d0e0e4736");
+    expect(currentTraceId()).toBeUndefined();
   });
 
   it("does not offer elicitation to a client that did not declare it", async () => {

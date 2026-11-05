@@ -244,6 +244,33 @@ export type Database = {
         };
         Relationships: [];
       };
+      mcp_ephemeral_state: {
+        Row: {
+          created_at: string;
+          expires_at: string;
+          key: string;
+          kind: string;
+          user_id: string | null;
+          value: Json;
+        };
+        Insert: {
+          created_at?: string;
+          expires_at: string;
+          key: string;
+          kind: string;
+          user_id?: string | null;
+          value?: Json;
+        };
+        Update: {
+          created_at?: string;
+          expires_at?: string;
+          key?: string;
+          kind?: string;
+          user_id?: string | null;
+          value?: Json;
+        };
+        Relationships: [];
+      };
       mcp_call_logs: {
         Row: {
           category: string | null;
@@ -807,6 +834,10 @@ export type Database = {
       increment_prompt_usage: {
         Args: { _n?: number; _user_id: string };
         Returns: undefined;
+      };
+      prune_mcp_ephemeral_state: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
       };
       publish_due_announcements: { Args: never; Returns: number };
     };
