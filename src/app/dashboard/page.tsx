@@ -1,6 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { BarChart3, Bot, Headphones, KeyRound, AppWindow, Server, ShieldCheck } from "lucide-react";
+import {
+  AppWindow,
+  BarChart3,
+  Bot,
+  Headphones,
+  KeyRound,
+  Server,
+  ShieldCheck,
+  UserRound,
+} from "lucide-react";
 
 export const metadata: Metadata = {
   title: "Dashboard",
@@ -19,6 +28,7 @@ const modules = [
     title: "API keys",
     text: "Create, rotate and revoke platform API keys.",
     icon: <KeyRound className="h-5 w-5" />,
+    href: "/dashboard/api-keys",
   },
   {
     title: "Connected apps",
@@ -41,6 +51,12 @@ const modules = [
     title: "Security",
     text: "Audit credential boundaries and outbound protection status.",
     icon: <ShieldCheck className="h-5 w-5" />,
+  },
+  {
+    title: "Account",
+    text: "Account details and permanent account deletion.",
+    icon: <UserRound className="h-5 w-5" />,
+    href: "/dashboard/account",
   },
   {
     title: "Support",
