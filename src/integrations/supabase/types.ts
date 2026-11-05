@@ -313,6 +313,11 @@ export type Database = {
           status: string;
           updated_at: string;
           user_id: string;
+          mcp_capabilities: Json;
+          mcp_checked_at: string | null;
+          mcp_token_encrypted: string | null;
+          mcp_token_iv: string | null;
+          mcp_token_tag: string | null;
         };
         Insert: {
           api_key_encrypted: string;
@@ -326,6 +331,11 @@ export type Database = {
           status?: string;
           updated_at?: string;
           user_id: string;
+          mcp_capabilities?: Json;
+          mcp_checked_at?: string | null;
+          mcp_token_encrypted?: string | null;
+          mcp_token_iv?: string | null;
+          mcp_token_tag?: string | null;
         };
         Update: {
           api_key_encrypted?: string;
@@ -339,6 +349,11 @@ export type Database = {
           status?: string;
           updated_at?: string;
           user_id?: string;
+          mcp_capabilities?: Json;
+          mcp_checked_at?: string | null;
+          mcp_token_encrypted?: string | null;
+          mcp_token_iv?: string | null;
+          mcp_token_tag?: string | null;
         };
         Relationships: [];
       };
