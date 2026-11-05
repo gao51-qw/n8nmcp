@@ -49,6 +49,17 @@ export type WorkflowDeploymentDependencies = {
   ): Promise<SmokeExecution>;
   activateWorkflow(workflowId: string): Promise<void>;
   deactivateWorkflow(workflowId: string): Promise<void>;
+  /**
+   * Smoke-tests the inactive draft without activating it (n8n instance-level
+   * MCP, `manual` mode). Returns null when that is not possible for this
+   * instance or workflow, in which case the pipeline falls back to activating
+   * first and testing through the production webhook.
+   */
+  runManualSmoke?(
+    workflowId: string,
+    workflow: WorkflowLike,
+    testData: Record<string, unknown>,
+  ): Promise<SmokeExecution | null>;
 };
 
 export type DeploymentResult = {
@@ -61,6 +72,9 @@ export type DeploymentResult = {
       success: boolean;
       output: Record<string, unknown> | null;
       error: string | null;
+      /** "manual": inactive draft via native MCP; "production": live webhook. */
+      mode?: "manual" | "production";
+      executionSource?: "native_mcp" | "webhook";
     };
     activation: { success: boolean; error: string | null; rolledBack: boolean };
   };
@@ -114,9 +128,62 @@ export class WorkflowDeploymentPipeline {
       confirmationToken: input.confirmationToken,
     });
 
-    // The n8n Public API cannot start an execution; the smoke test goes through the
-    // workflow's production webhook, which n8n only registers while the workflow is
-    // active. So activate first, smoke-test, and deactivate again on any failure.
+    // Preferred: test the inactive draft through n8n's instance-level MCP and
+    // only activate once it passed, so a failing test never touches production.
+    if (this.dependencies.runManualSmoke) {
+      let manual: SmokeExecution | null;
+      try {
+        manual = await this.dependencies.runManualSmoke(input.workflowId, workflow, input.testData);
+      } catch (error) {
+        result.results.test = {
+          ...result.results.test,
+          mode: "manual",
+          executionSource: "native_mcp",
+        };
+        result.results.test.error = errorMessage(error);
+        result.message = "Smoke test failed; the workflow was not activated.";
+        return result;
+      }
+      if (manual) {
+        result.results.test = {
+          ...result.results.test,
+          mode: "manual",
+          executionSource: "native_mcp",
+        };
+        const testError = applySmokeExecution(result, manual, rules);
+        if (testError) {
+          result.message = `${testError}; the workflow was not activated.`;
+          return result;
+        }
+        try {
+          await this.dependencies.activateWorkflow(input.workflowId);
+          result.results.activation.success = true;
+        } catch (error) {
+          result.results.activation.error = errorMessage(error);
+          try {
+            await this.dependencies.deactivateWorkflow(input.workflowId);
+          } catch (deactivationError) {
+            result.results.activation.error += `; safety deactivation failed: ${errorMessage(deactivationError)}`;
+          }
+          result.message =
+            "Activation failed after a passing smoke test; a safety deactivation was attempted.";
+          return result;
+        }
+        result.success = true;
+        result.message = "Workflow passed a smoke test as an inactive draft and was activated.";
+        return result;
+      }
+    }
+
+    // Fallback: the n8n Public API cannot start an execution; the smoke test goes
+    // through the workflow's production webhook, which n8n only registers while the
+    // workflow is active. So activate first, smoke-test, and deactivate again on
+    // any failure.
+    result.results.test = {
+      ...result.results.test,
+      mode: "production",
+      executionSource: "webhook",
+    };
     try {
       await this.dependencies.activateWorkflow(input.workflowId);
       result.results.activation.success = true;
@@ -139,25 +206,8 @@ export class WorkflowDeploymentPipeline {
       return this.deactivateAfterFailure(result, input.workflowId, "Smoke test failed");
     }
 
-    result.results.test.output = execution.output ?? null;
-    result.results.test.success = execution.finished === true && execution.error === undefined;
-    if (!result.results.test.success) {
-      result.results.test.error = errorMessage(
-        execution.error ?? "Workflow execution did not finish",
-      );
-      return this.deactivateAfterFailure(result, input.workflowId, "Smoke test failed");
-    }
-
-    const ruleError = evaluateRules(result.results.test.output, rules);
-    if (ruleError) {
-      result.results.test.success = false;
-      result.results.test.error = ruleError;
-      return this.deactivateAfterFailure(
-        result,
-        input.workflowId,
-        "Smoke-test output validation failed",
-      );
-    }
+    const testError = applySmokeExecution(result, execution, rules);
+    if (testError) return this.deactivateAfterFailure(result, input.workflowId, testError);
 
     result.success = true;
     result.message = "Workflow activated and smoke-tested successfully.";
@@ -180,6 +230,32 @@ export class WorkflowDeploymentPipeline {
     }
     return result;
   }
+}
+
+/**
+ * Records a smoke execution on the result. Returns the failure reason, or null
+ * when the run finished cleanly and its output satisfied every rule.
+ */
+function applySmokeExecution(
+  result: DeploymentResult,
+  execution: SmokeExecution,
+  rules: DeploymentValidationRule[],
+): string | null {
+  result.results.test.output = execution.output ?? null;
+  result.results.test.success = execution.finished === true && execution.error === undefined;
+  if (!result.results.test.success) {
+    result.results.test.error = errorMessage(
+      execution.error ?? "Workflow execution did not finish",
+    );
+    return "Smoke test failed";
+  }
+  const ruleError = evaluateRules(result.results.test.output, rules);
+  if (ruleError) {
+    result.results.test.success = false;
+    result.results.test.error = ruleError;
+    return "Smoke-test output validation failed";
+  }
+  return null;
 }
 
 function emptyResult(workflowFingerprint: string): DeploymentResult {

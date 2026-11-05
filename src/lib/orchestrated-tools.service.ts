@@ -35,6 +35,8 @@ type Inst = {
   name: string;
   base_url: string;
   api_key: string;
+  /** Instance-level MCP token and native tools, when configured. */
+  native?: { token: string; tools: string[] } | null;
 };
 
 async function n8n(inst: Inst, path: string, init?: RequestInit) {
@@ -246,6 +248,41 @@ export class OrchestratedToolsService {
             finished: execution.finished,
             error: execution.error ?? undefined,
             output: execution.output,
+          };
+        },
+        runManualSmoke: async (workflowId, workflow, testData) => {
+          // Native MCP lets n8n run the inactive draft ("manual" mode), so the
+          // workflow only goes live after it passed. null → webhook fallback.
+          const { nativeClientFor, nativeToolAvailable, runViaNativeMcp } =
+            await import("./n8n-native-execution.server");
+          if (!nativeToolAvailable(this.inst, "execute_workflow")) return null;
+          const { NativeMcpError } = await import("./n8n-native-mcp.server");
+          let run: Awaited<ReturnType<typeof runViaNativeMcp>>;
+          try {
+            run = await runViaNativeMcp(nativeClientFor(this.inst), {
+              workflowId,
+              workflow,
+              mode: "manual",
+              data: testData,
+            });
+          } catch (error) {
+            // Not started (rejected token, tool error such as "not available in
+            // MCP"): fall back. A network failure leaves it unknown whether the
+            // draft ran, so it is reported rather than run again.
+            if (error instanceof NativeMcpError && error.kind !== "unavailable") return null;
+            throw error;
+          }
+          if (!run.started) return null;
+          if (!run.execution) {
+            return {
+              finished: false,
+              error: `Execution ${run.executionId} started but its result could not be read`,
+            };
+          }
+          return {
+            finished: run.execution.finished,
+            error: run.execution.error ?? undefined,
+            output: run.execution.output,
           };
         },
         activateWorkflow: async (workflowId) => {

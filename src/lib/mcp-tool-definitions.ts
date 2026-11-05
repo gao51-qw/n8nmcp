@@ -42,6 +42,7 @@ const READ_ONLY_TOOLS = new Set([
   "create_workflow_review_batches",
   "audit_expression_dependencies",
   "get_workflow_history",
+  "resolve_node_options",
   "get_audit_statistics",
   "detect_suspicious_activity",
 ]);
@@ -696,6 +697,46 @@ const RAW_LOCAL_TOOLS = [
           type: "number",
           default: 20,
           description: "Max number of history entries to return",
+        },
+        source: {
+          type: "string",
+          enum: ["local", "native", "both"],
+          default: "local",
+          description:
+            "local: this gateway's audit snapshots (usable with rollback_workflow). native: n8n's own version history (needs the instance-level MCP token, n8n 2.29+). both: side by side.",
+        },
+      },
+    },
+  },
+  {
+    name: "resolve_node_options",
+    description:
+      "Resolve the options of a node parameter that n8n loads with a credential, such as Slack channels or Notion databases, so the workflow can use real values. Needs the instance-level MCP token (n8n 2.27+). Returns names and values only; credentials stay in n8n. Get methodName and methodType from the node type definition.",
+    inputSchema: {
+      type: "object",
+      required: [
+        "nodeType",
+        "version",
+        "methodName",
+        "methodType",
+        "credentialType",
+        "credentialId",
+      ],
+      properties: {
+        nodeType: { type: "string", description: "Full node type, e.g. n8n-nodes-base.slack" },
+        version: { type: "number", description: "Node type version" },
+        methodName: {
+          type: "string",
+          description: "listSearch or loadOptions method of the parameter",
+        },
+        methodType: { type: "string", enum: ["listSearch", "loadOptions"] },
+        credentialType: { type: "string", description: "Credential type, e.g. slackOAuth2Api" },
+        credentialId: { type: "string", description: "Id of a credential in the n8n instance" },
+        filter: { type: "string", description: "Optional search text (listSearch)" },
+        paginationToken: { type: "string", description: "Continue a listSearch page" },
+        currentNodeParameters: {
+          type: "object",
+          description: "Other parameter values the options depend on",
         },
       },
     },

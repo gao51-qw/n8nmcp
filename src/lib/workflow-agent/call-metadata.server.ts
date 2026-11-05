@@ -110,11 +110,23 @@ export function buildWorkflowAgentCallMetadata(
       smokeTest: {
         success: test.success === true,
         error: stringValue(test.error),
+        executionSource: stringValue(test.executionSource),
+        mode: stringValue(test.mode),
       },
       activation: {
         success: activation.success === true,
         error: stringValue(activation.error),
       },
+    };
+  } else if (name === "execute_workflow") {
+    const execution = asRecord(result.execution);
+    metadata = {
+      workflowId: stringValue(args.id ?? result.workflowId),
+      businessSuccess: result.success === true,
+      executionSource: stringValue(result.executionSource),
+      mode: stringValue(result.mode),
+      executionId: stringValue(execution.id),
+      executionStatus: stringValue(execution.status),
     };
   } else {
     return {};

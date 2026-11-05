@@ -42,6 +42,101 @@ function createHarness(overrides: Record<string, unknown> = {}) {
   return { pipeline: new WorkflowDeploymentPipeline(dependencies as never), dependencies, events };
 }
 
+describe("WorkflowDeploymentPipeline with a native manual smoke test", () => {
+  const input = {
+    userId: "user-1",
+    workflowId: "wf-1",
+    testData: { sample: true },
+    validationRules: [{ field: "status", condition: "equals", expectedValue: "ok" }],
+    confirmationToken: "token-1",
+  };
+
+  function manualSmoke(result: unknown) {
+    return vi.fn(async () => result);
+  }
+
+  it("tests the inactive draft first and activates only after it passed", async () => {
+    const events: string[] = [];
+    const runManualSmoke = vi.fn(async () => {
+      events.push("manual-smoke");
+      return { finished: true, output: { status: "ok" } };
+    });
+    const { pipeline, dependencies, events: harnessEvents } = createHarness({ runManualSmoke });
+
+    const result = await pipeline.deploy(input);
+
+    expect(result.success).toBe(true);
+    expect(result.message).toBe(
+      "Workflow passed a smoke test as an inactive draft and was activated.",
+    );
+    expect(result.results.test).toMatchObject({
+      success: true,
+      mode: "manual",
+      executionSource: "native_mcp",
+    });
+    expect(runManualSmoke).toHaveBeenCalledWith("wf-1", expect.objectContaining({ id: "wf-1" }), {
+      sample: true,
+    });
+    expect(dependencies.runWorkflow).not.toHaveBeenCalled();
+    expect(events).toEqual(["manual-smoke"]);
+    expect(harnessEvents.indexOf("consume-confirmation")).toBeLessThan(
+      harnessEvents.indexOf("activate"),
+    );
+  });
+
+  it("never activates when the manual smoke test fails", async () => {
+    const { pipeline, dependencies } = createHarness({
+      runManualSmoke: manualSmoke({ finished: true, error: "Slack returned 401" }),
+    });
+
+    const result = await pipeline.deploy(input);
+
+    expect(result.success).toBe(false);
+    expect(result.message).toBe("Smoke test failed; the workflow was not activated.");
+    expect(result.results.test.error).toBe("Slack returned 401");
+    expect(dependencies.activateWorkflow).not.toHaveBeenCalled();
+    expect(dependencies.deactivateWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("never activates when the output rules fail", async () => {
+    const { pipeline, dependencies } = createHarness({
+      runManualSmoke: manualSmoke({ finished: true, output: { status: "bad" } }),
+    });
+
+    const result = await pipeline.deploy(input);
+
+    expect(result.message).toBe(
+      "Smoke-test output validation failed; the workflow was not activated.",
+    );
+    expect(dependencies.activateWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("reports an error from the native run without activating", async () => {
+    const { pipeline, dependencies } = createHarness({
+      runManualSmoke: vi.fn(async () => {
+        throw new Error("socket hang up");
+      }),
+    });
+
+    const result = await pipeline.deploy(input);
+
+    expect(result.results.test.error).toBe("socket hang up");
+    expect(dependencies.activateWorkflow).not.toHaveBeenCalled();
+    expect(dependencies.runWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("falls back to activate-then-webhook when no native run is possible", async () => {
+    const { pipeline, dependencies, events } = createHarness({ runManualSmoke: manualSmoke(null) });
+
+    const result = await pipeline.deploy(input);
+
+    expect(result.success).toBe(true);
+    expect(result.results.test).toMatchObject({ mode: "production", executionSource: "webhook" });
+    expect(events.indexOf("activate")).toBeLessThan(events.indexOf("smoke-test"));
+    expect(dependencies.runWorkflow).toHaveBeenCalled();
+  });
+});
+
 describe("WorkflowDeploymentPipeline", () => {
   it("loads, validates, confirms, activates, then smoke-tests through the live webhook", async () => {
     const { pipeline, events, dependencies } = createHarness();

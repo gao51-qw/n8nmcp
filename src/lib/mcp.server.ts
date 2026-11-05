@@ -317,15 +317,44 @@ export async function recordCall(opts: {
 }
 
 /** Pick the user's first n8n instance (single-instance MVP). */
-export async function getDefaultInstance(userId: string) {
+/** A user's n8n instance with decrypted credentials (server-side only). */
+export type N8nInstance = {
+  id: string;
+  name: string;
+  base_url: string;
+  api_key: string;
+  /** Present when an instance-level MCP token is stored. */
+  native?: NativeInstanceMcp | null;
+};
+
+export async function getDefaultInstance(userId: string): Promise<N8nInstance | null> {
   const { data } = await supabaseAdmin
     .from("n8n_instances")
-    .select("id,base_url,api_key_encrypted,api_key_iv,api_key_tag,name")
+    .select(
+      "id,base_url,api_key_encrypted,api_key_iv,api_key_tag,name,mcp_token_encrypted,mcp_token_iv,mcp_token_tag,mcp_capabilities",
+    )
     .eq("user_id", userId)
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
   if (!data) return null;
+  const capabilities =
+    data.mcp_capabilities &&
+    typeof data.mcp_capabilities === "object" &&
+    !Array.isArray(data.mcp_capabilities)
+      ? (data.mcp_capabilities as Record<string, unknown>)
+      : {};
+  const native: NativeInstanceMcp | null =
+    data.mcp_token_encrypted && data.mcp_token_iv && data.mcp_token_tag
+      ? {
+          token: decryptSecret({
+            ciphertext: data.mcp_token_encrypted,
+            iv: data.mcp_token_iv,
+            tag: data.mcp_token_tag,
+          }),
+          tools: Array.isArray(capabilities.tools) ? capabilities.tools.map(String) : [],
+        }
+      : null;
   return {
     id: data.id,
     name: data.name,
@@ -335,8 +364,12 @@ export async function getDefaultInstance(userId: string) {
       iv: data.api_key_iv,
       tag: data.api_key_tag,
     }),
+    native,
   };
 }
+
+/** Decrypted instance-level MCP token and the native tools found for it. */
+export type NativeInstanceMcp = { token: string; tools: string[] };
 
 type Inst = NonNullable<Awaited<ReturnType<typeof getDefaultInstance>>>;
 
@@ -447,6 +480,49 @@ export async function runTool(
       if (!args.id) throw new Error("id (workflow id) is required");
       const id = String(args.id);
       await requireConfirmation(args, "Execute workflow", {}, context);
+
+      // Preferred: n8n's instance-level MCP server, when a token is stored and
+      // it offers execute_workflow. Active workflows run their published
+      // version ("production"); inactive drafts run as a manual test.
+      let nativeFallback: string | null = null;
+      const { nativeToolAvailable } = await import("./n8n-native-execution.server");
+      if (nativeToolAvailable(inst, "execute_workflow")) {
+        const { nativeClientFor, runViaNativeMcp } = await import("./n8n-native-execution.server");
+        const { NativeMcpError } = await import("./n8n-native-mcp.server");
+        const workflow = (await n8n(
+          inst,
+          `/api/v1/workflows/${encodeURIComponent(id)}`,
+        )) as WorkflowLike;
+        const mode = workflow.active === true ? "production" : "manual";
+        try {
+          const run = await runViaNativeMcp(nativeClientFor(inst), {
+            workflowId: id,
+            workflow,
+            mode,
+            data: asObj(args.data),
+          });
+          if (run.started) {
+            const execution = run.execution;
+            return {
+              success: true,
+              workflowId: id,
+              executionSource: "native_mcp",
+              mode,
+              execution,
+              message: execution?.finished
+                ? `Execution ${run.executionId} finished with status ${execution.status ?? "unknown"}.`
+                : `Execution ${run.executionId} is still running; check it with list_executions.`,
+            };
+          }
+          nativeFallback = run.error;
+        } catch (error) {
+          // A network failure while starting leaves it unknown whether n8n ran
+          // the workflow; do not risk running it a second time.
+          if (!(error instanceof NativeMcpError) || error.kind === "unavailable") throw error;
+          nativeFallback = error.message;
+        }
+      }
+
       // The Public API has no execution endpoint: run the workflow through its
       // production webhook and report the execution n8n recorded for it.
       const {
@@ -469,6 +545,9 @@ export async function runTool(
       return {
         success: true,
         workflowId: id,
+        executionSource: "webhook",
+        mode: "production",
+        ...(nativeFallback ? { nativeFallbackReason: nativeFallback } : {}),
         webhook,
         execution,
         message: execution
@@ -1999,6 +2078,35 @@ export async function dispatchTool(
     }
     const output = await callUpstreamTool(upstreamKnowledgeTool, args, null, caller);
     return { output, upstream: true, category: "knowledge", needsInstance: false };
+  }
+
+  // Native n8n MCP tools (instance-level MCP token required).
+  if (name === "resolve_node_options") {
+    if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
+    const { resolveNodeOptions } = await import("./n8n-native-tools.server");
+    return {
+      output: await resolveNodeOptions(inst, args),
+      upstream: false,
+      category: "local",
+      needsInstance: false,
+    };
+  }
+  if (name === "get_workflow_history" && (args.source === "native" || args.source === "both")) {
+    if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
+    const workflowId = String(args.workflowId ?? "").trim();
+    if (!workflowId) throw new Error("workflowId is required");
+    const { nativeWorkflowHistory } = await import("./n8n-native-tools.server");
+    const native = await nativeWorkflowHistory(inst, workflowId, Number(args.limit ?? 20));
+    const output =
+      args.source === "both"
+        ? {
+            workflowId,
+            source: "both",
+            local: await handleAuditReadTool(name, args, caller?.user_id),
+            native,
+          }
+        : { workflowId, source: "native", native };
+    return { output, upstream: false, category: "local", needsInstance: false };
   }
 
   // Audit read tools resolve from the audit log and need only the caller's id.
