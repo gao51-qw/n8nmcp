@@ -1316,11 +1316,14 @@ export class OrchestratedToolsService {
     // 1. Fetch the workflow
     const workflow = (await n8n(this.inst, `/api/v1/workflows/${workflowId}`)) as N8nWorkflowResult;
 
-    // 2. Fetch recent failed executions
-    const executions = (await n8n(
+    // 2. Fetch recent failed executions. The Public API wraps the list in
+    // { data, nextCursor } and only includes run data (where the error lives)
+    // when asked.
+    const executionPage = (await n8n(
       this.inst,
-      `/api/v1/executions?workflowId=${workflowId}&status=error&limit=5`,
-    )) as N8nExecutionRow[];
+      `/api/v1/executions?workflowId=${workflowId}&status=error&limit=5&includeData=true`,
+    )) as { data?: N8nExecutionRow[] } | N8nExecutionRow[];
+    const executions = Array.isArray(executionPage) ? executionPage : (executionPage?.data ?? []);
 
     if (!executions || executions.length === 0) {
       return {
