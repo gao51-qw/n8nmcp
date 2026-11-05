@@ -43,6 +43,12 @@ const READ_ONLY_TOOLS = new Set([
   "audit_expression_dependencies",
   "get_workflow_history",
   "resolve_node_options",
+  "list_credentials",
+  "get_credential_schema",
+  "list_projects",
+  "audit_instance",
+  "get_execution",
+  "autofix_workflow",
   "get_audit_statistics",
   "detect_suspicious_activity",
 ]);
@@ -54,6 +60,10 @@ const DESTRUCTIVE_TOOLS = new Set([
   "update_partial_workflow",
   "rollback_workflow",
   "deploy_and_test_workflow",
+  "manage_folders",
+  "manage_tags",
+  "manage_data_table",
+  "delete_execution",
 ]);
 
 const IDEMPOTENT_MUTATIONS = new Set([
@@ -763,6 +773,161 @@ const RAW_LOCAL_TOOLS = [
           description:
             "Short-lived token returned by the previous rollback_workflow confirmation challenge.",
         },
+      },
+    },
+  },
+  {
+    name: "list_credentials",
+    description:
+      "List credentials in the n8n instance: id, name and type only. Credential data (secrets) is never returned. Use the id when a node needs a credential.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", default: 50, description: "Page size (max 250)" },
+        cursor: { type: "string", description: "nextCursor from the previous page" },
+      },
+    },
+  },
+  {
+    name: "get_credential_schema",
+    description:
+      "Get the field schema of a credential type (which fields a credential of that type needs). Contains no secrets.",
+    inputSchema: {
+      type: "object",
+      required: ["credentialType"],
+      properties: {
+        credentialType: { type: "string", description: "Credential type name, e.g. slackApi" },
+      },
+    },
+  },
+  {
+    name: "list_projects",
+    description: "List projects in the n8n instance (needed for folders).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        limit: { type: "number", default: 50 },
+        cursor: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "manage_folders",
+    description:
+      "List, create, rename or delete folders in an n8n project. Deleting asks for confirmation.",
+    inputSchema: {
+      type: "object",
+      required: ["action", "projectId"],
+      properties: {
+        action: { type: "string", enum: ["list", "create", "rename", "delete"] },
+        projectId: { type: "string" },
+        folderId: { type: "string", description: "Required for rename and delete" },
+        name: { type: "string", description: "Required for create and rename" },
+        parentFolderId: { type: "string", description: "Optional parent for create" },
+        confirm: { type: "boolean" },
+        confirmationToken: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "manage_tags",
+    description: "List, create, rename or delete workflow tags. Deleting asks for confirmation.",
+    inputSchema: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: { type: "string", enum: ["list", "create", "rename", "delete"] },
+        tagId: { type: "string", description: "Required for rename and delete" },
+        name: { type: "string", description: "Required for create and rename" },
+        limit: { type: "number" },
+        cursor: { type: "string" },
+        confirm: { type: "boolean" },
+        confirmationToken: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "manage_data_table",
+    description:
+      "Work with n8n data tables: list tables, list rows (optional filter), insert rows (max 500 per call) or delete rows matching a filter. Deleting asks for confirmation and always needs a filter.",
+    inputSchema: {
+      type: "object",
+      required: ["action"],
+      properties: {
+        action: {
+          type: "string",
+          enum: ["list_tables", "list_rows", "insert_rows", "delete_rows"],
+        },
+        dataTableId: { type: "string", description: "16-character data table id" },
+        rows: { type: "array", items: { type: "object" }, description: "Rows for insert_rows" },
+        filter: {
+          type: "object",
+          description:
+            "n8n data table filter, e.g. {type: 'and', filters: [{columnName, condition, value}]}",
+        },
+        limit: { type: "number" },
+        cursor: { type: "string" },
+        confirm: { type: "boolean" },
+        confirmationToken: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "audit_instance",
+    description:
+      "Run n8n's security audit and return its risk report (credentials, database, nodes, filesystem, instance). Read-only.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        categories: {
+          type: "array",
+          items: {
+            type: "string",
+            enum: ["credentials", "database", "nodes", "filesystem", "instance"],
+          },
+        },
+        daysAbandonedWorkflow: {
+          type: "number",
+          description: "Days without runs before a workflow counts as abandoned",
+        },
+      },
+    },
+  },
+  {
+    name: "get_execution",
+    description:
+      "Get one execution: status, error, last node and output. includeData adds the full run data (omitted when over 100k characters).",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string", description: "Execution id" },
+        includeData: { type: "boolean", default: false },
+      },
+    },
+  },
+  {
+    name: "delete_execution",
+    description: "Delete one execution record. Asks for confirmation.",
+    inputSchema: {
+      type: "object",
+      required: ["id"],
+      properties: {
+        id: { type: "string" },
+        confirm: { type: "boolean" },
+        confirmationToken: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "autofix_workflow",
+    description:
+      "Propose repairs for a workflow from its recent failed executions. Returns WorkflowOperation previews; nothing is changed. Apply them with preview_workflow_diff, then update_partial_workflow.",
+    inputSchema: {
+      type: "object",
+      required: ["workflowId"],
+      properties: {
+        workflowId: { type: "string" },
       },
     },
   },

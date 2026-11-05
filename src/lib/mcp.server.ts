@@ -2080,6 +2080,32 @@ export async function dispatchTool(
     return { output, upstream: true, category: "knowledge", needsInstance: false };
   }
 
+  // Instance administration over the Public API (credentials metadata,
+  // projects, folders, tags, data tables, executions, security audit).
+  const { ADMIN_TOOL_NAMES, runAdminTool } = await import("./n8n-admin.server");
+  if (ADMIN_TOOL_NAMES.has(name)) {
+    if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
+    const output = await runAdminTool(
+      name,
+      args,
+      (path, init) => n8n(inst, path, init),
+      (operation, scope) =>
+        requireConfirmation(args, operation, { requireToken: true, scope }, caller),
+    );
+    return { output, upstream: false, category: "local", needsInstance: false };
+  }
+  if (name === "autofix_workflow") {
+    if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
+    const { OrchestratedToolsService } = await import("./orchestrated-tools.service");
+    const service = new OrchestratedToolsService(inst);
+    const output = await service.callTool(
+      "fix_workflow_errors",
+      { workflowId: args.workflowId },
+      caller,
+    );
+    return { output, upstream: false, category: "local", needsInstance: false };
+  }
+
   // Native n8n MCP tools (instance-level MCP token required).
   if (name === "resolve_node_options") {
     if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
