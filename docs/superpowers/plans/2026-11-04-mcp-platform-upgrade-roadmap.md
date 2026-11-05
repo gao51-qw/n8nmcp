@@ -349,12 +349,16 @@
 
 ## 阶段 6：多副本就绪与可观测性
 
-- [ ] **确认/elicitation 状态落库**：阶段 1.3 的 `requestState` 已无状态；旧协议路径的 `issuedElicitations` / `elicitationResponses` 迁移到 Supabase 表 `mcp_elicitations`（TTL 5 分钟，`oauth_prune_expired` 同一 cron 清理），`expiring-store` 仅作本地缓存。
-- [ ] **限流**：`MCP_SHORT_WINDOW_LIMITER=memory` 仅限单副本；文档明确生产必须用数据库限流器。
-- [ ] **OpenTelemetry**：从 `_meta` 读取 `traceparent`/`tracestate`，贯穿到 n8n 请求与 Supabase 调用；Sentry 事件附 trace id。
-- [ ] **工具结果缓存**：`search_nodes`、`get_node`、`search_templates` 结果按参数哈希缓存 5 分钟（进程内 `expiring-store`，上限 1,000 条）。
-- [ ] **审计 M 决策**：确认 `deleteUserAccount` 是否接成 GDPR 删除端点（建议接：`DELETE /api/dashboard/account` + 确认邮件）；`generatePlatformApiKey` 若已被 dashboard 路由替代则删除；其余未引用导出删除。
-- [ ] **部署**：`deploy/docker-compose.yml` 支持 `app` 服务 `replicas: 2` 的演练，Caddy 负载均衡；验证两副本下 OAuth、确认流程、限流均正确。
+- [x] **确认/elicitation 状态落库**：新表 `mcp_ephemeral_state`（迁移 `20261105120000`），只有 service role 能访问，也带了 agent token 的 restrictive 策略。`src/lib/mcp-shared-state.server.ts` 提供内存和 Supabase 两种后端，用 `MCP_SHARED_STATE=supabase` 切换。旧协议的 elicitation 签发、完成和单次回放，以及 2026-07-28 `requestState` 的 nonce 单次使用，都改用它。nonce 靠主键冲突判定谁先用，elicitation 用 `delete … returning` 保证只取一次。过期数据由每 5 分钟一次的 support 维护 cron 调用 `prune_mcp_ephemeral_state()` 清理（计划里写的 `oauth_prune_expired` 并不存在）。旧协议按 session 缓存的客户端能力仍然只在进程内，落到别的副本时会回退到确认令牌流程，这是安全的。
+- [x] **限流**：生产环境下如果 `MCP_SHORT_WINDOW_LIMITER=memory` 或 `MCP_SHARED_STATE` 不是 supabase，启动时打一次警告；`deploy/.env.app.example` 和 DEPLOY.md 写明了多副本时必须改用数据库。
+- [x] **Trace 上下文**：从 `_meta`（优先）或请求头读取 W3C `traceparent`/`tracestate`，用 AsyncLocalStorage 在整个请求内传递，并加到发往 n8n 的请求上（Public API、编排工具、原生 MCP）；日志带 `trace_id`，Sentry 事件打 `trace_id` tag。**未做**：Supabase 调用的传播（supabase-js 客户端是全局单例，请求头固定），也没有接入 OTel SDK 生成 span。
+- [x] **工具结果缓存**：`search_nodes`、`get_node`、`search_templates`、`get_template` 按工具名加参数摘要缓存 5 分钟，最多 1,000 条，错误结果不缓存。这些结果与用户无关，所以所有用户共用一份。
+- [x] **审计 M 决策**：账号删除做成了自助接口 `DELETE /api/dashboard/account` 和 `/dashboard/account` 页面。确认方式改为**输入邮箱**，没有用确认邮件，因为仓库里没有现成可用的事务邮件通道；有付费订阅时拒绝删除；删除请求记录在 `account_deletion_requests`。`deleteUserAccount` 之前会忽略 Supabase 返回的错误，现在任何一步失败都会在删除登录账号之前停止。原先完全没有 API key 管理，`generatePlatformApiKey` 现在接成了 `/api/dashboard/api-keys` 和 `/dashboard/api-keys`（只存哈希，完整 key 只显示一次，最多 20 个有效 key）。`TemplateService`、`error-page.ts` 已删除；Paddle checkout helper 保留。
+- [ ] **部署演练**：已准备 `deploy/docker-compose.replicas.yml`（已用 `docker compose config` 验证合并结果），DEPLOY.md 写了 Caddy `dynamic a` 负载均衡配置和演练清单。**两副本实测没有跑**：本机 Docker daemon 没启动，Caddy 配置也没有用 `caddy validate` 验证过。
+
+---
+
+**完成说明（2026-11-05）：** 新增测试 30 个，根项目共 93 个文件、860 个测试通过，`npm run build` 通过。两个 pgTAP 文件（`oauth_grants`、`mcp_ephemeral_state`）和 `n8n_instance_native_mcp` 都还没有执行。
 
 ---
 
@@ -364,6 +368,7 @@
 |---|---|---|
 | 客户端迁移到 2026-07-28 的节奏不一 | 过早删旧路径会断旧客户端 | 双版本至少 6 个月，按 `Mcp-Name` 统计版本分布后再下线 |
 | Supabase OAuth Server 仍是 beta，且无 CIMD / 自定义 scope | 客户端变 CIMD-only 或 beta 事故时阶段 2 需改自建 AS（+3 天） | 令牌校验与 scope 判定隔离在 `src/lib/oauth/`；scope 与撤销状态存自有表，不依赖 Supabase 的 scope 系统 |
+| 多副本下内存状态不一致 | 确认流程在副本间丢失、限流放大 | `MCP_SHARED_STATE=supabase`、`MCP_SHORT_WINDOW_LIMITER=supabase`，生产启动时有警告；两副本演练待执行 |
 | 社区包供应链风险 | 恶意包进入知识库 | 静态解析不执行代码、SRI、trusted host、信任等级标注、非 verified 节点部署需确认 |
 | n8n 原生 MCP 仍在快速变化（2.13 → 2.46 间多次改动） | 客户端适配反复 | 能力探测 + 缓存 `mcp_capabilities`，所有原生调用都有公共 API 回退 |
 | n8n 官方 MCP 吞掉连接层价值 | 产品差异化下降 | 护城河放在安全管线、图分析、多租户治理与社区节点知识，不比工具数量 |
@@ -384,3 +389,4 @@ npx.cmd --yes node@20 ./node_modules/typescript/bin/tsc -p tsconfig.json
 
 - 2026-11-04：确定升级方向为"协议 → OAuth → 知识 → 原生 MCP → 工具面 → 多副本"，不做架构重写。
 - 2026-11-04：阶段 2 的授权服务器采用 Supabase Auth OAuth 2.1 Server（公测中，所有计划免费，支持 DCR / PKCE / refresh / JWKS，无 CIMD、无自定义 scope、撤销不即时）。本应用只做资源服务器；scope 与撤销由自有 `oauth_grants` 表承担；`src/lib/oauth/` 作为 issuer 无关适配层。切换到自建 AS 的触发条件：目标客户端 CIMD-only、多域名 consent 不可行、或 beta 稳定性事故。Task 2.0 的 staging 验证结果待补。
+- 2026-11-05：阶段 0–6 的代码部分全部完成并提交（具体看各阶段的完成说明）。剩下的工作都需要外部环境：真实客户端联调（阶段 1）、Supabase staging 验证和启用 OAuth（阶段 2）、生产环境完整跑一次社区节点构建（阶段 3）、有 token 的 n8n 实例验收（阶段 4）、两副本演练和 pgTAP 执行（阶段 6）。明确推迟的有：输出 schema（Task 5.x）、stats 里的 `n8nVersion`、内网 n8n 实例放行、evaluations 工具。
