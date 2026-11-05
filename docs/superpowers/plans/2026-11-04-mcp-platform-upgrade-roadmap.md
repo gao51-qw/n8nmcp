@@ -328,19 +328,21 @@
 
 每个新工具都要：定义在 `src/lib/mcp-tool-definitions.ts`、实现在 `src/lib/mcp.server.ts` 或新的 `src/lib/n8n-admin.server.ts`、`mcp-tool-contract-parity.test.ts` 覆盖 schema 与运行时一致、变更类工具走确认与审计。
 
-- [ ] **`list_credentials` / `get_credential_schema`**：只返回名称、类型、id 与类型 schema，**永不**返回凭据数据。
-- [ ] **`manage_folders`**、**`list_projects`**、**`manage_tags`**：n8n 公共 API 对应端点；写操作需确认。
-- [ ] **`manage_data_table`**：优先原生 MCP，回退公共 API；行级写入计入 `mcp:workflows:write` scope。
-- [ ] **`autofix_workflow`**：复用 `repair-pipeline.server.ts`，输出 `WorkflowOperation` 预览，`apply: true` 时走 `safe_apply_workflow_patch`。对齐竞品的 `n8n_autofix_workflow` 名称语义但保持安全序列。
-- [ ] **`audit_instance`**：调用 n8n `/audit` 端点，输出分类风险；只读。
-- [ ] **`get_execution` / `delete_execution`**：补齐 `list_executions` 的读详情与删除（删除需确认）。
-- [ ] 更新 `docs/tools` 页面与 `llms.txt`；`site-navigation.test.ts` 的路由清单不受影响。
+- [x] **`list_credentials` / `get_credential_schema`**：只返回 id/name/type/时间戳。n8n 的接口本身不返回凭据数据，网关这边再做一次字段白名单。
+- [x] **`manage_folders`**、**`list_projects`**、**`manage_tags`**：使用 Public API 的路由（路径已对照 n8n 源码里的 controller 核实），删除需要确认。
+- [x] **`manage_data_table`**：支持 list_tables / list_rows / insert_rows（单次最多 500 行）/ delete_rows（必须带 filter 并确认），走 Public API。工具名不是只读的，所以 OAuth 下按 `mcp:workflows:write` 计。建表和列管理未做。
+- [x] **`autofix_workflow`**：只给出修复建议，复用 `fix_workflow_errors`；**不支持** `apply: true`，因为 AGENTS.md 规定变更必须经过 diff preview 和 partial update。顺带修复了 `fix_workflow_errors` 的一个 bug：它把 `/executions` 的返回值当数组用，没有带 `includeData`，只要存在失败执行就会抛 `executions.map is not a function`。补了回归测试，在旧代码上确认会失败。
+- [x] **`audit_instance`**：调用 `POST /api/v1/audit`，可按类别过滤，可设置 `daysAbandonedWorkflow`。
+- [x] **`get_execution` / `delete_execution`**：返回执行摘要，运行数据超过 100k 字符时省略；删除需要确认。
+- [x] `docs/tools` 页面直接渲染 `LOCAL_TOOLS`，新工具会自动出现；`llms.txt` 只链接到该页面，无需修改。
+
+**完成说明（2026-11-05）：** 对照表已写入 `docs/audits/tool-parity-2026.md`。剩余缺口：evaluations、health check、folder 移动、数据表的表/列管理、版本 diff；有意不做：凭据写操作、n8n Agents。这些变更不是 workflow 变更，所以没有写入 workflow 审计日志，调用日志照常记录。新增测试 16 个，根项目共 89 个文件、838 个测试通过。
 
 **阶段验收：** 与 czlonkowski 28 工具逐项对照表写入 `docs/audits/tool-parity-2026.md`，缺口仅剩有意不做的项（如 `n8n_manage_credentials` 的写操作）。
 
 ### Task 5.x：输出 schema（从阶段 1 Task 1.4 移入）
 
-- [ ] 为每个本地工具写真实的 `outputSchema`，工具结果同时返回匹配的 `structuredContent`，并保留 JSON 文本块以兼容旧客户端。
+- [ ] 为每个本地工具写真实的 `outputSchema`，工具结果同时返回匹配的 `structuredContent`，并保留 JSON 文本块以兼容旧客户端。 **暂缓（2026-11-05）：** 一旦声明 `outputSchema`，客户端就会用它校验 `structuredContent`，schema 写错会直接让调用失败。而很多工具直接透传 n8n 的返回对象，形状随 n8n 版本变化。应先为输出稳定的工具（admin 工具、`execute_workflow`、`deploy_and_test_workflow`）写 schema，并配上对真实 n8n 返回的录制测试，再逐步扩展。
 - [ ] 测试：每个工具都有 `title`、`inputSchema`、`outputSchema`，并且样例输出能通过各自 schema 的校验。
 
 ---
