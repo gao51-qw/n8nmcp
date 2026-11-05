@@ -906,30 +906,6 @@ export class NodeKnowledgeService {
   }
 }
 
-export class TemplateService {
-  async searchTemplates(
-    query: string,
-    limit = 10,
-  ): Promise<{
-    query: string;
-    count: number;
-    templates: TemplateSearchResult[];
-    fallbackReason?: string;
-  }> {
-    void limit;
-    return {
-      query,
-      count: 0,
-      templates: [],
-      fallbackReason: "Local template database is not configured for the active MCP gateway.",
-    };
-  }
-
-  async getTemplate(id: string | number): Promise<WorkflowTemplateDetail | { error: string }> {
-    return { error: `template not found: ${id}` };
-  }
-}
-
 export function optionalPolicy(
   value: unknown,
   confirm: unknown,

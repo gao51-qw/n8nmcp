@@ -223,7 +223,7 @@ export async function getWorkflowHistory(
 }
 
 /** Fetch a single audit row, scoped to its owner (cross-user access returns null). */
-export async function getAuditLogForUser(
+async function getAuditLogForUser(
   userId: string,
   auditLogId: string,
 ): Promise<WorkflowAuditRow | null> {
