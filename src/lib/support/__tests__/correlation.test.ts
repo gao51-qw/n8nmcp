@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mcpMocks = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
-  checkDailyQuota: vi.fn(),
+  reserveDailyQuota: vi.fn(),
+  releaseDailyQuota: vi.fn(),
   checkShortWindowQuota: vi.fn(),
   dispatchTool: vi.fn(),
   getDefaultInstance: vi.fn(),
@@ -44,7 +45,7 @@ describe("request correlation", () => {
       daily_limit: 100,
     });
     mcpMocks.checkShortWindowQuota.mockResolvedValue(true);
-    mcpMocks.checkDailyQuota.mockResolvedValue({ ok: true, used: 0, limit: 100 });
+    mcpMocks.reserveDailyQuota.mockResolvedValue({ ok: true, used: 0, limit: 100 });
     mcpMocks.getDefaultInstance.mockResolvedValue({ id: "instance-1" });
     mcpMocks.getMergedTools.mockResolvedValue([]);
     mcpMocks.recordCall.mockResolvedValue(undefined);

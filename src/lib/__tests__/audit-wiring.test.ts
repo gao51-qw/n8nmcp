@@ -59,16 +59,14 @@ const mocks = vi.hoisted(() => ({
   getWorkflowHistory: vi.fn(async () => [{ id: "a1" }]),
   getAuditStatistics: vi.fn(async () => ({ total: 0, byOperation: {}, byDay: {} })),
   detectSuspiciousActivity: vi.fn(async () => []),
-  markRolledBack: vi.fn(async (_userId: string, _auditLogId: string) => ({
-    id: "wf-1",
-    name: "Old",
-    nodes: [],
-    connections: {},
-  })),
+  markRolledBack: vi.fn(async (_userId: string, _auditLogId: string) => true),
+  releaseRollbackClaim: vi.fn(async (_userId: string, _auditLogId: string) => undefined),
+  getRollbackSnapshotForUser: vi.fn(),
   safeFetchPublicUrl: vi.fn(),
   loadTrustedWorkflowPreview: vi.fn(async () => ({
     id: "preview-1",
     user_id: "u1",
+    instance_id: "inst-1",
     tool_name: "preview_workflow_diff",
     status: "ok",
     created_at: new Date().toISOString(),
@@ -129,9 +127,19 @@ vi.mock("../audit.server", () => ({
   getWorkflowHistory: mocks.getWorkflowHistory,
   getAuditStatistics: mocks.getAuditStatistics,
   detectSuspiciousActivity: mocks.detectSuspiciousActivity,
-  markRolledBack: mocks.markRolledBack,
-  getRollbackSnapshotForUser: vi.fn(async () => ({
+  getRollbackSnapshotForUser: mocks.getRollbackSnapshotForUser,
+  markAuditRolledBack: (userId: string, auditLogId: string) =>
+    mocks.markRolledBack(userId, auditLogId),
+  releaseAuditRollbackClaim: (userId: string, auditLogId: string) =>
+    mocks.releaseRollbackClaim(userId, auditLogId),
+}));
+
+// The audited mutation produced the live "Before" workflow returned by the
+// default n8n GET mock below, so a rollback of a1 passes the concurrency check.
+function auditRow(overrides: Record<string, unknown> = {}) {
+  return {
     id: "a1",
+    instance_id: "inst-1",
     workflow_id: "wf-1",
     snapshot_before: {
       id: "wf-1",
@@ -148,12 +156,18 @@ vi.mock("../audit.server", () => ({
       ],
       connections: {},
     },
+    snapshot_after: {
+      id: "wf-1",
+      name: "Before",
+      active: false,
+      nodes: [],
+      connections: {},
+      settings: {},
+    },
     is_rolled_back: false,
-  })),
-  markAuditRolledBack: vi.fn(async (userId: string, auditLogId: string) => {
-    await mocks.markRolledBack(userId, auditLogId);
-  }),
-}));
+    ...overrides,
+  };
+}
 
 vi.mock("../ssrf-guard.server", () => ({
   safeFetchPublicUrl: mocks.safeFetchPublicUrl,
@@ -200,6 +214,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.confirmationTokens.clear();
   mocks.safeFetchPublicUrl.mockImplementation(n8nResponse);
+  mocks.getRollbackSnapshotForUser.mockImplementation(async () => auditRow());
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -398,5 +413,193 @@ describe("dispatchTool audit read/rollback routing", () => {
       expect.objectContaining({ workflowId: "wf-1", toolName: "rollback_workflow" }),
     );
     expect(result).toMatchObject({ output: { success: true, workflow_id: "wf-1" } });
+  });
+});
+
+describe("rollback instance binding and concurrency", () => {
+  async function confirmedRollback(args: Record<string, unknown> = {}, instance = inst) {
+    const dispatchTool = await getDispatch();
+    const base = { auditLogId: "a1", ...args };
+    let confirmationToken = "";
+    try {
+      await dispatchTool("rollback_workflow", base, instance, caller);
+    } catch (error) {
+      confirmationToken =
+        String((error as Error).message).match(/confirmationToken": "([^"]+)"/)?.[1] ?? "";
+    }
+    expect(confirmationToken).toMatch(/^mcp_confirm_/);
+    return dispatchTool(
+      "rollback_workflow",
+      { ...base, confirm: true, confirmationToken },
+      instance,
+      caller,
+    );
+  }
+
+  function putCalls() {
+    return mocks.safeFetchPublicUrl.mock.calls.filter(
+      ([, init]) =>
+        String((init as { method?: string } | undefined)?.method).toUpperCase() === "PUT",
+    );
+  }
+
+  beforeEach(() => {
+    mocks.markRolledBack.mockImplementation(async () => true);
+  });
+
+  it("refuses a rollback when the audit row was recorded on another instance", async () => {
+    mocks.getRollbackSnapshotForUser.mockImplementation(async () =>
+      auditRow({ instance_id: "inst-other" }),
+    );
+
+    await expect(confirmedRollback()).rejects.toMatchObject({
+      name: "WorkflowActionConflictError",
+      code: "instance_mismatch",
+      message: expect.stringMatching(/instance changed since this audit entry/),
+    });
+    expect(mocks.safeFetchPublicUrl).not.toHaveBeenCalled();
+    expect(mocks.markRolledBack).not.toHaveBeenCalled();
+    expect(mocks.recordWorkflowAudit).not.toHaveBeenCalled();
+  });
+
+  it("treats a null recorded instance (deleted instance) as a mismatch", async () => {
+    mocks.getRollbackSnapshotForUser.mockImplementation(async () =>
+      auditRow({ instance_id: null }),
+    );
+
+    await expect(confirmedRollback()).rejects.toMatchObject({ code: "instance_mismatch" });
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("refuses to overwrite edits made after the audited change (versionId)", async () => {
+    mocks.getRollbackSnapshotForUser.mockImplementation(async () =>
+      auditRow({
+        snapshot_after: { id: "wf-1", name: "After", versionId: "v-audited", nodes: [] },
+      }),
+    );
+    mocks.safeFetchPublicUrl.mockImplementation((_url: string, init?: { method?: string }) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(
+            (init?.method ?? "GET") === "GET"
+              ? { id: "wf-1", name: "After", versionId: "v-newer", nodes: [], connections: {} }
+              : { id: "wf-1", name: "Old" },
+          ),
+      }),
+    );
+
+    await expect(confirmedRollback()).rejects.toMatchObject({
+      code: "rollback_conflict",
+      message: expect.stringMatching(/changed since the audited change/),
+    });
+    expect(putCalls()).toHaveLength(0);
+    expect(mocks.markRolledBack).not.toHaveBeenCalled();
+    expect(mocks.recordWorkflowAudit).not.toHaveBeenCalled();
+  });
+
+  it("refuses when content differs and no versionId is recorded", async () => {
+    mocks.safeFetchPublicUrl.mockImplementation((_url: string, init?: { method?: string }) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(
+            (init?.method ?? "GET") === "GET"
+              ? { id: "wf-1", name: "Edited by hand", nodes: [], connections: {}, settings: {} }
+              : { id: "wf-1", name: "Old" },
+          ),
+      }),
+    );
+
+    await expect(confirmedRollback()).rejects.toMatchObject({ code: "rollback_conflict" });
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("refuses when the audit row cannot prove the workflow is unchanged", async () => {
+    mocks.getRollbackSnapshotForUser.mockImplementation(async () =>
+      auditRow({ snapshot_after: { _truncated: true, bytes: 999999 } }),
+    );
+
+    await expect(confirmedRollback()).rejects.toMatchObject({ code: "rollback_unverifiable" });
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("overwrites newer edits only with force: true and records that in the audit", async () => {
+    mocks.getRollbackSnapshotForUser.mockImplementation(async () =>
+      auditRow({ snapshot_after: { id: "wf-1", versionId: "v-audited", nodes: [] } }),
+    );
+    mocks.safeFetchPublicUrl.mockImplementation((_url: string, init?: { method?: string }) =>
+      Promise.resolve({
+        ok: true,
+        status: 200,
+        text: async () =>
+          JSON.stringify(
+            (init?.method ?? "GET") === "GET"
+              ? { id: "wf-1", name: "After", versionId: "v-newer", nodes: [], connections: {} }
+              : { id: "wf-1", name: "Old", versionId: "v-restored" },
+          ),
+      }),
+    );
+
+    const result = await confirmedRollback({ force: true });
+
+    expect(result.output).toMatchObject({
+      success: true,
+      forced: true,
+      overwrote_newer_changes: true,
+    });
+    expect(putCalls()).toHaveLength(1);
+    expect(mocks.recordWorkflowAudit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolName: "rollback_workflow",
+        instanceId: "inst-1",
+        toolParams: expect.objectContaining({
+          auditLogId: "a1",
+          force: true,
+          concurrencyCheck: "changed",
+          concurrencySignal: "versionId",
+        }),
+      }),
+    );
+  });
+
+  it("does not let a non-forced confirmation token authorize a forced rollback", async () => {
+    const dispatchTool = await getDispatch();
+    const token = await issueRollbackConfirmationToken(dispatchTool, { auditLogId: "a1" });
+
+    await expect(
+      dispatchTool(
+        "rollback_workflow",
+        { auditLogId: "a1", force: true, confirm: true, confirmationToken: token },
+        inst,
+        caller,
+      ),
+    ).rejects.toThrow(/valid confirmation token/);
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("refuses a second rollback of the same audit row once it has been claimed", async () => {
+    mocks.markRolledBack.mockImplementation(async () => false);
+
+    await expect(confirmedRollback()).rejects.toMatchObject({ code: "already_rolled_back" });
+    expect(putCalls()).toHaveLength(0);
+    expect(mocks.recordWorkflowAudit).not.toHaveBeenCalled();
+  });
+
+  it("claims the audit row before the PUT and releases it when n8n rejects the restore", async () => {
+    mocks.safeFetchPublicUrl.mockImplementation((url: string, init?: { method?: string }) => {
+      if ((init?.method ?? "GET") === "PUT") {
+        expect(mocks.markRolledBack).toHaveBeenCalledWith("u1", "a1");
+        return Promise.resolve({ ok: false, status: 500, text: async () => "boom" });
+      }
+      return n8nResponse(url, init);
+    });
+
+    await expect(confirmedRollback()).rejects.toThrow();
+    expect(putCalls()).toHaveLength(1);
+    expect(mocks.releaseRollbackClaim).toHaveBeenCalledWith("u1", "a1");
+    expect(mocks.recordWorkflowAudit).not.toHaveBeenCalled();
   });
 });

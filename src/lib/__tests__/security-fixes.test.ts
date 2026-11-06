@@ -80,7 +80,15 @@ describe("security regression fixes", () => {
     rpcMock.mockResolvedValueOnce({ data: null, error: { message: "limiter unavailable" } });
     const { checkShortWindowQuota } = await import("../mcp.server");
 
-    await expect(checkShortWindowQuota("user-1")).resolves.toBe(false);
+    await expect(checkShortWindowQuota("user-1", "free")).resolves.toBe(false);
+  });
+
+  it("does not fall back to a weaker limiter when the rate-limit RPC fails for other reasons", async () => {
+    rpcMock.mockResolvedValueOnce({ data: null, error: { code: "57014", message: "timeout" } });
+    const { checkShortWindowQuota } = await import("../mcp.server");
+
+    await expect(checkShortWindowQuota("user-1", "pro")).resolves.toBe(false);
+    expect(rpcMock).toHaveBeenCalledOnce();
   });
 
   it("does not increment billable usage for rate-limited calls", async () => {
@@ -102,7 +110,7 @@ describe("security regression fixes", () => {
     process.env.MCP_SHORT_WINDOW_LIMITER = "memory";
     const { checkShortWindowQuota } = await import("../mcp.server");
 
-    await expect(checkShortWindowQuota(`user-${Math.random()}`)).resolves.toBe(true);
+    await expect(checkShortWindowQuota(`user-${Math.random()}`, "free")).resolves.toBe(true);
     expect(rpcMock).not.toHaveBeenCalled();
   });
 

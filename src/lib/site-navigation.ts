@@ -7,7 +7,8 @@
 // rewrites, so the same targets are reached through their path prefix on
 // the one origin instead.
 
-import { canonicalUrl, siteUrl, type SiteSurface } from "@/lib/site-domains";
+import { canonicalUrl, SITE_DOMAINS, siteUrl, type SiteSurface } from "@/lib/site-domains";
+import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
 
 export const GITHUB_URL = "https://github.com/czlonkowski/n8n-mcp";
 
@@ -42,9 +43,59 @@ export function surfaceHref(surface: SiteSurface, path = "/"): string {
   return clean === "/" ? `/${surface}` : `/${surface}${clean}`;
 }
 
+const DEFAULT_AUTH_DESTINATION = getSafeLoginDestination(null);
+
+/**
+ * Auth pages (/login, /signup, /forgot-password, /reset-password) are served
+ * un-rewritten on the dashboard host. `next` is only forwarded when it is a
+ * safe same-site path (see getSafeLoginDestination) other than the default.
+ */
+function authPageHref(path: string, next?: string | null): string {
+  const base = isSingleOrigin("dashboard") ? path : canonicalUrl(path, "dashboard");
+  if (!next) return base;
+  const destination = getSafeLoginDestination(next);
+  return destination === DEFAULT_AUTH_DESTINATION
+    ? base
+    : `${base}?next=${encodeURIComponent(destination)}`;
+}
+
 /** The sign-in page lives at `/login` on both the dashboard host and the main host. */
-export function loginHref(): string {
-  return isSingleOrigin("dashboard") ? "/login" : canonicalUrl("/login", "dashboard");
+export function loginHref(next?: string | null): string {
+  return authPageHref("/login", next);
+}
+
+/** Self-service account creation. */
+export function signupHref(next?: string | null): string {
+  return authPageHref("/signup", next);
+}
+
+/** Request a password-reset email. */
+export function forgotPasswordHref(next?: string | null): string {
+  return authPageHref("/forgot-password", next);
+}
+
+/**
+ * Absolute URL on the dashboard host for Supabase email links
+ * (`emailRedirectTo`, `redirectTo`). Unsafe paths collapse to the dashboard.
+ * When the page runs on an origin that is not a configured surface (a preview
+ * build, or `next dev` on another port) the link returns to that origin.
+ */
+export function authRedirectUrl(path: string, currentOrigin?: string): string {
+  const clean = getSafeLoginDestination(path);
+  if (currentOrigin) {
+    let origin: URL | null = null;
+    try {
+      origin = new URL(currentOrigin);
+    } catch {
+      origin = null;
+    }
+    const known =
+      origin && Object.values(SITE_DOMAINS).some((site) => site.host === origin.hostname);
+    if (origin && !known && (origin.protocol === "https:" || origin.protocol === "http:")) {
+      return `${origin.origin}${clean}`;
+    }
+  }
+  return canonicalUrl(clean, "dashboard");
 }
 
 export function buildPrimaryNav(): SiteNavLink[] {

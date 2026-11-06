@@ -4,6 +4,7 @@ import { Suspense, useEffect, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
+import { DashboardNav, normalizeDashboardPath } from "@/components/dashboard/dashboard-nav";
 import { SupportLauncher } from "@/components/support/support-launcher";
 import { readSupportCorrelationIds } from "@/lib/support/validation";
 
@@ -43,9 +44,20 @@ function DashboardShell({ children }: { children: ReactNode }) {
     );
   }
 
+  // The OAuth consent screen is a focused, single-decision page reached from an
+  // MCP client; it keeps the bare layout without the dashboard navigation.
+  const bare = normalizeDashboardPath(pathname).startsWith("/dashboard/oauth/");
+
   return (
     <>
-      {children}
+      {bare ? (
+        children
+      ) : (
+        <div className="min-h-screen lg:pl-64">
+          <DashboardNav />
+          <div className="min-w-0">{children}</div>
+        </div>
+      )}
       <SupportLauncher user={user} {...correlationIds} />
     </>
   );

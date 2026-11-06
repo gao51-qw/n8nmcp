@@ -9,7 +9,16 @@ const db = vi.hoisted(() => ({
 vi.mock("@/integrations/supabase/client.server", () => {
   const builder = () => {
     const chain: Record<string, unknown> = {};
-    for (const method of ["select", "insert", "update", "delete", "eq", "gt", "maybeSingle"]) {
+    for (const method of [
+      "select",
+      "insert",
+      "update",
+      "upsert",
+      "delete",
+      "eq",
+      "gt",
+      "maybeSingle",
+    ]) {
       chain[method] = (...args: unknown[]) => {
         db.calls.push([method, ...args]);
         return chain;
@@ -63,7 +72,90 @@ describe("memory shared state", () => {
   });
 });
 
+describe("memory shared state: session capabilities", () => {
+  it("stores capabilities per user and session, replacing on re-initialize", async () => {
+    const state = createMemorySharedState();
+    await state.setSessionCapabilities("u1", "s1", { elicitation: true }, 60_000);
+    await expect(state.getSessionCapabilities("u1", "s1")).resolves.toEqual({ elicitation: true });
+    await expect(state.getSessionCapabilities("u2", "s1")).resolves.toBeNull();
+    await expect(state.getSessionCapabilities("u1", "s2")).resolves.toBeNull();
+
+    await state.setSessionCapabilities("u1", "s1", { elicitation: false }, 60_000);
+    await expect(state.getSessionCapabilities("u1", "s1")).resolves.toEqual({ elicitation: false });
+  });
+
+  it("expires capabilities after their TTL", async () => {
+    const nowSpy = vi.spyOn(Date, "now");
+    try {
+      nowSpy.mockReturnValue(1_000_000);
+      const state = createMemorySharedState();
+      await state.setSessionCapabilities("u1", "s1", { elicitation: true }, 60_000);
+      nowSpy.mockReturnValue(1_000_000 + 60_001);
+      await expect(state.getSessionCapabilities("u1", "s1")).resolves.toBeNull();
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it("is bounded: the oldest session is evicted first", async () => {
+    const state = createMemorySharedState(50_000, 2);
+    await state.setSessionCapabilities("u1", "a", { elicitation: true }, 60_000);
+    await state.setSessionCapabilities("u1", "b", { elicitation: true }, 60_000);
+    await state.setSessionCapabilities("u1", "c", { elicitation: true }, 60_000);
+    await expect(state.getSessionCapabilities("u1", "a")).resolves.toBeNull();
+    await expect(state.getSessionCapabilities("u1", "c")).resolves.toEqual({ elicitation: true });
+  });
+
+  it("keeps only boolean capability flags", async () => {
+    const state = createMemorySharedState();
+    await state.setSessionCapabilities(
+      "u1",
+      "s1",
+      { elicitation: "yes", sampling: true, other: 1 } as never,
+      60_000,
+    );
+    await expect(state.getSessionCapabilities("u1", "s1")).resolves.toEqual({ sampling: true });
+  });
+});
+
 describe("supabase shared state", () => {
+  it("upserts session capabilities under a hashed, bounded key", async () => {
+    const state = createSupabaseSharedState();
+    const sessionId = "x".repeat(5_000);
+    db.results = [{ error: null }];
+    await state.setSessionCapabilities("u1", sessionId, { elicitation: true }, 60_000);
+
+    const upsert = db.calls.find(([method]) => method === "upsert");
+    const row = upsert?.[1] as { key: string; kind: string; user_id: string; value: unknown };
+    expect(row).toMatchObject({
+      kind: "session_capabilities",
+      user_id: "u1",
+      value: { elicitation: true },
+    });
+    expect(row.key).toMatch(/^session:u1:[A-Za-z0-9_-]{43}$/);
+    expect(row.key).not.toContain(sessionId);
+    expect(upsert?.[2]).toEqual({ onConflict: "key" });
+  });
+
+  it("throws when the capabilities cannot be stored", async () => {
+    const state = createSupabaseSharedState();
+    db.results = [{ error: { message: "down" } }];
+    await expect(
+      state.setSessionCapabilities("u1", "s1", { elicitation: true }, 60_000),
+    ).rejects.toThrow("Could not store the session capabilities");
+  });
+
+  it("reads live session capabilities and treats errors as none (fail closed)", async () => {
+    const state = createSupabaseSharedState();
+    db.results = [
+      { data: { value: { elicitation: true } }, error: null },
+      { data: null, error: { message: "down" } },
+    ];
+    await expect(state.getSessionCapabilities("u1", "s1")).resolves.toEqual({ elicitation: true });
+    expect(db.calls.map(([method]) => method)).toEqual(["select", "eq", "gt", "maybeSingle"]);
+    await expect(state.getSessionCapabilities("u1", "s1")).resolves.toBeNull();
+  });
+
   it("lets the primary key decide which request redeems a nonce", async () => {
     const state = createSupabaseSharedState();
     db.results = [{ error: null }, { error: { code: "23505", message: "duplicate key" } }];

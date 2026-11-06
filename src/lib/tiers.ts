@@ -73,3 +73,45 @@ export function tierLimit(tier: string | null | undefined): number {
 export function hasFeature(tier: string | null | undefined, f: Feature): boolean {
   return TIER_LIMITS[tierOf(tier)].features.includes(f);
 }
+
+/** Plans in display order (pricing page, billing page). */
+export const TIER_ORDER: readonly Tier[] = ["free", "pro", "enterprise"];
+
+export const TIER_SUMMARIES: Record<Tier, string> = {
+  free: "For trying MCP client setup and low-volume workflow exploration.",
+  pro: "For individuals and small teams running AI-assisted workflow operations every day.",
+  enterprise:
+    "For organisations that need unlimited calls, higher rate limits and priority support.",
+};
+
+/** "100 MCP calls / day", "100,000 MCP calls / day", "Unlimited MCP calls". */
+export function formatDailyCalls(tier: Tier): string {
+  const calls = TIER_LIMITS[tier].calls_day;
+  if (calls === -1) return "Unlimited MCP calls";
+  return `${calls.toLocaleString("en-US")} MCP calls / day`;
+}
+
+/** Subscription statuses under which a paid tier confers its paid limits. */
+export const ACTIVE_SUBSCRIPTION_STATUSES: readonly string[] = ["active", "trialing"];
+
+/**
+ * The tier a stored subscription row actually grants: a paid tier collapses
+ * to `free` unless its status is active/trialing. `effectiveTier` in
+ * `src/lib/mcp.server.ts` delegates here, so the MCP gateway and client-safe
+ * callers such as the billing page share one rule.
+ */
+export function grantedTier(
+  tier: string | null | undefined,
+  status: string | null | undefined,
+): Tier {
+  const resolved = tierOf(tier);
+  if (resolved === "free") return "free";
+  return ACTIVE_SUBSCRIPTION_STATUSES.includes(status ?? "") ? resolved : "free";
+}
+
+/** Billing interval shown after a paid price; must match the Paddle price. */
+export const TIER_PRICE_PERIODS: Record<Tier, string | null> = {
+  free: null,
+  pro: "/ month",
+  enterprise: null,
+};

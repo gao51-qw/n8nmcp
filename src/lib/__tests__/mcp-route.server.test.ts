@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mcpServerMocks = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
-  checkDailyQuota: vi.fn(),
+  reserveDailyQuota: vi.fn(),
+  releaseDailyQuota: vi.fn(),
   checkShortWindowQuota: vi.fn(),
   dispatchTool: vi.fn(),
   getDefaultInstance: vi.fn(),
@@ -44,7 +45,7 @@ describe("mcp route elicitation transport", () => {
       key_id: "key-1",
     });
     mcpServerMocks.checkShortWindowQuota.mockResolvedValue(true);
-    mcpServerMocks.checkDailyQuota.mockResolvedValue({
+    mcpServerMocks.reserveDailyQuota.mockResolvedValue({
       ok: true,
       used: 0,
       limit: 1000,
@@ -152,6 +153,51 @@ describe("mcp route elicitation transport", () => {
 
       expect(payload.result.content[0].text).not.toContain("abc123");
       expect(payload.result.content[0].text).toMatch(/^Tool execution failed\./);
+      // The persisted call log gets the generic fallback, never the raw message.
+      expect(mcpServerMocks.recordCall).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "error", error_message: "Tool execution failed" }),
+      );
+      expect(JSON.stringify(mcpServerMocks.recordCall.mock.calls)).not.toContain("abc123");
+    });
+
+    it("persists only sanitized text for thrown tool errors", async () => {
+      class UpstreamTimeoutError extends Error {
+        constructor() {
+          super("fetch to https://internal.n8n.local:5678/api/v1/workflows/wf-1 timed out");
+          this.name = "UpstreamTimeoutError";
+        }
+      }
+      mcpServerMocks.dispatchTool
+        .mockRejectedValueOnce(new UpstreamTimeoutError())
+        .mockRejectedValueOnce(
+          new Error(
+            "The n8n instance changed since this audit entry was recorded; rollback was not applied.",
+          ),
+        );
+
+      for (const id of ["raw-1", "raw-2"]) {
+        await mcpPost(
+          new Request("https://example.com/mcp", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id,
+              method: "tools/call",
+              params: { name: "rollback_workflow", arguments: { auditLogId: "audit-1" } },
+            }),
+          }),
+        );
+      }
+
+      const persisted = mcpServerMocks.recordCall.mock.calls.map(
+        ([call]) => (call as { error_message?: string }).error_message,
+      );
+      expect(persisted).toEqual([
+        "Tool execution failed (UpstreamTimeoutError)",
+        "The n8n instance changed since this audit entry was recorded; rollback was not applied.",
+      ]);
+      expect(JSON.stringify(persisted)).not.toContain("internal.n8n.local");
     });
 
     it("returns a structured elicitation required error when confirm is not provided", async () => {
@@ -317,7 +363,7 @@ describe("mcp route elicitation transport", () => {
       expect(mcpServerMocks.dispatchTool).toHaveBeenCalledWith(
         "preview_workflow_diff",
         expect.any(Object),
-        expect.any(Object),
+        expect.any(Function),
         expect.objectContaining({ session_id: "session-metadata" }),
       );
     });

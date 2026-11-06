@@ -2,12 +2,18 @@
 // Auth: Bearer nmcp_<...> from `Authorization` header → SHA-256 → platform_api_keys lookup,
 // or (when MCP_OAUTH_ENABLED=1) a Supabase Auth OAuth access token backed by oauth_grants.
 // Rate limit: database-backed short-window limiter + daily quota check via usage_daily.
-import { pruneExpired } from "@/lib/expiring-store";
+import { createExpiringStore, pruneExpired } from "@/lib/expiring-store";
+import {
+  BURST_WINDOW_SECONDS,
+  LEGACY_BURST_MAX,
+  RATE_WINDOW_SECONDS,
+  rateLimitFor,
+} from "@/lib/mcp-rate-limit";
 import { createHash, randomBytes } from "node:crypto";
 import type { Json } from "@/integrations/supabase/types";
 import { hashPlatformApiKey, decryptSecret } from "./crypto.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { TIER_DAILY_LIMITS, type Tier } from "./tiers";
+import { grantedTier, TIER_DAILY_LIMITS, type Tier } from "./tiers";
 import {
   callUpstreamTool,
   categorize,
@@ -28,8 +34,17 @@ import {
   getWorkflowHistory,
   markAuditRolledBack,
   recordWorkflowAudit,
+  releaseAuditRollbackClaim,
   type WorkflowAuditOperation,
 } from "./audit.server";
+import {
+  ALREADY_ROLLED_BACK_MESSAGE,
+  AUDIT_INSTANCE_MISMATCH_MESSAGE,
+  ROLLBACK_CONFLICT_MESSAGE,
+  ROLLBACK_UNVERIFIABLE_MESSAGE,
+  WorkflowActionConflictError,
+  assertSameInstance,
+} from "./workflow-agent/action-conflict";
 import {
   NodeKnowledgeService,
   WorkflowDiffService,
@@ -102,14 +117,63 @@ export class ElicitationRequiredError extends Error {
   }
 }
 
-// Fallback in-memory short-window throttle (per Worker isolate). 60 req / 10s per user.
+// Opt-in in-memory rate limiter (MCP_SHORT_WINDOW_LIMITER=memory), per process.
+// Keyed by `${userId}:${windowSeconds}`; the database limiter is the default.
 const buckets = new Map<string, { count: number; resetAt: number }>();
-const WINDOW_MS = 10_000;
-const WINDOW_MAX = 60;
 const BUCKET_SWEEP_INTERVAL_MS = 60_000;
 let lastBucketSweep = 0;
 const TEST_CONFIRMATION_TOKEN_TTL_MS = 5 * 60_000;
-const testOnlyConfirmationChallenges = new Map<string, { token: string; expiresAt: number }>();
+// Only reachable without an authenticated caller (direct runTool unit tests);
+// production refuses that path, see requireConfirmation().
+const testOnlyConfirmationChallenges = createExpiringStore<{ token: string }>({
+  maxEntries: 1_000,
+});
+
+/**
+ * Database functions added after src/integrations/supabase/types.ts was last
+ * generated. Regenerating the types makes this shim unnecessary.
+ */
+type PendingRpcs = {
+  check_mcp_rate_limit: {
+    Args: {
+      _user_id: string;
+      _burst_window_seconds: number;
+      _burst_max: number;
+      _window_seconds: number;
+      _max_requests: number;
+    };
+    Returns: boolean;
+  };
+  authenticate_mcp_platform_key: {
+    Args: { _key_hash: string };
+    Returns: Array<{
+      key_id: string;
+      user_id: string;
+      tier: string | null;
+      status: string | null;
+    }>;
+  };
+};
+
+type RpcError = { code?: string; message: string };
+
+function pendingRpc<K extends keyof PendingRpcs>(
+  fn: K,
+  args: PendingRpcs[K]["Args"],
+): PromiseLike<{ data: PendingRpcs[K]["Returns"] | null; error: RpcError | null }> {
+  const client = supabaseAdmin as unknown as {
+    rpc(
+      fn: string,
+      args: unknown,
+    ): PromiseLike<{ data: PendingRpcs[K]["Returns"] | null; error: RpcError | null }>;
+  };
+  return client.rpc(fn, args);
+}
+
+/** PostgREST: the function is not in the schema cache (migration not applied yet). */
+function isMissingFunction(error: RpcError | null): boolean {
+  return error?.code === "PGRST202";
+}
 const confirmationService = createConfirmationService();
 const nodeKnowledgeService = new NodeKnowledgeService();
 const workflowValidationService = new WorkflowValidationService();
@@ -146,25 +210,54 @@ export const KNOWLEDGE_TOOL_MAP = Object.freeze({
   get_template: "get_workflow_template",
 } as const);
 
-export function shortWindowAllow(userId: string): boolean {
+type RateWindow = { seconds: number; max: number };
+
+/** The windows enforced for a tier: burst first, then the per-minute limit. */
+function rateWindowsFor(tier: Tier): RateWindow[] {
+  const { rpm, burst } = rateLimitFor(tier);
+  return [
+    { seconds: BURST_WINDOW_SECONDS, max: burst },
+    { seconds: RATE_WINDOW_SECONDS, max: rpm },
+  ];
+}
+
+/**
+ * In-memory limiter. Every window must allow the request; it is then counted
+ * in all of them. Without a tier only the legacy 60 req / 10s burst applies.
+ */
+export function shortWindowAllow(userId: string, tier?: Tier): boolean {
   const now = Date.now();
   if (now - lastBucketSweep >= BUCKET_SWEEP_INTERVAL_MS) {
     lastBucketSweep = now;
     pruneExpired(buckets, (bucket) => bucket.resetAt, now);
   }
-  const b = buckets.get(userId);
-  if (!b || b.resetAt < now) {
-    buckets.set(userId, { count: 1, resetAt: now + WINDOW_MS });
-    return true;
+  const windows = tier
+    ? rateWindowsFor(tier)
+    : [{ seconds: BURST_WINDOW_SECONDS, max: LEGACY_BURST_MAX }];
+  const states = windows.map((window) => {
+    const key = `${userId}:${window.seconds}`;
+    const bucket = buckets.get(key);
+    return { key, window, bucket: bucket && bucket.resetAt > now ? bucket : null };
+  });
+  if (states.some(({ window, bucket }) => bucket && bucket.count >= window.max)) return false;
+  for (const { key, window, bucket } of states) {
+    if (bucket) bucket.count++;
+    else buckets.set(key, { count: 1, resetAt: now + window.seconds * 1000 });
   }
-  if (b.count >= WINDOW_MAX) return false;
-  b.count++;
   return true;
 }
 
 let warnedMemoryLimiter = false;
+let warnedMissingRateLimitRpc = false;
 
-export async function checkShortWindowQuota(userId: string): Promise<boolean> {
+/**
+ * Tier-aware request rate limit: the tier's rpm over 60s plus a 10s burst
+ * guard (see mcp-rate-limit.ts), checked and counted atomically by the
+ * check_mcp_rate_limit database function. Fails closed when the database
+ * errors. Callers that do not know the tier (e.g. the dashboard agent
+ * console) get it looked up.
+ */
+export async function checkShortWindowQuota(userId: string, tier?: Tier): Promise<boolean> {
   if (process.env.MCP_SHORT_WINDOW_LIMITER === "memory") {
     if (process.env.NODE_ENV === "production" && !warnedMemoryLimiter) {
       warnedMemoryLimiter = true;
@@ -172,20 +265,46 @@ export async function checkShortWindowQuota(userId: string): Promise<boolean> {
         "[mcp.rate_limit] MCP_SHORT_WINDOW_LIMITER=memory counts per process; with more than one app replica each replica allows the full limit. Use the database limiter in production.",
       );
     }
-    return shortWindowAllow(userId);
+    return shortWindowAllow(userId, tier ?? (await tierForUser(userId)));
   }
 
-  const { data, error } = await supabaseAdmin.rpc("check_mcp_short_window", {
+  const [burst, sustained] = rateWindowsFor(tier ?? (await tierForUser(userId)));
+  const { data, error } = await pendingRpc("check_mcp_rate_limit", {
     _user_id: userId,
-    _window_seconds: Math.floor(WINDOW_MS / 1000),
-    _max_requests: WINDOW_MAX,
+    _burst_window_seconds: burst.seconds,
+    _burst_max: burst.max,
+    _window_seconds: sustained.seconds,
+    _max_requests: sustained.max,
   });
 
+  if (isMissingFunction(error)) {
+    // Rolling deploy before the migration landed: keep the burst guard only.
+    if (!warnedMissingRateLimitRpc) {
+      warnedMissingRateLimitRpc = true;
+      console.error(
+        "[mcp.rate_limit] check_mcp_rate_limit is missing; enforcing the burst window only until the migration is applied",
+      );
+    }
+    return legacyShortWindowCheck(userId, burst);
+  }
   if (error) {
     console.error("[mcp.rate_limit] database limiter failed; failing closed", error);
     return false;
   }
 
+  return data === true;
+}
+
+async function legacyShortWindowCheck(userId: string, burst: RateWindow): Promise<boolean> {
+  const { data, error } = await supabaseAdmin.rpc("check_mcp_short_window", {
+    _user_id: userId,
+    _window_seconds: burst.seconds,
+    _max_requests: burst.max,
+  });
+  if (error) {
+    console.error("[mcp.rate_limit] database limiter failed; failing closed", error);
+    return false;
+  }
   return data === true;
 }
 
@@ -196,6 +315,52 @@ async function tierForUser(userId: string): Promise<Tier> {
     .eq("user_id", userId)
     .maybeSingle();
   return effectiveTier(sub?.tier, sub?.status);
+}
+
+let warnedMissingAuthRpc = false;
+
+/**
+ * Resolves a platform key hash to its owner and effective tier. One database
+ * round trip: authenticate_mcp_platform_key joins the subscription and touches
+ * last_used_at (at most once a minute). Falls back to the two-query lookup
+ * while the function is not deployed yet.
+ */
+async function lookupPlatformKey(
+  hash: string,
+): Promise<{ key_id: string; user_id: string; tier: Tier } | null> {
+  const { data, error } = await pendingRpc("authenticate_mcp_platform_key", { _key_hash: hash });
+  if (!error) {
+    const row = Array.isArray(data) ? data[0] : null;
+    if (!row) return null;
+    return { key_id: row.key_id, user_id: row.user_id, tier: effectiveTier(row.tier, row.status) };
+  }
+  if (!isMissingFunction(error)) {
+    console.error("[mcp.auth] platform key lookup failed; rejecting the key", error);
+    return null;
+  }
+  if (!warnedMissingAuthRpc) {
+    warnedMissingAuthRpc = true;
+    console.error(
+      "[mcp.auth] authenticate_mcp_platform_key is missing; using the two-query key lookup until the migration is applied",
+    );
+  }
+
+  const { data: key } = await supabaseAdmin
+    .from("platform_api_keys")
+    .select("id,user_id,revoked_at")
+    .eq("key_hash", hash)
+    .maybeSingle();
+  if (!key || key.revoked_at) return null;
+
+  // Touch last_used_at, fire and forget. Query builders are lazy: .then() is
+  // what sends the request, so a bare `void builder` would never run.
+  void supabaseAdmin
+    .from("platform_api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", key.id)
+    .then(undefined, () => undefined);
+
+  return { key_id: key.id, user_id: key.user_id, tier: await tierForUser(key.user_id) };
 }
 
 export async function authenticateBearer(req: Request): Promise<AuthedKey | null> {
@@ -217,27 +382,13 @@ export async function authenticateBearer(req: Request): Promise<AuthedKey | null
   const m = bearer.match(/^(nmcp_[A-Za-z0-9_-]+)$/);
   if (!m) return null;
   const full = m[1];
-  const hash = hashPlatformApiKey(full);
-
-  const { data: key } = await supabaseAdmin
-    .from("platform_api_keys")
-    .select("id,user_id,revoked_at")
-    .eq("key_hash", hash)
-    .maybeSingle();
-  if (!key || key.revoked_at) return null;
-
-  // Touch last_used_at, fire and forget. Query builders are lazy: .then() is
-  // what sends the request, so a bare `void builder` would never run.
-  void supabaseAdmin
-    .from("platform_api_keys")
-    .update({ last_used_at: new Date().toISOString() })
-    .eq("id", key.id)
-    .then(undefined, () => undefined);
+  const key = await lookupPlatformKey(hashPlatformApiKey(full));
+  if (!key) return null;
 
   return {
     user_id: key.user_id,
-    key_id: key.id,
-    tier: await tierForUser(key.user_id),
+    key_id: key.key_id,
+    tier: key.tier,
     auth_source: "api_key",
     scopes: MCP_SCOPES,
   };
@@ -246,22 +397,23 @@ export async function authenticateBearer(req: Request): Promise<AuthedKey | null
 // A paid tier only confers paid quota while the subscription is in good standing.
 // past_due / canceled / paused / anything non-active collapses to `free`, so a
 // user whose payment failed cannot keep hitting pro/enterprise MCP limits until
-// Paddle eventually sends a cancellation event.
-const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
-
+// Paddle eventually sends a cancellation event. The rule lives in `grantedTier`
+// (src/lib/tiers.ts) so client-safe callers share it.
 export function effectiveTier(
   tier: string | null | undefined,
   status: string | null | undefined,
 ): Tier {
-  const resolved = (tier as Tier) ?? "free";
-  if (resolved === "free") return "free";
-  return ACTIVE_SUBSCRIPTION_STATUSES.has(status ?? "") ? resolved : "free";
+  return grantedTier(tier, status);
 }
 
+/**
+ * Read-only daily quota check. Not safe for gating billable calls (it is
+ * check-then-act); those must use reserveDailyQuota().
+ */
 export async function checkDailyQuota(
   auth: AuthedKey,
 ): Promise<{ ok: boolean; used: number; limit: number }> {
-  const limit = TIER_DAILY_LIMITS[auth.tier] ?? TIER_DAILY_LIMITS.free;
+  const limit = dailyLimitFor(auth.tier);
   const { data, error } = await supabaseAdmin.rpc("get_today_mcp_usage", {
     _user_id: auth.user_id,
   });
@@ -272,6 +424,72 @@ export async function checkDailyQuota(
   const used = typeof data === "number" ? data : 0;
   return { ok: used < limit, used, limit };
 }
+
+/*
+ * Daily quota billing rule (MCP gateway and dashboard agent console):
+ *
+ * - One unit is reserved atomically (reserve_mcp_usage) BEFORE a billable call
+ *   is dispatched, so concurrent calls can never overshoot the tier limit.
+ * - The reservation is kept (the call is charged) once the tool was actually
+ *   dispatched: successful calls, business failures and ordinary tool errors.
+ *   Those calls are logged with recordCall({ usage: "reserved" }) so they are
+ *   not counted a second time.
+ * - The reservation is refunded (releaseDailyQuota) when the call did no
+ *   billable work: no n8n instance configured, OAuth scope denied, invalid
+ *   modern requestState, a confirmation round-trip (elicitation required),
+ *   rejected dashboard preconditions, or an unexpected failure before dispatch.
+ * - Throttled / quota-denied calls are never charged.
+ */
+
+/** Daily limit for a tier, defaulting to the free tier. */
+function dailyLimitFor(tier: Tier): number {
+  return TIER_DAILY_LIMITS[tier] ?? TIER_DAILY_LIMITS.free;
+}
+
+/**
+ * Atomically reserves `n` units of the user's daily MCP quota. `ok: false`
+ * means nothing was reserved. Fails closed when the RPC errors.
+ */
+export async function reserveDailyQuota(
+  auth: Pick<AuthedKey, "user_id" | "tier">,
+  n = 1,
+): Promise<{ ok: boolean; used: number; limit: number }> {
+  const limit = dailyLimitFor(auth.tier);
+  const { data, error } = await supabaseAdmin.rpc("reserve_mcp_usage", {
+    _user_id: auth.user_id,
+    _limit: limit,
+    _n: n,
+  });
+  const row = Array.isArray(data) ? data[0] : null;
+  if (error || !row) {
+    console.error("[mcp.quota] daily quota reservation failed; failing closed", error);
+    return { ok: false, used: limit, limit };
+  }
+  return { ok: row.allowed === true, used: row.used, limit: row.quota_limit ?? limit };
+}
+
+/**
+ * Refunds `n` previously reserved units (never below zero). Best effort: a
+ * failed refund only over-counts the user's own usage, so it is logged and
+ * swallowed rather than failing the request.
+ */
+export async function releaseDailyQuota(userId: string, n = 1): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin.rpc("release_mcp_usage", { _user_id: userId, _n: n });
+    if (error) console.error("[mcp.quota] daily quota refund failed", error);
+  } catch (error) {
+    console.error("[mcp.quota] daily quota refund failed", error);
+  }
+}
+
+/**
+ * How recordCall() treats the daily usage counter:
+ * - "increment": count the call now (legacy path for callers that did not reserve).
+ * - "reserved": the call was already counted by reserveDailyQuota(); do not count again.
+ * - "none": the call is not billable (e.g. its reservation was refunded).
+ * Rate-limited calls are never counted.
+ */
+export type CallUsage = "increment" | "reserved" | "none";
 
 export async function recordCall(opts: {
   user_id: string;
@@ -287,6 +505,8 @@ export async function recordCall(opts: {
   metadata?: Json;
   /** How the caller authenticated; stored under metadata.auth. */
   auth?: { source: "api_key" | "oauth"; client_id?: string };
+  /** Daily usage accounting; defaults to "increment". See CallUsage. */
+  usage?: CallUsage;
 }) {
   const baseMetadata =
     opts.metadata && typeof opts.metadata === "object" && !Array.isArray(opts.metadata)
@@ -317,7 +537,7 @@ export async function recordCall(opts: {
     }),
   ];
 
-  if (opts.status !== "rate_limited") {
+  if ((opts.usage ?? "increment") === "increment" && opts.status !== "rate_limited") {
     writes.push(supabaseAdmin.rpc("increment_mcp_usage", { _user_id: opts.user_id, _n: 1 }));
   }
 
@@ -1237,26 +1457,26 @@ async function requireConfirmation(
 
     // Direct runTool unit tests do not have an authenticated caller. Keep their
     // compatibility challenge process-local; all production dispatches use the
-    // durable, owner-scoped service above.
+    // durable, owner-scoped service above. A process-local challenge would not
+    // survive a second replica (and is not owner-scoped), so production
+    // refuses to issue one.
+    if (process.env.NODE_ENV === "production") {
+      throw new Error(`${operation} requires an authenticated caller.`);
+    }
     const challengeKey = `${operation}:${stableStringify(scope)}`;
-    const now = Date.now();
     const existing = testOnlyConfirmationChallenges.get(challengeKey);
 
     if (
       args.confirm === true &&
       typeof args.confirmationToken === "string" &&
-      existing?.token === args.confirmationToken &&
-      existing.expiresAt > now
+      existing?.token === args.confirmationToken
     ) {
       testOnlyConfirmationChallenges.delete(challengeKey);
       return;
     }
 
     const token = `mcp_confirm_${randomBytes(16).toString("base64url")}`;
-    testOnlyConfirmationChallenges.set(challengeKey, {
-      token,
-      expiresAt: now + TEST_CONFIRMATION_TOKEN_TTL_MS,
-    });
+    testOnlyConfirmationChallenges.set(challengeKey, { token }, TEST_CONFIRMATION_TOKEN_TTL_MS);
 
     if (args.confirm === true) {
       throw new Error(
@@ -1879,8 +2099,11 @@ async function handleAuditReadTool(
 }
 
 /**
- * Roll a workflow back to a prior audited snapshot. Marks the audit row rolled
- * back (owner-scoped), re-applies snapshot_before to n8n, and records the
+ * Roll a workflow back to a prior audited snapshot. Fails closed unless the
+ * audit row was recorded on the instance the rollback runs on and the workflow
+ * is unchanged since the audited mutation (unless `force: true`). Claims the
+ * audit row (owner-scoped compare-and-set) before re-applying snapshot_before
+ * to n8n, releases the claim if n8n rejects the restore, and records the
  * rollback itself as a new audit row.
  */
 async function handleRollback(
@@ -1892,8 +2115,10 @@ async function handleRollback(
   if (!userId) throw new Error("Authentication required");
   const auditLogId = String(args.auditLogId ?? "");
   if (!auditLogId) throw new Error("auditLogId is required");
+  const force = args.force === true;
 
   const auditRow = await getRollbackSnapshotForUser(userId, auditLogId);
+  assertSameInstance(auditRow.instance_id, inst.id, AUDIT_INSTANCE_MISMATCH_MESSAGE);
   const snap = asObj(auditRow.snapshot_before);
   const workflowId = auditRow.workflow_id;
   const snapshotWorkflowId = strId(snap.id);
@@ -1914,19 +2139,43 @@ async function handleRollback(
     };
   }
 
-  const before = await fetchSnapshotSafe(inst, workflowId);
-  const restored = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`, {
-    method: "PUT",
-    body: JSON.stringify({
-      name: snap.name,
-      nodes: snap.nodes,
-      connections: snap.connections,
-      settings: snap.settings ?? {},
-    }),
-  });
+  // The current workflow is required: it is both the concurrency baseline and
+  // this rollback's own before-snapshot. An unreadable workflow fails closed.
+  const before = requireWorkflow(
+    await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`),
+  );
+  const concurrency = compareWithAuditedState(before, auditRow.snapshot_after);
+  if (!force) {
+    if (concurrency.status === "changed") {
+      throw new WorkflowActionConflictError("rollback_conflict", ROLLBACK_CONFLICT_MESSAGE);
+    }
+    if (concurrency.status === "unverifiable") {
+      throw new WorkflowActionConflictError("rollback_unverifiable", ROLLBACK_UNVERIFIABLE_MESSAGE);
+    }
+  }
 
-  await markAuditRolledBack(userId, auditLogId);
+  // Compare-and-set claim: only one rollback of this audit row may write to n8n.
+  if (!(await markAuditRolledBack(userId, auditLogId))) {
+    throw new WorkflowActionConflictError("already_rolled_back", ALREADY_ROLLED_BACK_MESSAGE);
+  }
 
+  let restored: unknown;
+  try {
+    restored = await n8n(inst, `/api/v1/workflows/${encodeURIComponent(workflowId)}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        name: snap.name,
+        nodes: snap.nodes,
+        connections: snap.connections,
+        settings: snap.settings ?? {},
+      }),
+    });
+  } catch (error) {
+    await releaseAuditRollbackClaim(userId, auditLogId);
+    throw error;
+  }
+
+  const forced = force && concurrency.status !== "unchanged";
   await recordWorkflowAudit({
     userId,
     instanceId: inst.id,
@@ -1934,10 +2183,15 @@ async function handleRollback(
     operation: "update",
     snapshotBefore: before,
     snapshotAfter: restored,
-    changes: before ? calculateChanges(before, restored) : undefined,
+    changes: calculateChanges(before, restored),
     aiReasoning: typeof args.reason === "string" ? args.reason : "rollback",
     toolName: "rollback_workflow",
-    toolParams: { auditLogId },
+    toolParams: {
+      auditLogId,
+      ...(force ? { force: true } : {}),
+      concurrencyCheck: concurrency.status,
+      concurrencySignal: concurrency.signal,
+    },
     ipAddress: caller?.ip ?? null,
     userAgent: caller?.ua ?? null,
     sessionId: caller?.request_id ?? null,
@@ -1949,7 +2203,58 @@ async function handleRollback(
     rolled_back_from: auditLogId,
     validation,
     workflow: restored,
+    ...(forced ? { forced: true, overwrote_newer_changes: concurrency.status === "changed" } : {}),
   };
+}
+
+type AuditedStateComparison = {
+  /** unchanged: matches snapshot_after; changed: newer edits; unverifiable: no usable baseline. */
+  status: "unchanged" | "changed" | "unverifiable";
+  signal: "versionId" | "content" | null;
+};
+
+/**
+ * Optimistic concurrency check for rollback: is the live workflow still the
+ * state the audited mutation produced (its snapshot_after)? n8n assigns a new
+ * versionId on every save, so a versionId on both sides is the authoritative
+ * signal. Without one, fall back to a fingerprint of the editable content
+ * (name, nodes, connections, settings). A missing or truncated snapshot_after
+ * cannot rule out newer edits and is reported as unverifiable.
+ */
+function compareWithAuditedState(
+  current: WorkflowLike,
+  snapshotAfter: unknown,
+): AuditedStateComparison {
+  const after = asObj(snapshotAfter);
+  const afterVersionId = strId(after.versionId);
+  const currentVersionId = strId(current.versionId);
+  if (afterVersionId && currentVersionId) {
+    return {
+      status: afterVersionId === currentVersionId ? "unchanged" : "changed",
+      signal: "versionId",
+    };
+  }
+  if (!Array.isArray(after.nodes)) return { status: "unverifiable", signal: null };
+  return {
+    status:
+      workflowContentFingerprint(after as WorkflowLike) === workflowContentFingerprint(current)
+        ? "unchanged"
+        : "changed",
+    signal: "content",
+  };
+}
+
+function workflowContentFingerprint(workflow: WorkflowLike): string {
+  return createHash("sha256")
+    .update(
+      stableStringify({
+        name: workflow.name ?? null,
+        nodes: workflow.nodes ?? [],
+        connections: workflow.connections ?? {},
+        settings: workflow.settings ?? {},
+      }),
+    )
+    .digest("hex");
 }
 
 async function previewWorkflowDiff(inst: Inst, args: Record<string, unknown>): Promise<unknown> {
@@ -1999,6 +2304,8 @@ async function updatePartialWorkflow(
     operations: requestedOperations,
     operationIndexes,
     sessionId: context?.request_id,
+    // The update runs on `inst`; refuse a preview computed on another instance.
+    instanceId: inst.id,
   });
   const operations = requireOperations(trustedPreview.operations);
   const policy = optionalPolicy(args.policy, args.confirm, context?.policy);
@@ -2069,16 +2376,28 @@ function workflowFingerprint(workflow: WorkflowLike): string {
 }
 
 /**
+ * The caller's n8n instance, or a loader that fetches (and decrypts) it.
+ * dispatchTool calls a loader at most once, and only for tools that need an
+ * instance, so knowledge, audit-read and validation tools never touch the
+ * instance row or its secrets.
+ */
+export type InstanceSource = Inst | null | (() => Promise<Inst | null>);
+
+/**
  * Route a tool call to local handler or upstream proxy.
- * `inst` is required for local tools and for upstream `n8n_*` management tools;
- * upstream knowledge tools work without it.
+ * An instance is required for local tools and for upstream `n8n_*` management
+ * tools; upstream knowledge tools work without it.
  */
 export async function dispatchTool(
   name: string,
   args: Record<string, unknown>,
-  inst: Inst | null,
+  instanceSource: InstanceSource,
   caller?: CallerCtx & ToolContext,
 ): Promise<DispatchResult> {
+  let pending: Promise<Inst | null> | undefined;
+  const loadInstance = (): Promise<Inst | null> =>
+    (pending ??=
+      typeof instanceSource === "function" ? instanceSource() : Promise.resolve(instanceSource));
   const upstreamKnowledgeTool = KNOWLEDGE_TOOL_MAP[name as keyof typeof KNOWLEDGE_TOOL_MAP];
   if (upstreamKnowledgeTool) {
     if (!isUpstreamConfigured()) {
@@ -2097,6 +2416,7 @@ export async function dispatchTool(
   // projects, folders, tags, data tables, executions, security audit).
   const { ADMIN_TOOL_NAMES, runAdminTool } = await import("./n8n-admin.server");
   if (ADMIN_TOOL_NAMES.has(name)) {
+    const inst = await loadInstance();
     if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
     const output = await runAdminTool(
       name,
@@ -2108,6 +2428,7 @@ export async function dispatchTool(
     return { output, upstream: false, category: "local", needsInstance: false };
   }
   if (name === "autofix_workflow") {
+    const inst = await loadInstance();
     if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
     const { OrchestratedToolsService } = await import("./orchestrated-tools.service");
     const service = new OrchestratedToolsService(inst);
@@ -2121,6 +2442,7 @@ export async function dispatchTool(
 
   // Native n8n MCP tools (instance-level MCP token required).
   if (name === "resolve_node_options") {
+    const inst = await loadInstance();
     if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
     const { resolveNodeOptions } = await import("./n8n-native-tools.server");
     return {
@@ -2131,6 +2453,7 @@ export async function dispatchTool(
     };
   }
   if (name === "get_workflow_history" && (args.source === "native" || args.source === "both")) {
+    const inst = await loadInstance();
     if (!inst) return { output: null, upstream: false, category: "local", needsInstance: true };
     const workflowId = String(args.workflowId ?? "").trim();
     if (!workflowId) throw new Error("workflowId is required");
@@ -2155,6 +2478,7 @@ export async function dispatchTool(
   }
   // Rollback re-applies a prior snapshot, so it also needs an n8n instance.
   if (name === "rollback_workflow") {
+    const inst = await loadInstance();
     if (!inst) {
       return { output: null, upstream: false, category: "local", needsInstance: true };
     }
@@ -2164,7 +2488,11 @@ export async function dispatchTool(
       "Rollback workflow",
       {
         requireToken: true,
-        scope: { auditLogId: args.auditLogId },
+        // A forced rollback overwrites newer edits, so it needs its own token.
+        scope:
+          args.force === true
+            ? { auditLogId: args.auditLogId, force: true }
+            : { auditLogId: args.auditLogId },
       },
       caller,
     );
@@ -2178,11 +2506,14 @@ export async function dispatchTool(
   }
 
   if (AGENT_READ_TOOLS.has(name)) {
-    const output = await runTool(inst ?? ({} as Inst), name, args, caller);
+    // validate_node never reads the instance: do not load it.
+    const known = typeof instanceSource === "function" ? null : instanceSource;
+    const output = await runTool(known ?? ({} as Inst), name, args, caller);
     return { output, upstream: false, category: "local", needsInstance: false };
   }
 
   if (AGENT_INSTANCE_TOOLS.has(name)) {
+    const inst = await loadInstance();
     if (!inst) {
       return { output: null, upstream: false, category: "local", needsInstance: true };
     }
@@ -2202,6 +2533,7 @@ export async function dispatchTool(
   }
 
   if (LOCAL_NAMES.has(name)) {
+    const inst = await loadInstance();
     if (!inst) {
       return {
         output: null,
@@ -2250,6 +2582,7 @@ export async function dispatchTool(
   }
 
   const management = isManagementTool(name);
+  const inst = management ? await loadInstance() : null;
   if (management && !inst) {
     return {
       output: null,

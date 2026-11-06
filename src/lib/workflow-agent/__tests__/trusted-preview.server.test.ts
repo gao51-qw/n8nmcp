@@ -75,6 +75,33 @@ describe("trusted workflow preview", () => {
     ).toThrow(/scope/);
   });
 
+  it("binds the preview to the instance the update runs on", () => {
+    expect(
+      assertTrustedWorkflowPreview({
+        ...baseInput,
+        preview: preview({ instance_id: "instance-1" }),
+        instanceId: "instance-1",
+      }).workflowId,
+    ).toBe("wf-1");
+
+    for (const instance_id of ["instance-2", null, undefined]) {
+      let thrown: unknown;
+      try {
+        assertTrustedWorkflowPreview({
+          ...baseInput,
+          preview: preview({ instance_id }),
+          instanceId: "instance-1",
+        });
+      } catch (error) {
+        thrown = error;
+      }
+      expect(thrown).toMatchObject({
+        name: "WorkflowActionConflictError",
+        code: "instance_mismatch",
+      });
+    }
+  });
+
   it("rejects operations that do not match the full preview", () => {
     expect(() =>
       assertTrustedWorkflowPreview({

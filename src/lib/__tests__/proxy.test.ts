@@ -14,6 +14,38 @@ describe("domain proxy", () => {
     expect(response.headers.get("x-robots-tag")).toBe("noindex,nofollow");
   });
 
+  it.each([
+    "/signup",
+    "/signup?next=%2Fdashboard%2Fbilling",
+    "/forgot-password",
+    "/reset-password",
+    "/auth/callback",
+  ])("serves the account page %s un-rewritten and noindex on the dashboard domain", (path) => {
+    const host = "dashboard.n8nworkflow.com";
+    const response = proxy(new NextRequest(`https://${host}${path}`, { headers: { host } }));
+
+    expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+    expect(response.headers.get("x-robots-tag")).toBe("noindex,nofollow");
+  });
+
+  it("still rewrites look-alike dashboard paths under /dashboard", () => {
+    const host = "dashboard.n8nworkflow.com";
+    expect(rewriteTarget(host, "/signups")).toBe("/dashboard/signups");
+    expect(rewriteTarget(host, "/authx")).toBe("/dashboard/authx");
+    expect(rewriteTarget(host, "/billing")).toBe("/dashboard/billing");
+  });
+
+  it("marks account pages noindex on the main domain too", () => {
+    const host = "mcp.n8nworkflow.com";
+    for (const path of ["/login", "/signup", "/forgot-password", "/reset-password"]) {
+      const response = proxy(new NextRequest(`https://${host}${path}`, { headers: { host } }));
+      expect(response.headers.get("x-middleware-rewrite")).toBeNull();
+      expect(response.headers.get("x-robots-tag")).toBe("noindex,nofollow");
+    }
+    const home = proxy(new NextRequest(`https://${host}/`, { headers: { host } }));
+    expect(home.headers.get("x-robots-tag")).toBeNull();
+  });
+
   function rewriteTarget(host: string, path: string): string | null {
     const request = new NextRequest(`https://${host}${path}`, { headers: { host } });
     const rewrite = proxy(request).headers.get("x-middleware-rewrite");

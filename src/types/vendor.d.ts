@@ -41,12 +41,15 @@ declare module "lucide-react" {
   export const Inbox: LucideIcon;
   export const Info: LucideIcon;
   export const KeyRound: LucideIcon;
+  export const LayoutDashboard: LucideIcon;
   export const LayoutGrid: LucideIcon;
   export const LifeBuoy: LucideIcon;
   export const Linkedin: LucideIcon;
   export const ListChecks: LucideIcon;
   export const Loader2: LucideIcon;
   export const LogIn: LucideIcon;
+  export const LogOut: LucideIcon;
+  export const MailCheck: LucideIcon;
   export const Megaphone: LucideIcon;
   export const Menu: LucideIcon;
   export const MessageCircle: LucideIcon;

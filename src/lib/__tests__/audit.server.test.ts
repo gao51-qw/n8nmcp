@@ -220,6 +220,30 @@ describe("rollback audit lifecycle", () => {
     expect(eqCols).toEqual(expect.arrayContaining(["id", "user_id", "is_rolled_back"]));
   });
 
+  it("claims a row with compare-and-set so only one rollback wins", async () => {
+    const { markAuditRolledBack } = await mod();
+
+    mocks.from.mockReturnValue(makeBuilder({ data: [{ id: "a1" }], error: null }));
+    await expect(markAuditRolledBack("user-1", "a1")).resolves.toBe(true);
+
+    // Already claimed: the is_rolled_back=false filter matches no row.
+    mocks.from.mockReturnValue(makeBuilder({ data: [], error: null }));
+    await expect(markAuditRolledBack("user-1", "a1")).resolves.toBe(false);
+  });
+
+  it("releases a rollback claim without throwing", async () => {
+    const update = makeBuilder({ data: null, error: { message: "db down" } });
+    mocks.from.mockReturnValue(update);
+    const { releaseAuditRollbackClaim } = await mod();
+
+    await expect(releaseAuditRollbackClaim("user-1", "a1")).resolves.toBeUndefined();
+    expect(update.update).toHaveBeenCalledWith({ is_rolled_back: false });
+    expect(mocks.logWarn).toHaveBeenCalledWith(
+      "audit.rollback_release_failed",
+      expect.objectContaining({ audit_log_id: "a1" }),
+    );
+  });
+
   it("rejects when the row is missing or owned by another user", async () => {
     withRow(null);
     const { getRollbackSnapshotForUser } = await mod();

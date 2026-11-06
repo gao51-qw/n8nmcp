@@ -1,13 +1,15 @@
 "use client";
 
 // MCP clients the user has connected through OAuth, with their scopes and a
-// revoke button. Revoking marks the grant revoked here (the gateway rejects
+// revoke button. Revoking asks for confirmation first, then marks the grant revoked here (the gateway rejects
 // the client's tokens immediately) and asks Supabase Auth to delete the
 // client's sessions and refresh tokens.
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, AppWindow } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { errorText } from "@/components/dashboard/error-text";
 import { supabase } from "@/integrations/supabase/client";
 import { isMcpScope, SCOPE_LABELS } from "@/lib/oauth/scopes";
 import { supportFetch } from "@/lib/support/http.client";
@@ -31,14 +33,15 @@ export default function ConnectedAppsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<string | null>(null);
+  const [pendingRevoke, setPendingRevoke] = useState<Grant | null>(null);
 
   const load = useCallback(async () => {
     try {
       const data = await supportFetch<{ grants: Grant[] }>("/api/oauth/grants");
       setGrants(data.grants);
       setError(null);
-    } catch {
-      setError("Could not load connected apps.");
+    } catch (err) {
+      setError(errorText(err, "Could not load connected apps."));
     }
   }, []);
 
@@ -49,6 +52,7 @@ export default function ConnectedAppsPage() {
   async function revoke(grant: Grant) {
     setRevoking(grant.client_id);
     setNotice(null);
+    setError(null);
     try {
       await supportFetch(`/api/oauth/grants?client_id=${encodeURIComponent(grant.client_id)}`, {
         method: "DELETE",
@@ -62,8 +66,8 @@ export default function ConnectedAppsPage() {
           : `${grant.client_name || "The app"} has been disconnected.`,
       );
       await load();
-    } catch {
-      setError("Could not revoke the app. Try again.");
+    } catch (err) {
+      setError(errorText(err, "Could not revoke the app. Try again."));
     } finally {
       setRevoking(null);
     }
@@ -127,7 +131,7 @@ export default function ConnectedAppsPage() {
             </div>
             <Button
               variant="outline"
-              onClick={() => revoke(grant)}
+              onClick={() => setPendingRevoke(grant)}
               disabled={revoking === grant.client_id}
             >
               {revoking === grant.client_id ? (
@@ -138,6 +142,28 @@ export default function ConnectedAppsPage() {
           </li>
         ))}
       </ul>
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRevoke(null);
+        }}
+        title={
+          pendingRevoke
+            ? `Disconnect ${pendingRevoke.client_name || pendingRevoke.client_id}?`
+            : "Disconnect app?"
+        }
+        description={
+          <p>
+            The app loses access to n8n-mcp immediately and has to ask for your consent again to
+            reconnect.
+          </p>
+        }
+        confirmLabel="Revoke access"
+        onConfirm={async () => {
+          if (pendingRevoke) await revoke(pendingRevoke);
+        }}
+      />
     </main>
   );
 }

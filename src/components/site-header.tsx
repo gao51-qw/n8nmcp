@@ -7,7 +7,13 @@ import { useAuth } from "@/components/auth-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { buildPrimaryNav, loginHref, surfaceHref, type SiteNavLink } from "@/lib/site-navigation";
+import {
+  buildPrimaryNav,
+  loginHref,
+  signupHref,
+  surfaceHref,
+  type SiteNavLink,
+} from "@/lib/site-navigation";
 
 function NavAnchor({
   link,
@@ -60,14 +66,19 @@ function AccountLinks({
   }
 
   return (
-    <Button
-      asChild
-      size={layout === "desktop" ? "sm" : "default"}
-      variant={layout === "desktop" ? "ghost" : "outline"}
-      onClick={onNavigate}
-    >
-      <Link href={loginHref()}>Sign in</Link>
-    </Button>
+    <>
+      <Button
+        asChild
+        size={layout === "desktop" ? "sm" : "default"}
+        variant={layout === "desktop" ? "ghost" : "outline"}
+        onClick={onNavigate}
+      >
+        <Link href={loginHref()}>Sign in</Link>
+      </Button>
+      <Button asChild size={layout === "desktop" ? "sm" : "default"} onClick={onNavigate}>
+        <Link href={signupHref()}>Get started</Link>
+      </Button>
+    </>
   );
 }
 

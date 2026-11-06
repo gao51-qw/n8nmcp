@@ -1,16 +1,23 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
-  checkDailyQuota,
   checkShortWindowQuota,
   dispatchTool,
   effectiveTier,
   getDefaultInstance,
   recordCall,
+  releaseDailyQuota,
+  reserveDailyQuota,
 } from "@/lib/mcp.server";
 import {
   buildWorkflowAgentCallMetadata,
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
+import { persistedToolErrorMessage } from "@/lib/mcp-tool-errors";
+import {
+  PREVIEW_INSTANCE_MISMATCH_MESSAGE,
+  WorkflowActionConflictError,
+  assertSameInstance,
+} from "@/lib/workflow-agent/action-conflict";
 import { createConfirmationService } from "@/lib/workflow-agent/confirmation.server";
 import {
   assertTrustedWorkflowPreview,
@@ -49,7 +56,13 @@ export type DashboardAgentActionDependencies = {
   getInstance: (userId: string) => Promise<N8nInstance | null>;
   dispatch: Dispatch;
   recordCall: typeof recordCall;
+  /**
+   * Applies the short-window throttle and atomically reserves one unit of
+   * daily quota; throws when the call may not run (nothing is reserved then).
+   */
   checkQuota: (userId: string) => Promise<void>;
+  /** Refunds the unit reserved by checkQuota. Must not throw. */
+  releaseQuota: (userId: string) => Promise<void>;
   confirmation: {
     requireOrConsume(input: {
       userId: string;
@@ -80,22 +93,21 @@ const defaultDependencies: DashboardAgentActionDependencies = {
   dispatch: dispatchTool,
   recordCall,
   async checkQuota(userId) {
-    if (!(await checkShortWindowQuota(userId))) {
-      throw new DashboardAgentActionError(429, "rate_limited", "Rate limit exceeded");
-    }
-
+    // One subscription lookup serves both limiters; without a tier,
+    // checkShortWindowQuota would query the subscription again.
     const { data: subscription, error } = await supabaseAdmin
       .from("subscriptions")
       .select("tier,status")
       .eq("user_id", userId)
       .maybeSingle();
     if (error) throw new Error(`Failed to load subscription: ${error.message}`);
+    const tier = effectiveTier(subscription?.tier, subscription?.status);
 
-    const quota = await checkDailyQuota({
-      user_id: userId,
-      key_id: "dashboard-agent-console",
-      tier: effectiveTier(subscription?.tier, subscription?.status),
-    });
+    if (!(await checkShortWindowQuota(userId, tier))) {
+      throw new DashboardAgentActionError(429, "rate_limited", "Rate limit exceeded");
+    }
+
+    const quota = await reserveDailyQuota({ user_id: userId, tier });
     if (!quota.ok) {
       throw new DashboardAgentActionError(
         429,
@@ -104,8 +116,20 @@ const defaultDependencies: DashboardAgentActionDependencies = {
       );
     }
   },
+  async releaseQuota(userId) {
+    await releaseDailyQuota(userId);
+  },
   confirmation: createConfirmationService(),
 };
+
+/**
+ * Tracks the unit reserved by checkQuota for one action. Billing rule (same as
+ * the MCP gateway, see reserveDailyQuota in mcp.server.ts): the unit is charged
+ * once the tool was dispatched (success or tool error); rejected preconditions
+ * (preview, instance, confirmation round-trip) and a missing n8n instance are
+ * refunded.
+ */
+type QuotaReservation = { charged: boolean };
 
 export async function executeDashboardAgentAction(
   userId: string,
@@ -114,10 +138,34 @@ export async function executeDashboardAgentAction(
   dependencies: DashboardAgentActionDependencies = defaultDependencies,
 ): Promise<{ action: DashboardAgentAction["action"]; output: unknown }> {
   await dependencies.checkQuota(userId);
+  const reservation: QuotaReservation = { charged: false };
+  try {
+    return await performAction(userId, input, context, dependencies, reservation);
+  } catch (error) {
+    // Never let a failed refund mask the original error.
+    if (!reservation.charged) await dependencies.releaseQuota(userId).catch(() => undefined);
+    throw error;
+  }
+}
 
+async function performAction(
+  userId: string,
+  input: DashboardAgentAction,
+  context: DashboardAgentActionContext,
+  dependencies: DashboardAgentActionDependencies,
+  reservation: QuotaReservation,
+): Promise<{ action: DashboardAgentAction["action"]; output: unknown }> {
   if (input.action === "apply") {
     const preview = await dependencies.loadPreview(userId, input.previewCallId);
     const trusted = trustedPreview(preview, userId, input, dependencies.now());
+    const instance = await requireInstance(userId, dependencies);
+    // The preview's diff and base version were computed on one instance; never
+    // apply them to a different (or since-deleted) one.
+    try {
+      assertSameInstance(preview?.instance_id, instance.id, PREVIEW_INSTANCE_MISMATCH_MESSAGE);
+    } catch (error) {
+      throw toDashboardError(error);
+    }
     await dependencies.confirmation.requireOrConsume({
       userId,
       action: "Apply workflow preview",
@@ -141,8 +189,10 @@ export async function executeDashboardAgentAction(
         sourcePreviewOperationIndexes: trusted.selectedIndexes,
         confirm: true,
       },
+      instance,
       context,
       dependencies,
+      reservation,
     );
   }
 
@@ -152,6 +202,9 @@ export async function executeDashboardAgentAction(
     scope: { auditLogId: input.auditLogId },
     confirmationToken: input.confirmationToken,
   });
+  // rollback_workflow itself verifies the audit row's instance and that the
+  // workflow is unchanged since the audited change; its structured conflicts
+  // are mapped to 409 responses in dispatchAndRecord.
   return dispatchAndRecord(
     userId,
     "rollback",
@@ -161,9 +214,30 @@ export async function executeDashboardAgentAction(
       reason: input.reason,
       confirm: true,
     },
+    await requireInstance(userId, dependencies),
     context,
     dependencies,
+    reservation,
   );
+}
+
+async function requireInstance(
+  userId: string,
+  dependencies: DashboardAgentActionDependencies,
+): Promise<N8nInstance> {
+  const instance = await dependencies.getInstance(userId);
+  if (!instance) {
+    throw new DashboardAgentActionError(404, "instance_not_found", "No n8n instance configured");
+  }
+  return instance;
+}
+
+/** Map a structured workflow-action conflict to a 409 dashboard error. */
+function toDashboardError(error: unknown): unknown {
+  if (error instanceof WorkflowActionConflictError) {
+    return new DashboardAgentActionError(409, error.code, error.message);
+  }
+  return error;
 }
 
 function trustedPreview(
@@ -217,17 +291,15 @@ async function dispatchAndRecord(
   action: DashboardAgentAction["action"],
   toolName: "update_partial_workflow" | "rollback_workflow",
   args: Record<string, unknown>,
+  instance: N8nInstance,
   context: DashboardAgentActionContext,
   dependencies: DashboardAgentActionDependencies,
+  reservation: QuotaReservation,
 ) {
-  const instance = await dependencies.getInstance(userId);
-  if (!instance) {
-    throw new DashboardAgentActionError(404, "instance_not_found", "No n8n instance configured");
-  }
-
   const started = Date.now();
+  let result: Awaited<ReturnType<Dispatch>>;
   try {
-    const result = await dependencies.dispatch(toolName, args, instance, {
+    result = await dependencies.dispatch(toolName, args, instance, {
       user_id: userId,
       source: "dashboard-agent-console",
       request_id: context.requestId,
@@ -235,36 +307,56 @@ async function dispatchAndRecord(
       ua: context.userAgent,
       confirmationVerified: true,
     });
-    if (result.needsInstance) {
-      throw new DashboardAgentActionError(404, "instance_not_found", "No n8n instance configured");
-    }
-
-    await dependencies.recordCall({
-      user_id: userId,
-      instance_id: instance.id,
-      tool_name: toolName,
-      status: "ok",
-      latency_ms: Date.now() - started,
-      upstream: result.upstream,
-      category: result.category,
-      workflow_id: workflowIdFromCall(toolName, args, result.output),
-      session_id: context.requestId,
-      metadata: buildWorkflowAgentCallMetadata(toolName, args, result.output),
-    });
-    return { action, output: result.output };
   } catch (error) {
+    // Ordinary tool errors are billable: the tool was dispatched.
+    reservation.charged = true;
     await dependencies.recordCall({
+      usage: "reserved",
       user_id: userId,
       instance_id: instance.id,
       tool_name: toolName,
       status: "error",
       latency_ms: Date.now() - started,
-      error_message: error instanceof Error ? error.message : "Workflow action failed",
+      // Persist only sanitized text, never the raw exception message.
+      error_message: persistedToolErrorMessage(error, "Workflow action failed"),
       workflow_id: workflowIdFromCall(toolName, args, null),
       session_id: context.requestId,
     });
-    throw error;
+    throw toDashboardError(error);
   }
+
+  if (result.needsInstance) {
+    // A configuration error is not billable; executeDashboardAgentAction
+    // refunds the reservation when this error propagates.
+    await dependencies.recordCall({
+      usage: "none",
+      user_id: userId,
+      instance_id: instance.id,
+      tool_name: toolName,
+      status: "error",
+      latency_ms: Date.now() - started,
+      error_message: "no n8n instance configured",
+      workflow_id: workflowIdFromCall(toolName, args, null),
+      session_id: context.requestId,
+    });
+    throw new DashboardAgentActionError(404, "instance_not_found", "No n8n instance configured");
+  }
+
+  reservation.charged = true;
+  await dependencies.recordCall({
+    usage: "reserved",
+    user_id: userId,
+    instance_id: instance.id,
+    tool_name: toolName,
+    status: "ok",
+    latency_ms: Date.now() - started,
+    upstream: result.upstream,
+    category: result.category,
+    workflow_id: workflowIdFromCall(toolName, args, result.output),
+    session_id: context.requestId,
+    metadata: buildWorkflowAgentCallMetadata(toolName, args, result.output),
+  });
+  return { action, output: result.output };
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

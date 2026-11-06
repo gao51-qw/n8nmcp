@@ -27,6 +27,27 @@ describe("mcp transport helpers", () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
+  it("exposes the MCP and OAuth response headers to browser clients", () => {
+    const exposed = CORS["Access-Control-Expose-Headers"]
+      .split(",")
+      .map((name) => name.trim().toLowerCase());
+
+    expect(exposed).toEqual(
+      expect.arrayContaining([
+        "www-authenticate",
+        "mcp-session-id",
+        "mcp-protocol-version",
+        "x-request-id",
+        "retry-after",
+      ]),
+    );
+    for (const res of [jsonResp({ ok: true }), sseStream({ ok: true })]) {
+      expect(res.headers.get("access-control-expose-headers")).toBe(
+        CORS["Access-Control-Expose-Headers"],
+      );
+    }
+  });
+
   it("returns a single-message SSE stream", async () => {
     const res = sseStream({ jsonrpc: "2.0", id: 1, result: {} });
 

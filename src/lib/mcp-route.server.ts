@@ -8,20 +8,24 @@
 import { randomBytes } from "node:crypto";
 import {
   authenticateBearer,
-  checkDailyQuota,
+  type CallUsage,
   checkShortWindowQuota,
   ElicitationRequiredError,
   type ToolContext,
   dispatchTool,
   getDefaultInstance,
   getMergedTools,
+  type N8nInstance,
   recordCall,
+  releaseDailyQuota,
+  reserveDailyQuota,
 } from "@/lib/mcp.server";
 import * as Sentry from "@sentry/nextjs";
 import { isManagementTool, isUpstreamConfigured } from "@/lib/mcp-upstream.server";
 import { isOAuthEnabled, protectedResourceMetadataUrl } from "@/lib/oauth/config.server";
 import { missingScopes } from "@/lib/oauth/scopes";
 import { requiredScopesForTool } from "@/lib/oauth/tool-scopes.server";
+import { clientIp } from "@/lib/client-ip.server";
 import { getRequestId, log } from "@/lib/logger.server";
 import { CORS, jsonResp, rpcError, rpcResult, sseStream } from "@/lib/mcp-transport.server";
 import type { JsonRpcReq } from "@/lib/mcp-types";
@@ -30,8 +34,9 @@ import {
   toolBusinessOutcome,
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
-import { createExpiringStore } from "@/lib/expiring-store";
+import { persistedToolErrorMessage, sanitizedToolErrorMessage } from "@/lib/mcp-tool-errors";
 import { mcpSharedState } from "@/lib/mcp-shared-state.server";
+import { rateLimitLogReason, rateLimitMessage } from "@/lib/mcp-rate-limit";
 import { currentTraceId, runWithTrace, traceContextFrom } from "@/lib/trace-context.server";
 import {
   classifyRequest,
@@ -78,10 +83,10 @@ const LEGACY_ONLY_METHODS = new Set([
 const ROBOTS_NOINDEX = "noindex,nofollow";
 const CLIENT_CAPABILITIES_SESSION_TTL_MS = 24 * 60 * 60 * 1000;
 const ELICITATION_TTL_MS = 5 * 60_000;
-const MAX_TRACKED_SESSIONS = 10_000;
-const clientCapabilitySessions = createExpiringStore<ToolContext["clientCapabilities"]>({
-  maxEntries: MAX_TRACKED_SESSIONS,
-});
+// Capabilities a legacy client declared in initialize, per user + session,
+// live in the shared MCP state (mcp-shared-state.server.ts) so a tools/call
+// that reaches another replica still sees them.
+
 // Elicitations the server has issued, keyed by user + id. A completion is only
 // accepted for an id issued to the same user, and a replay only satisfies the
 // exact request (title + description) that id was issued for.
@@ -151,37 +156,69 @@ function parseClientCapabilities(
   };
 }
 
-function buildSessionKey(userId: string, request: Request, sessionId: string | null): string {
+function sessionName(request: Request, sessionId: string | null): string {
   const mcpSession = request.headers.get("mcp-session-id") || request.headers.get("x-session-id");
-  return `${userId}:${sessionId || mcpSession || "default"}`;
+  return sessionId || mcpSession || "default";
 }
 
-function storeSessionCapabilities(
+/** Drops keys whose value is undefined, so they do not override a merge. */
+function definedCapabilities(
+  capabilities: ToolContext["clientCapabilities"],
+): NonNullable<ToolContext["clientCapabilities"]> {
+  return Object.fromEntries(
+    Object.entries(capabilities ?? {}).filter(([, value]) => value !== undefined),
+  );
+}
+
+async function storeSessionCapabilities(
   userId: string,
   sessionId: string | null,
   request: Request,
   capabilities: ToolContext["clientCapabilities"],
-) {
-  const key = buildSessionKey(userId, request, sessionId);
-  clientCapabilitySessions.set(key, capabilities, CLIENT_CAPABILITIES_SESSION_TTL_MS);
+): Promise<void> {
+  try {
+    await mcpSharedState().setSessionCapabilities(
+      userId,
+      sessionName(request, sessionId),
+      definedCapabilities(capabilities),
+      CLIENT_CAPABILITIES_SESSION_TTL_MS,
+    );
+  } catch (error) {
+    // initialize still succeeds; the client falls back to confirmation tokens.
+    log.warn("mcp.session_capabilities.store_failed", {
+      user_id: userId,
+      err: error instanceof Error ? error.message : String(error),
+    });
+  }
 }
 
-function loadSessionCapabilities(
+async function loadSessionCapabilities(
   userId: string,
   sessionId: string | null,
   request: Request,
-): ToolContext["clientCapabilities"] | null {
-  return clientCapabilitySessions.get(buildSessionKey(userId, request, sessionId)) ?? null;
+): Promise<ToolContext["clientCapabilities"] | null> {
+  try {
+    return await mcpSharedState().getSessionCapabilities(userId, sessionName(request, sessionId));
+  } catch {
+    return null;
+  }
 }
 
-function resolveToolContext(
+async function resolveToolContext(
   userId: string,
   request: Request,
   sessionId: string | null,
   requestParams: Record<string, unknown>,
-): ToolContext {
-  const capabilitiesFromSession = loadSessionCapabilities(userId, sessionId, request) ?? {};
-  const capabilityCandidate = parseClientCapabilities(requestParams);
+): Promise<ToolContext> {
+  // Capabilities sent with this call win over the ones stored at initialize.
+  // Only keys the call actually declares override: an absent key must not
+  // erase a stored `elicitation: true`. Only `elicitation` drives behaviour,
+  // so the shared state is not read when the call already declares it.
+  const capabilityCandidate = definedCapabilities(parseClientCapabilities(requestParams));
+  const capabilitiesFromSession =
+    capabilityCandidate.elicitation === undefined
+      ? ((await loadSessionCapabilities(userId, sessionId, request)) ?? {})
+      : {};
   const clientCapabilities = {
     ...capabilitiesFromSession,
     ...capabilityCandidate,
@@ -364,38 +401,38 @@ function withRequestId(response: Response, requestId: string): Response {
   return withNoIndex(response);
 }
 
-/**
- * The confirmation challenge a client must echo back to run a destructive
- * tool. The token is a one-time, user-scoped, short-lived value issued for
- * this client, so it has to reach it; the generic secret filter below would
- * otherwise drop the whole message because it contains "confirmationToken".
- */
-const CONFIRMATION_PROMPT =
-  /^[A-Z][A-Za-z ]{2,80} requires (?:a valid )?confirmation(?: token)?\. Re-send with \{"confirm": true, "confirmationToken": "mcp_confirm_[A-Za-z0-9_-]{16,64}"\} to proceed\.$/;
+// Re-exported for existing importers; the implementation is shared with the
+// dashboard agent actions.
+export { sanitizedToolErrorMessage };
 
-export function sanitizedToolErrorMessage(message: string): string | null {
-  const normalized = message.replace(/\s+/g, " ").trim();
-  if (!normalized || normalized.length > 300) return null;
-  if (CONFIRMATION_PROMPT.test(normalized)) return normalized;
-  if (/(api[-_ ]?key|authorization|bearer|cookie|password|secret|token)/i.test(normalized)) {
-    return null;
-  }
-  if (
-    /\b(is|are) required\b/i.test(normalized) ||
-    /\belicitation\b/i.test(normalized) ||
-    /\brequires confirmation\b/i.test(normalized) ||
-    /\bmust be\b/i.test(normalized) ||
-    /\bunsupported\b/i.test(normalized) ||
-    /\binvalid\b/i.test(normalized) ||
-    /\bvalidation failed\b/i.test(normalized) ||
-    /\bnot configured\b/i.test(normalized) ||
-    /\bnot yet supported\b/i.test(normalized)
-  ) {
-    return normalized;
-  }
-  return null;
+/**
+ * One unit of daily quota that throttle() reserved for a tools/call before it
+ * was dispatched. Billing rule (see the comment above reserveDailyQuota in
+ * mcp.server.ts): the unit is charged only once the tool was dispatched;
+ * every other outcome (no instance, scope denied, invalid requestState,
+ * confirmation round-trip, unexpected failure before dispatch) is refunded.
+ */
+type QuotaReservation = { userId: string; state: "held" | "charged" | "released" };
+
+/** Marks the reservation as charged and returns the matching recordCall usage. */
+function chargeReservation(reservation: QuotaReservation | null): CallUsage {
+  if (!reservation) return "increment";
+  reservation.state = "charged";
+  return "reserved";
 }
 
+/** Refunds a reservation that was not charged. Idempotent. */
+async function refundUnchargedReservation(reservation: QuotaReservation | null): Promise<void> {
+  if (reservation?.state !== "held") return;
+  reservation.state = "released";
+  await releaseDailyQuota(reservation.userId);
+}
+
+/**
+ * Handles one JSON-RPC message. A quota reservation that the message did not
+ * charge is refunded here before the response is returned, so the next item
+ * of a sequential batch sees the refunded counter.
+ */
 async function handleRpc(
   req: JsonRpcReq,
   ctx: Awaited<ReturnType<typeof authenticateBearer>>,
@@ -403,6 +440,23 @@ async function handleRpc(
   request: Request,
   sessionId: string | null,
   era: Era = { era: "legacy" },
+  reservation: QuotaReservation | null = null,
+): Promise<unknown> {
+  try {
+    return await dispatchRpc(req, ctx, source, request, sessionId, era, reservation);
+  } finally {
+    await refundUnchargedReservation(reservation);
+  }
+}
+
+async function dispatchRpc(
+  req: JsonRpcReq,
+  ctx: Awaited<ReturnType<typeof authenticateBearer>>,
+  source: { ip: string; ua: string; request_id: string },
+  request: Request,
+  sessionId: string | null,
+  era: Era,
+  reservation: QuotaReservation | null,
 ): Promise<unknown> {
   if (!ctx) return rpcError(req.id, -32001, "Unauthorized");
   const modern = era.era === "modern" ? era : null;
@@ -427,7 +481,7 @@ async function handleRpc(
     case "initialize":
       if (req.params) {
         const capabilities = parseClientCapabilities(asRecord(req.params));
-        storeSessionCapabilities(ctx.user_id, sessionId, request, capabilities);
+        await storeSessionCapabilities(ctx.user_id, sessionId, request, capabilities);
       }
       return rpcResult(req.id, {
         protocolVersion: LEGACY_PROTOCOL_VERSION,
@@ -489,6 +543,7 @@ async function handleRpc(
       const args = (params.arguments ?? {}) as Record<string, unknown>;
       const started = Date.now();
       // OAuth clients only get the scopes the user granted on the consent page.
+      // A denied call is not charged: handleRpc refunds its reservation.
       if (ctx.auth_source === "oauth") {
         const required = requiredScopesForTool(name, isManagementTool(name));
         const missing = missingScopes(ctx.scopes ?? [], required);
@@ -516,6 +571,7 @@ async function handleRpc(
       let toolContext: ToolContext;
       if (modern) {
         const resolved = await resolveModernToolContext(ctx.user_id, name, args, modern, params);
+        // Invalid requestState: not charged (refunded by handleRpc).
         if ("error" in resolved) {
           log.warn("mcp.gateway.request", {
             method: "tools/call",
@@ -531,12 +587,29 @@ async function handleRpc(
         }
         toolContext = resolved.toolContext;
       } else {
-        toolContext = resolveToolContext(ctx.user_id, request, sessionId, params);
+        toolContext = await resolveToolContext(ctx.user_id, request, sessionId, params);
       }
-      const inst = await getDefaultInstance(ctx.user_id);
+      // The instance (a DB read plus two AES decryptions) is loaded only when
+      // dispatchTool reaches a tool that needs it. A failure to load it is not
+      // a tool error: it propagates like any failure before dispatch and the
+      // reservation is refunded by handleRpc.
+      const instance: { loaded: N8nInstance | null; failed: boolean; error?: unknown } = {
+        loaded: null,
+        failed: false,
+      };
+      const loadInstance = async () => {
+        try {
+          instance.loaded = await getDefaultInstance(ctx.user_id);
+          return instance.loaded;
+        } catch (error) {
+          instance.failed = true;
+          instance.error = error;
+          throw error;
+        }
+      };
 
       try {
-        const result = await dispatchTool(name, args, inst, {
+        const result = await dispatchTool(name, args, loadInstance, {
           user_id: ctx.user_id,
           key_id: ctx.key_id,
           source: "tools/call",
@@ -548,6 +621,8 @@ async function handleRpc(
         });
 
         if (result.needsInstance) {
+          // A configuration error is not billable: logged with usage "none"
+          // and its reservation refunded by handleRpc.
           await recordCall({
             user_id: ctx.user_id,
             tool_name: name,
@@ -559,6 +634,7 @@ async function handleRpc(
             workflow_id: workflowIdFromCall(name, args, result.output),
             session_id: sessionId,
             auth: callAuth(ctx),
+            usage: "none",
           });
           log.warn("mcp.gateway.request", {
             method: "tools/call",
@@ -596,8 +672,9 @@ async function handleRpc(
             ? sanitizedToolErrorMessage(outcome.errorMessage ?? "Tool reported a business failure")
             : null;
         await recordCall({
+          usage: chargeReservation(reservation),
           user_id: ctx.user_id,
-          instance_id: inst?.id ?? null,
+          instance_id: instance.loaded?.id ?? null,
           tool_name: name,
           status: outcome.success === false ? "error" : "ok",
           error_message: businessErrorMessage,
@@ -638,8 +715,11 @@ async function handleRpc(
           isError: false,
         });
       } catch (e) {
+        if (instance.failed && e === instance.error) throw e;
         const msg = e instanceof Error ? e.message : "tool failed";
         const safeMsg = sanitizedToolErrorMessage(msg);
+        // A confirmation round-trip is not charged (refunded by handleRpc);
+        // the confirmed retry is.
         if (e instanceof ElicitationRequiredError && modern) {
           log.info("mcp.gateway.request", {
             method: "tools/call",
@@ -675,13 +755,16 @@ async function handleRpc(
           },
           user: { id: ctx.user_id },
         });
+        // Ordinary tool errors are billable: the tool was dispatched.
         await recordCall({
+          usage: chargeReservation(reservation),
           user_id: ctx.user_id,
-          instance_id: inst?.id ?? null,
+          instance_id: instance.loaded?.id ?? null,
           tool_name: name,
           status: "error",
           latency_ms: Date.now() - started,
-          error_message: msg,
+          // Persist only sanitized text; the raw message goes to Sentry and the logger.
+          error_message: persistedToolErrorMessage(e),
           workflow_id: workflowIdFromCall(name, args, null),
           session_id: sessionId,
           auth: callAuth(ctx),
@@ -725,11 +808,9 @@ async function handleRpc(
 }
 
 function requestSource(request: Request) {
-  const ip =
-    request.headers.get("cf-connecting-ip") ||
-    request.headers.get("x-real-ip") ||
-    (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() ||
-    "unknown";
+  // Only the address the reverse proxy observed is trusted (client-ip.server.ts);
+  // cf-connecting-ip / x-real-ip / left-most X-Forwarded-For are spoofable.
+  const ip = clientIp(request) ?? "unknown";
   const ua = (request.headers.get("user-agent") ?? "").slice(0, 200);
   return { ip, ua };
 }
@@ -758,42 +839,54 @@ export async function mcpGet(request: Request) {
   );
 }
 
+type ThrottleOutcome =
+  | { limited: ReturnType<typeof rpcError> }
+  | { limited: null; reservation: QuotaReservation | null };
+
 /**
- * Applies the short-window throttle and, for billable methods, the daily
- * quota. Returns the JSON-RPC error to send, or null when the call may run.
- * Enforced per RPC so a batch of N tool calls costs N tokens.
+ * Applies the short-window throttle and, for billable methods, atomically
+ * reserves one unit of daily quota before the call is dispatched. Returns the
+ * JSON-RPC error to send, or the reservation (null for non-billable methods)
+ * that handleRpc charges or refunds. Enforced per RPC, so a batch of N tool
+ * calls reserves N units, sequentially.
  */
 async function throttle(
   auth: NonNullable<Awaited<ReturnType<typeof authenticateBearer>>>,
   r: JsonRpcReq,
-): Promise<ReturnType<typeof rpcError> | null> {
-  if (!(await checkShortWindowQuota(auth.user_id))) {
+): Promise<ThrottleOutcome> {
+  // Tier-aware: the tier's rpm over 60s plus a 10s burst guard.
+  if (!(await checkShortWindowQuota(auth.user_id, auth.tier))) {
     await recordCall({
       user_id: auth.user_id,
       tool_name: null,
       status: "rate_limited",
       latency_ms: 0,
-      error_message: "short-window throttle",
+      error_message: rateLimitLogReason(auth.tier),
     });
-    return rpcError(r.id ?? null, -32003, "Rate limit exceeded (60 req / 10s)");
+    return { limited: rpcError(r.id ?? null, -32003, rateLimitMessage(auth.tier)) };
   }
 
-  if (isBillableMethod(r.method)) {
-    // Re-read before each billable call; recordCall() in handleRpc has already
-    // incremented usage for any prior call in a sequential batch.
-    const quota = await checkDailyQuota(auth);
-    if (!quota.ok) {
-      await recordCall({
-        user_id: auth.user_id,
-        tool_name: null,
-        status: "rate_limited",
-        latency_ms: 0,
-        error_message: `daily quota exceeded (${quota.used}/${quota.limit})`,
-      });
-      return rpcError(r.id ?? null, -32004, `Daily quota exceeded (${quota.used}/${quota.limit})`);
-    }
+  if (!isBillableMethod(r.method)) return { limited: null, reservation: null };
+
+  // Check and increment in one atomic step; fails closed when the RPC errors.
+  const quota = await reserveDailyQuota(auth);
+  if (!quota.ok) {
+    await recordCall({
+      user_id: auth.user_id,
+      tool_name: null,
+      status: "rate_limited",
+      latency_ms: 0,
+      error_message: `daily quota exceeded (${quota.used}/${quota.limit})`,
+    });
+    return {
+      limited: rpcError(
+        r.id ?? null,
+        -32004,
+        `Daily quota exceeded (${quota.used}/${quota.limit})`,
+      ),
+    };
   }
-  return null;
+  return { limited: null, reservation: { userId: auth.user_id, state: "held" } };
 }
 
 function isValidMessage(r: unknown): r is JsonRpcReq {
@@ -819,7 +912,10 @@ async function serveModern(
     return withRequestId(new Response(null, { status: 202, headers: CORS }), requestId);
   }
 
-  const out = (await throttle(auth, r)) ?? (await handleRpc(r, auth, source, request, null, era));
+  const gate = await throttle(auth, r);
+  const out = gate.limited
+    ? gate.limited
+    : await handleRpc(r, auth, source, request, null, era, gate.reservation);
   const payload = out as { result?: unknown; error?: { code?: number } };
   const scopes = insufficientScope(payload);
   if (scopes) return forbiddenScopeResponse(payload, scopes, requestId);
@@ -926,13 +1022,21 @@ async function servePost(
     }
     const isNotification = r.id === undefined || r.id === null;
 
-    const limited = await throttle(auth, r);
-    if (limited) {
-      if (!isNotification) responses.push(limited);
+    const gate = await throttle(auth, r);
+    if (gate.limited) {
+      if (!isNotification) responses.push(gate.limited);
       continue;
     }
 
-    const out = await handleRpc(r, auth, source, request, sessionId);
+    const out = await handleRpc(
+      r,
+      auth,
+      source,
+      request,
+      sessionId,
+      { era: "legacy" },
+      gate.reservation,
+    );
     if (!isNotification) responses.push(out);
   }
 

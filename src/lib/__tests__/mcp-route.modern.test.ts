@@ -2,7 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 const mcpServerMocks = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
-  checkDailyQuota: vi.fn(),
+  reserveDailyQuota: vi.fn(),
+  releaseDailyQuota: vi.fn(),
   checkShortWindowQuota: vi.fn(),
   dispatchTool: vi.fn(),
   getDefaultInstance: vi.fn(),
@@ -140,7 +141,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mcpServerMocks.authenticateBearer.mockResolvedValue({ user_id: "user-1", key_id: "key-1" });
   mcpServerMocks.checkShortWindowQuota.mockResolvedValue(true);
-  mcpServerMocks.checkDailyQuota.mockResolvedValue({ ok: true, used: 0, limit: 1000 });
+  mcpServerMocks.reserveDailyQuota.mockResolvedValue({ ok: true, used: 0, limit: 1000 });
   mcpServerMocks.getDefaultInstance.mockResolvedValue({ id: "instance-1" });
   mcpServerMocks.getMergedTools.mockResolvedValue([
     { name: "a_tool", inputSchema: { type: "object" } },
@@ -248,6 +249,24 @@ describe("MCP 2026-07-28 requests", () => {
     expect(status).toBe(200);
     expect(body.error).toBeUndefined();
     expect(body.result).toMatchObject({ resultType: "complete", isError: true });
+    // A configuration error is not billable: the reservation is refunded.
+    expect(mcpServerMocks.reserveDailyQuota).toHaveBeenCalledTimes(1);
+    expect(mcpServerMocks.releaseDailyQuota).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(mcpServerMocks.recordCall).toHaveBeenCalledWith(
+      expect.objectContaining({ usage: "none", error_message: "no n8n instance configured" }),
+    );
+  });
+
+  it("returns 429 with -32004 when the daily quota reservation is denied", async () => {
+    mcpServerMocks.reserveDailyQuota.mockResolvedValue({ ok: false, used: 1000, limit: 1000 });
+    const { status, body } = await callDelete("over-quota", "wf-1");
+    expect(status).toBe(429);
+    expect(body.error).toMatchObject({
+      code: -32004,
+      message: "Daily quota exceeded (1000/1000)",
+    });
+    expect(mcpServerMocks.dispatchTool).not.toHaveBeenCalled();
+    expect(mcpServerMocks.releaseDailyQuota).not.toHaveBeenCalled();
   });
 
   it("continues the caller's trace from _meta into tool dispatch", async () => {
@@ -316,6 +335,9 @@ describe("MCP 2026-07-28 multi round-trip confirmation", () => {
       },
       requestState: expect.any(String),
     });
+    // The confirmation round-trip is not charged; the confirmed retry is.
+    expect(mcpServerMocks.releaseDailyQuota).toHaveBeenCalledExactlyOnceWith("user-1");
+    expect(mcpServerMocks.recordCall).not.toHaveBeenCalled();
   });
 
   it("completes the call when the retry carries an accepted answer", async () => {
@@ -326,6 +348,12 @@ describe("MCP 2026-07-28 multi round-trip confirmation", () => {
     });
     expect(body.result.resultType).toBe("complete");
     expect(toolOutput(body)).toEqual({ confirmed: true, answer: { confirm: true } });
+    // Two reservations (first round + retry); only the first round is refunded.
+    expect(mcpServerMocks.reserveDailyQuota).toHaveBeenCalledTimes(2);
+    expect(mcpServerMocks.releaseDailyQuota).toHaveBeenCalledTimes(1);
+    expect(mcpServerMocks.recordCall).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ status: "ok", usage: "reserved" }),
+    );
   });
 
   it.each(["decline", "cancel"])("fails closed when the user chooses %s", async (action) => {
@@ -379,6 +407,19 @@ describe("MCP 2026-07-28 multi round-trip confirmation", () => {
       inputResponses: { confirm: { action: "accept", content: { confirm: true } } },
     });
     expect(body.error).toMatchObject({ code: -32602 });
+  });
+
+  it("refunds the reservation of a call with an invalid requestState", async () => {
+    const { requestState } = await firstRound("wf-1");
+    mcpServerMocks.releaseDailyQuota.mockClear();
+    mcpServerMocks.dispatchTool.mockClear();
+    const { body } = await callDelete("tampered-refund", "wf-1", {
+      requestState: `${requestState}x`,
+      inputResponses: { confirm: { action: "accept", content: { confirm: true } } },
+    });
+    expect(body.error).toMatchObject({ code: -32602 });
+    expect(mcpServerMocks.dispatchTool).not.toHaveBeenCalled();
+    expect(mcpServerMocks.releaseDailyQuota).toHaveBeenCalledExactlyOnceWith("user-1");
   });
 
   it("redeems an accepted state only once", async () => {

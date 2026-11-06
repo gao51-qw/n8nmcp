@@ -40,6 +40,8 @@ describe("workflow agent Console action route", () => {
           authorization: "Bearer session-token",
           "content-type": "application/json",
           "user-agent": "route-test",
+          "x-forwarded-for": "1.1.1.1, 203.0.113.7",
+          "cf-connecting-ip": "9.9.9.9",
         },
         body: JSON.stringify({
           action: "apply",
@@ -55,8 +57,64 @@ describe("workflow agent Console action route", () => {
     expect(mocks.execute).toHaveBeenCalledWith(
       "user-1",
       expect.objectContaining({ action: "apply", selectedOperationIndexes: [0] }),
-      expect.objectContaining({ requestId: "request-action-1", userAgent: "route-test" }),
+      expect.objectContaining({
+        requestId: "request-action-1",
+        userAgent: "route-test",
+        // Right-most X-Forwarded-For (added by Caddy); spoofable headers ignored.
+        ip: "203.0.113.7",
+      }),
     );
+    expect(response.headers.get("cache-control")).toBe("no-store");
+  });
+
+  it("returns the shared JSON error shape when authentication fails", async () => {
+    mocks.requireUser.mockRejectedValue(new Response("Unauthorized", { status: 401 }));
+    const { POST } = await import("../route");
+
+    const response = await POST(
+      new Request("https://example.test/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("x-request-id")).toBe("request-action-1");
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "authentication_required",
+        message: "Authentication required",
+        requestId: "request-action-1",
+      },
+    });
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("hides unexpected failures behind a generic message", async () => {
+    mocks.execute.mockRejectedValue(new Error("upstream secret detail"));
+    const { POST } = await import("../route");
+
+    const response = await POST(
+      new Request("https://example.test/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: { authorization: "Bearer session-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "rollback",
+          auditLogId: "67f354e9-309d-4e1f-b81b-6d3d419aeb52",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "internal_error",
+        message: "Workflow action failed",
+        requestId: "request-action-1",
+      },
+    });
   });
 
   it("returns a structured confirmation challenge", async () => {
@@ -82,11 +140,17 @@ describe("workflow agent Console action route", () => {
     );
 
     expect(response.status).toBe(409);
+    expect(response.headers.get("cache-control")).toBe("no-store");
     await expect(response.json()).resolves.toMatchObject({
-      error: { code: "confirmation_required", requestId: "request-action-1" },
+      error: {
+        code: "confirmation_required",
+        message: "Apply workflow preview requires confirmation.",
+        requestId: "request-action-1",
+      },
       confirmation: {
         token: "mcp_confirm_new",
         expiresAt: "2026-07-10T00:15:00.000Z",
+        summary: "Apply workflow preview",
       },
     });
   });
@@ -130,6 +194,24 @@ describe("workflow agent Console action route", () => {
     );
 
     expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "invalid_request", message: "Invalid action request" },
+    });
+    expect(mocks.execute).not.toHaveBeenCalled();
+  });
+
+  it("rejects a body that is not JSON", async () => {
+    const { POST } = await import("../route");
+    const response = await POST(
+      new Request("https://example.test/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: { authorization: "Bearer session-token", "content-type": "application/json" },
+        body: "{not json",
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toMatchObject({ error: { code: "invalid_json" } });
     expect(mocks.execute).not.toHaveBeenCalled();
   });
 });

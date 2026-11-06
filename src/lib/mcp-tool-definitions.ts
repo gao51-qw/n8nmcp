@@ -764,6 +764,12 @@ const RAW_LOCAL_TOOLS = [
           description: "Audit log id to roll back to (from get_workflow_history)",
         },
         reason: { type: "string", description: "Reason for the rollback (recommended)" },
+        force: {
+          type: "boolean",
+          default: false,
+          description:
+            "Roll back even if the workflow changed after the audited change (or that cannot be verified). Overwrites the newer edits; needs its own confirmation.",
+        },
         confirm: {
           type: "boolean",
           description: "Required with confirmationToken to confirm this rollback.",

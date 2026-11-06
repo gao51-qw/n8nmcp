@@ -250,15 +250,43 @@ export async function getRollbackSnapshotForUser(
   return row;
 }
 
-/** Mark a previously restored audit row after n8n accepted the snapshot. */
-export async function markAuditRolledBack(userId: string, auditLogId: string): Promise<void> {
-  const { error } = await db
+/**
+ * Atomically mark an audit row rolled back (compare-and-set on
+ * `is_rolled_back = false`). Returns true only for the single caller whose
+ * update matched the row, so two concurrent rollbacks of the same entry cannot
+ * both proceed. Rollback claims the row with this before writing to n8n and
+ * releases it with `releaseAuditRollbackClaim` if n8n rejects the restore.
+ */
+export async function markAuditRolledBack(userId: string, auditLogId: string): Promise<boolean> {
+  const { data, error } = await db
     .from(TABLE)
     .update({ is_rolled_back: true })
     .eq("id", auditLogId)
     .eq("user_id", userId)
-    .eq("is_rolled_back", false);
+    .eq("is_rolled_back", false)
+    .select("id");
   if (error) throw new Error(`Failed to mark as rolled back: ${error.message}`);
+  return Array.isArray(data) && data.length > 0;
+}
+
+/** Undo a rollback claim after the restore failed. Best-effort; never throws. */
+export async function releaseAuditRollbackClaim(userId: string, auditLogId: string): Promise<void> {
+  try {
+    const { error } = await db
+      .from(TABLE)
+      .update({ is_rolled_back: false })
+      .eq("id", auditLogId)
+      .eq("user_id", userId)
+      .eq("is_rolled_back", true);
+    if (error) {
+      log.warn("audit.rollback_release_failed", { audit_log_id: auditLogId, err: error.message });
+    }
+  } catch (e) {
+    log.warn("audit.rollback_release_failed", {
+      audit_log_id: auditLogId,
+      err: e instanceof Error ? e.message : "unknown",
+    });
+  }
 }
 
 /** Operation/day counts over the last `days` for the requesting user. */

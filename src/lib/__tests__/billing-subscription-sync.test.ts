@@ -23,6 +23,8 @@ const selectBuilder = {
 const updateBuilder = {
   update: updateMock,
   eq: updateEqMock,
+  // Awaiting the update chain resolves to the Supabase result.
+  then: (resolve: (value: { error: null }) => void) => resolve({ error: null }),
 };
 
 vi.mock("@/integrations/supabase/client.server", () => ({
@@ -60,7 +62,7 @@ describe("billing subscription sync", () => {
     selectNotMock.mockReturnValue(selectBuilder);
     selectInMock.mockReturnValue(selectBuilder);
     updateMock.mockReturnValue(updateBuilder);
-    updateEqMock.mockResolvedValue({ error: null });
+    updateEqMock.mockReturnValue(updateBuilder);
 
     fromMock.mockImplementation(() => {
       if (fromMock.mock.calls.length === 1) return selectBuilder;
@@ -107,6 +109,7 @@ describe("billing subscription sync", () => {
         current_period_end: "2026-07-31T00:00:00.000Z",
       }),
     );
+    expect(updateEqMock).toHaveBeenCalledWith("user_id", "user-1");
     expect(updateEqMock).toHaveBeenCalledWith("billing_subscription_id", "sub_1");
     expect(result).toEqual({ scanned: 1, synced: 1, failed: 0 });
   });
@@ -141,5 +144,48 @@ describe("billing subscription sync", () => {
       expect.objectContaining({ subscriptionId: "sub_bad", errorType: "Error" }),
     );
     expect(result).toEqual({ scanned: 2, synced: 1, failed: 1 });
+  });
+  it("updates only the stored row and ignores customData naming another user", async () => {
+    selectLimitMock.mockResolvedValue({
+      error: null,
+      data: [
+        { user_id: "user-1", status: "active", tier: "pro", billing_subscription_id: "sub_1" },
+      ],
+    });
+    paddleGetMock.mockResolvedValue({
+      id: "sub_1",
+      status: "active",
+      customerId: "ctm_1",
+      customData: { user_id: "8b0f7a0e-3f1c-4a59-9d64-2f0f3c6c1a99" },
+      items: [{ price: { id: "price_pro" } }],
+    });
+
+    const { syncPaddleSubscriptions } = await import("@/lib/billing/subscription-sync.server");
+    await syncPaddleSubscriptions();
+
+    const update = updateMock.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(update).not.toHaveProperty("user_id");
+    expect(update).not.toHaveProperty("billing_subscription_id");
+    expect(updateEqMock).toHaveBeenCalledWith("user_id", "user-1");
+    expect(updateEqMock).not.toHaveBeenCalledWith(
+      "user_id",
+      "8b0f7a0e-3f1c-4a59-9d64-2f0f3c6c1a99",
+    );
+  });
+
+  it("refuses to apply a Paddle response for a different subscription", async () => {
+    selectLimitMock.mockResolvedValue({
+      error: null,
+      data: [
+        { user_id: "user-1", status: "active", tier: "pro", billing_subscription_id: "sub_1" },
+      ],
+    });
+    paddleGetMock.mockResolvedValue({ id: "sub_other", status: "canceled", items: [] });
+
+    const { syncPaddleSubscriptions } = await import("@/lib/billing/subscription-sync.server");
+    const result = await syncPaddleSubscriptions();
+
+    expect(updateMock).not.toHaveBeenCalled();
+    expect(result).toEqual({ scanned: 1, synced: 0, failed: 1 });
   });
 });

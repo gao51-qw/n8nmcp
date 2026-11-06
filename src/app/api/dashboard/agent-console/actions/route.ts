@@ -1,6 +1,13 @@
 import { z } from "zod";
 
-import { getRequestId } from "@/lib/logger.server";
+import { clientIp } from "@/lib/client-ip.server";
+import {
+  apiErrorResponse,
+  apiJson,
+  jsonError,
+  readJsonBody,
+  withApiErrors,
+} from "@/lib/http/api-response.server";
 import { requireSupportUser } from "@/lib/support/auth.server";
 import { ConfirmationRequiredError } from "@/lib/workflow-agent/confirmation.server";
 import {
@@ -27,70 +34,43 @@ const actionSchema = z.discriminatedUnion("action", [
 ]);
 
 export async function POST(request: Request): Promise<Response> {
-  const requestId = getRequestId(request);
-  try {
-    const user = await requireSupportUser(request);
-    const input = actionSchema.parse(await request.json());
-    const result = await executeDashboardAgentAction(user.userId, input, {
-      requestId,
-      ip: (request.headers.get("x-forwarded-for") ?? "").split(",")[0].trim() || undefined,
-      userAgent: request.headers.get("user-agent") ?? undefined,
-    });
-    return json(result, requestId);
-  } catch (error) {
-    if (error instanceof ConfirmationRequiredError) {
-      return json(
-        {
-          error: {
-            code: error.code,
-            message: error.message,
-            requestId,
-          },
-          confirmation: {
-            token: error.token,
-            expiresAt: error.expiresAt,
-            summary: error.summary,
-          },
-        },
+  return withApiErrors(request, async ({ requestId }) => {
+    try {
+      const user = await requireSupportUser(request);
+      const input = actionSchema.parse(await readJsonBody(request));
+      const result = await executeDashboardAgentAction(user.userId, input, {
         requestId,
-        409,
-      );
+        ip: clientIp(request),
+        userAgent: request.headers.get("user-agent") ?? undefined,
+      });
+      return apiJson(result, { requestId });
+    } catch (error) {
+      return actionErrorResponse(error, requestId);
     }
-    if (error instanceof DashboardAgentActionError) {
-      return json(
-        { error: { code: error.code, message: error.message, requestId } },
-        requestId,
-        error.status,
-      );
-    }
-    if (error instanceof z.ZodError || error instanceof SyntaxError) {
-      return json(
-        { error: { code: "invalid_request", message: "Invalid action request", requestId } },
-        requestId,
-        400,
-      );
-    }
-    if (error instanceof Response) {
-      return json(
-        {
-          error: {
-            code: error.status === 401 ? "authentication_required" : "request_failed",
-            message: error.status === 401 ? "Authentication required" : "Request failed",
-            requestId,
-          },
-        },
-        requestId,
-        error.status,
-      );
-    }
-    return json(
-      { error: { code: "internal_error", message: "Workflow action failed", requestId } },
-      requestId,
-      500,
-    );
-  }
+  });
 }
 
-function json(body: unknown, requestId: string, status = 200): Response {
-  return Response.json(body, { status, headers: { "x-request-id": requestId } });
+// The agent-console client reads `error.message`, and on 409 the
+// `confirmation` challenge next to `error`.
+function actionErrorResponse(error: unknown, requestId: string): Response {
+  if (error instanceof ConfirmationRequiredError) {
+    return jsonError(409, error.code, error.message, {
+      requestId,
+      extra: {
+        confirmation: {
+          token: error.token,
+          expiresAt: error.expiresAt,
+          summary: error.summary,
+        },
+      },
+    });
+  }
+  if (error instanceof DashboardAgentActionError) {
+    return jsonError(error.status, error.code, error.message, { requestId });
+  }
+  return apiErrorResponse(error, requestId, {
+    invalidRequestMessage: "Invalid action request",
+    internalMessage: "Workflow action failed",
+    logEvent: "agent_console.action_failed",
+  });
 }

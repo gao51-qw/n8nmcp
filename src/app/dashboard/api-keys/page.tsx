@@ -5,6 +5,8 @@
 // stored for display.
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { KeyRound, Loader2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { errorText } from "@/components/dashboard/error-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,15 +22,6 @@ type ApiKey = {
   revoked_at: string | null;
 };
 
-function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  try {
-    return (JSON.parse(message) as { error?: string }).error ?? message;
-  } catch {
-    return message;
-  }
-}
-
 function formatDate(value: string | null): string {
   if (!value) return "Never";
   const date = new Date(value);
@@ -42,6 +35,7 @@ export default function ApiKeysPage() {
   const [creating, setCreating] = useState(false);
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [pendingRevoke, setPendingRevoke] = useState<ApiKey | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -78,7 +72,6 @@ export default function ApiKeysPage() {
   }
 
   async function revoke(key: ApiKey) {
-    if (!window.confirm(`Revoke "${key.name}"? Clients using it stop working immediately.`)) return;
     try {
       await supportFetch(`/api/dashboard/api-keys/${key.id}`, { method: "DELETE" });
       await load();
@@ -171,13 +164,28 @@ export default function ApiKeysPage() {
             {key.revoked_at ? (
               <Badge variant="outline">Revoked</Badge>
             ) : (
-              <Button variant="outline" onClick={() => revoke(key)}>
+              <Button variant="outline" onClick={() => setPendingRevoke(key)}>
                 Revoke
               </Button>
             )}
           </li>
         ))}
       </ul>
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRevoke(null);
+        }}
+        title={pendingRevoke ? `Revoke "${pendingRevoke.name}"?` : "Revoke key?"}
+        description={
+          <p>MCP clients using this key stop working immediately. This cannot be undone.</p>
+        }
+        confirmLabel="Revoke key"
+        onConfirm={async () => {
+          if (pendingRevoke) await revoke(pendingRevoke);
+        }}
+      />
     </main>
   );
 }

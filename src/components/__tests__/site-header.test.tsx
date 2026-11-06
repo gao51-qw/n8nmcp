@@ -56,11 +56,12 @@ describe("site header", () => {
     await renderHeader();
 
     const texts = links().map((l) => l.text);
-    for (const label of ["Pricing", "Docs", "FAQ", "Blog", "GitHub", "Sign in"]) {
+    for (const label of ["Pricing", "Docs", "FAQ", "Blog", "GitHub", "Sign in", "Get started"]) {
       expect(texts, `missing ${label}`).toContain(label);
     }
     expect(texts).not.toContain("Dashboard");
     expect(links().find((l) => l.text === "Sign in")?.href).toMatch(/\/login$/);
+    expect(links().find((l) => l.text === "Get started")?.href).toMatch(/\/signup$/);
   });
 
   it("swaps the sign-in action for a dashboard link once signed in", async () => {
@@ -71,6 +72,7 @@ describe("site header", () => {
     const texts = links().map((l) => l.text);
     expect(texts).toContain("Dashboard");
     expect(texts).not.toContain("Sign in");
+    expect(texts).not.toContain("Get started");
   });
 
   it("renders no account action while the session is still loading", async () => {
@@ -80,6 +82,7 @@ describe("site header", () => {
 
     const texts = links().map((l) => l.text);
     expect(texts).not.toContain("Sign in");
+    expect(texts).not.toContain("Get started");
     expect(texts).not.toContain("Dashboard");
     expect(texts).toContain("Pricing");
   });

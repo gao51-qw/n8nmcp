@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mcpServerMocks = vi.hoisted(() => ({
   authenticateBearer: vi.fn(),
-  checkDailyQuota: vi.fn(),
+  reserveDailyQuota: vi.fn(),
+  releaseDailyQuota: vi.fn(),
   checkShortWindowQuota: vi.fn(),
   dispatchTool: vi.fn(),
   getDefaultInstance: vi.fn(),
@@ -56,7 +57,7 @@ beforeEach(() => {
   vi.stubEnv("MCP_OAUTH_ENABLED", "1");
   vi.stubEnv("SUPABASE_URL", "https://proj.supabase.co");
   mcpServerMocks.checkShortWindowQuota.mockResolvedValue(true);
-  mcpServerMocks.checkDailyQuota.mockResolvedValue({ ok: true, used: 0, limit: 100 });
+  mcpServerMocks.reserveDailyQuota.mockResolvedValue({ ok: true, used: 0, limit: 100 });
   mcpServerMocks.getDefaultInstance.mockResolvedValue({ id: "instance-1" });
   mcpServerMocks.dispatchTool.mockResolvedValue({
     output: { ok: true },
@@ -107,6 +108,9 @@ describe("OAuth on the MCP endpoint", () => {
     const body = await response.json();
     expect(body.error).toMatchObject({ data: { requiredScopes: ["mcp:workflows:write"] } });
     expect(mcpServerMocks.dispatchTool).not.toHaveBeenCalled();
+    // A scope-denied call does no billable work: its reservation is refunded.
+    expect(mcpServerMocks.reserveDailyQuota).toHaveBeenCalledTimes(1);
+    expect(mcpServerMocks.releaseDailyQuota).toHaveBeenCalledExactlyOnceWith("user-1");
   });
 
   it("treats upstream management tools as writes", async () => {

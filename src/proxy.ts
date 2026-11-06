@@ -4,6 +4,22 @@ import { canonicalUrl, normalizeHost, SITE_DOMAINS, surfaceFromHost } from "@/li
 const PUBLIC_FILE = /\.(?:avif|ico|jpg|jpeg|png|svg|webp|css|js|map|txt|xml)$/;
 const NOINDEX = "noindex,nofollow";
 
+/**
+ * Account pages shared by every surface. On the dashboard host they are
+ * served as-is (not rewritten under /dashboard), and they are never indexed.
+ */
+const AUTH_PAGES = new Set(["/login", "/signup", "/forgot-password", "/reset-password"]);
+
+function isAuthPage(pathname: string): boolean {
+  return AUTH_PAGES.has(pathname) || pathname === "/auth" || pathname.startsWith("/auth/");
+}
+
+function nextWithNoIndex(): NextResponse {
+  const response = NextResponse.next();
+  response.headers.set("X-Robots-Tag", NOINDEX);
+  return response;
+}
+
 function shouldBypass(pathname: string): boolean {
   return (
     pathname.startsWith("/_next/") ||
@@ -52,6 +68,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (surface === "mcp") {
+    if (isAuthPage(pathname)) return nextWithNoIndex();
     if (pathname === "/mcp") return rewriteWithNoIndex(request, "/mcp");
     if (pathname === "/faq") return redirectMovedFaq(request);
     return NextResponse.next();
@@ -84,11 +101,7 @@ export function proxy(request: NextRequest) {
   }
 
   if (surface === "dashboard") {
-    if (pathname === "/login") {
-      const response = NextResponse.next();
-      response.headers.set("X-Robots-Tag", NOINDEX);
-      return response;
-    }
+    if (isAuthPage(pathname)) return nextWithNoIndex();
     if (!pathname.startsWith("/dashboard")) {
       return rewriteWithNoIndex(request, `/dashboard${pathname === "/" ? "" : pathname}`);
     }

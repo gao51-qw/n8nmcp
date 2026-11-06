@@ -78,10 +78,18 @@ export async function syncPaddleSubscriptions(
 
     try {
       const remote = (await paddle.subscriptions.get(subscriptionId)) as PaddleSubscriptionSnapshot;
+      if (remote?.id !== subscriptionId) {
+        counts.failed++;
+        log.warn("billing.subscription_sync.id_mismatch", { subscriptionId, userId: row.user_id });
+        continue;
+      }
+      // The user comes from the stored binding read above. Paddle customData
+      // is never consulted, and only that exact row is updated.
       const update = subscriptionUpdateFromPaddle(remote);
       const { error: updateError } = await supabaseAdmin
         .from("subscriptions")
         .update(update)
+        .eq("user_id", row.user_id)
         .eq("billing_subscription_id", subscriptionId);
 
       if (updateError) {

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import {
   ArrowRight,
   Bot,
@@ -12,6 +11,7 @@ import {
 } from "lucide-react";
 import { answerBlock, homepageFaq } from "@/lib/geo-content";
 import { MCP_ENDPOINT_URL } from "@/lib/site-domains";
+import { signupHref, surfaceHref } from "@/lib/site-navigation";
 import {
   buildFaqPageJsonLd,
   buildOrganizationJsonLd,
@@ -80,20 +80,35 @@ export default function HomePage() {
             </p>
 
             <div className="mt-10 flex flex-wrap items-center gap-3">
-              <Link
-                href="/llms.txt"
+              <a
+                href={signupHref()}
                 className="group inline-flex h-12 items-center justify-center gap-2 rounded-md bg-primary px-6 text-sm font-semibold text-primary-foreground transition-all hover:shadow-[var(--shadow-glow)]"
               >
-                Read AI index
+                Get started
                 <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-              <Link
-                href={MCP_ENDPOINT_URL}
-                className="label-mono inline-flex h-12 items-center justify-center gap-2 rounded-md border border-border px-6 text-foreground transition-colors hover:border-primary hover:text-primary"
+              </a>
+              <a
+                href={surfaceHref("docs", "/getting-started")}
+                className="inline-flex h-12 items-center justify-center gap-2 rounded-md border border-border px-6 text-sm font-semibold text-foreground transition-colors hover:border-primary hover:text-primary"
               >
-                <Network className="h-4 w-4" />
-                endpoint
-              </Link>
+                Read the setup guide
+              </a>
+            </div>
+
+            <div className="mt-6 max-w-xl">
+              <p className="label-mono flex items-center gap-2 text-muted-foreground">
+                <Network className="h-4 w-4 text-primary" aria-hidden="true" />
+                MCP endpoint
+              </p>
+              <code
+                className="mt-2 block select-all overflow-x-auto whitespace-nowrap rounded-md border border-border bg-card px-4 py-3 font-mono text-sm text-foreground"
+                aria-label="MCP endpoint URL"
+              >
+                {MCP_ENDPOINT_URL}
+              </code>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Add this URL to your MCP client with a platform API key from the dashboard.
+              </p>
             </div>
 
             <p className="mt-6 max-w-md text-sm leading-6 text-muted-foreground">

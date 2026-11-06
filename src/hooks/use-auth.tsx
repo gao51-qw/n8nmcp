@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { clearAuthSessionCookies, supabase } from "@/integrations/supabase/client";
 
 type AuthState = {
   session: Session | null;
@@ -31,7 +31,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // A global sign-out revokes the refresh token server-side. If that call
+    // fails (offline, already revoked) fall back to a local sign-out, then
+    // clear the shared parent-domain cookies explicitly either way so no
+    // subdomain keeps the session.
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) await supabase.auth.signOut({ scope: "local" });
+    } catch {
+      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
+    } finally {
+      clearAuthSessionCookies();
+      setSession(null);
+    }
   };
 
   return (

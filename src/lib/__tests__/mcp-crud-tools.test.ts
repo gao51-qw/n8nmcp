@@ -228,6 +228,20 @@ describe("Workflow CRUD Tools", () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it("never issues a process-local confirmation token in production", async () => {
+      // The unauthenticated challenge store is per process (not shared across
+      // replicas, not owner-scoped); production dispatches always carry a user.
+      vi.stubEnv("NODE_ENV", "production");
+      try {
+        await expect(
+          runTool(mockN8nInstance, "delete_workflow", { id: "workflow-123" }),
+        ).rejects.toThrow("Delete workflow requires an authenticated caller.");
+      } finally {
+        vi.unstubAllEnvs();
+      }
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("should delete workflow after caller repeats the issued confirmation token", async () => {
       let token = "";
       try {

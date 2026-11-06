@@ -4,7 +4,9 @@
 // stored encrypted), set or clear the optional instance-level MCP token, and
 // remove an instance. Secrets are never shown again after they are saved.
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Loader2, Server } from "lucide-react";
+import { CheckCircle2, Loader2, Server } from "lucide-react";
+import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
+import { errorText } from "@/components/dashboard/error-text";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,16 +21,6 @@ type Instance = {
   created_at: string;
   native_mcp: { configured: boolean; tools: string[]; checked_at: string | null };
 };
-
-async function errorText(error: unknown): Promise<string> {
-  const message = error instanceof Error ? error.message : String(error);
-  try {
-    const parsed = JSON.parse(message) as { error?: string };
-    return parsed.error ?? message;
-  } catch {
-    return message;
-  }
-}
 
 function NativeTokenForm({ instance, onSaved }: { instance: Instance; onSaved: () => void }) {
   const [token, setToken] = useState("");
@@ -46,7 +38,7 @@ function NativeTokenForm({ instance, onSaved }: { instance: Instance; onSaved: (
       setToken("");
       onSaved();
     } catch (err) {
-      setError(await errorText(err));
+      setError(errorText(err));
     } finally {
       setBusy(false);
     }
@@ -99,6 +91,7 @@ export default function InstancesPage() {
   const [form, setForm] = useState({ name: "", base_url: "", api_key: "", mcp_token: "" });
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [pendingRemoval, setPendingRemoval] = useState<Instance | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -106,7 +99,7 @@ export default function InstancesPage() {
       setInstances(data.instances);
       setLoadError(null);
     } catch (err) {
-      setLoadError(await errorText(err));
+      setLoadError(errorText(err));
     }
   }, []);
 
@@ -126,20 +119,18 @@ export default function InstancesPage() {
       setForm({ name: "", base_url: "", api_key: "", mcp_token: "" });
       await load();
     } catch (err) {
-      setCreateError(await errorText(err));
+      setCreateError(errorText(err));
     } finally {
       setCreating(false);
     }
   }
 
   async function remove(instance: Instance) {
-    if (!window.confirm(`Remove ${instance.name}? Its stored API key and token are deleted.`))
-      return;
     try {
       await supportFetch(`/api/dashboard/instances/${instance.id}`, { method: "DELETE" });
       await load();
     } catch (err) {
-      setLoadError(await errorText(err));
+      setLoadError(errorText(err));
     }
   }
 
@@ -154,8 +145,9 @@ export default function InstancesPage() {
       </div>
       <h1 className="mt-3 text-3xl font-bold">Instances</h1>
       <p className="mt-3 text-sm text-muted-foreground">
-        MCP tools act on your first instance. Keys are checked against n8n, stored encrypted and
-        never shown again. The instance must be reachable from the internet.
+        MCP tools work with the instance you added first, marked &quot;Active for MCP&quot;. If you
+        remove it, MCP moves to the next oldest instance. Keys are checked against n8n, stored
+        encrypted and never shown again. The instance must be reachable from the internet.
       </p>
 
       {loadError ? (
@@ -172,11 +164,26 @@ export default function InstancesPage() {
       ) : null}
 
       <ul className="mt-8 grid gap-4">
-        {instances?.map((instance) => (
-          <li key={instance.id} className="rounded-lg border border-border bg-card p-5">
+        {instances?.map((instance, index) => (
+          <li
+            key={instance.id}
+            className={
+              index === 0
+                ? "rounded-lg border border-primary/60 bg-card p-5"
+                : "rounded-lg border border-border bg-card p-5"
+            }
+          >
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
-                <p className="font-semibold">{instance.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold">{instance.name}</p>
+                  {index === 0 ? (
+                    <Badge className="gap-1">
+                      <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                      Active for MCP
+                    </Badge>
+                  ) : null}
+                </div>
                 <p className="mt-1 break-all text-sm text-muted-foreground">{instance.base_url}</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Badge variant="secondary">API: {instance.status}</Badge>
@@ -187,7 +194,7 @@ export default function InstancesPage() {
                   </Badge>
                 </div>
               </div>
-              <Button variant="outline" onClick={() => remove(instance)}>
+              <Button variant="outline" onClick={() => setPendingRemoval(instance)}>
                 Remove
               </Button>
             </div>
@@ -195,6 +202,36 @@ export default function InstancesPage() {
           </li>
         ))}
       </ul>
+
+      {instances?.length === 0 ? (
+        <p className="mt-8 rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground">
+          No instances yet. Add your n8n instance below so MCP clients can work with it.
+        </p>
+      ) : null}
+
+      <ConfirmDialog
+        open={pendingRemoval !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRemoval(null);
+        }}
+        title={pendingRemoval ? `Remove ${pendingRemoval.name}?` : "Remove instance?"}
+        description={
+          <>
+            <p>Its stored API key and MCP token are deleted. Your n8n workflows are not touched.</p>
+            {pendingRemoval && instances?.[0]?.id === pendingRemoval.id ? (
+              <p className="font-medium text-foreground">
+                {instances.length > 1
+                  ? `This instance is active for MCP. MCP tools will move to ${instances[1].name}.`
+                  : "This is your only instance. MCP tools that need n8n stop working until you add another one."}
+              </p>
+            ) : null}
+          </>
+        }
+        confirmLabel="Remove instance"
+        onConfirm={async () => {
+          if (pendingRemoval) await remove(pendingRemoval);
+        }}
+      />
 
       <section className="mt-12 rounded-lg border border-border bg-card p-6">
         <h2 className="text-xl font-semibold">Add an instance</h2>

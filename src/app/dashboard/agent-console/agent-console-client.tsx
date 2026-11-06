@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Loader2, RefreshCw } from "lucide-react";
+import { Loader2, LogIn, RefreshCw } from "lucide-react";
 
 import {
   WorkflowAgentConsole,
@@ -18,20 +18,36 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/components/auth-provider";
+import { errorText } from "@/components/dashboard/error-text";
+import { apiErrorFromResponse } from "@/lib/support/http.client";
 import { subscribeToWorkflowAgentConsole } from "@/lib/workflow-agent/realtime.client";
 import type { DashboardAgentAction } from "@/lib/workflow-agent/dashboard-actions.server";
 import type { WorkflowAgentActionState } from "@/components/workflow-agent/agent-console";
+import { SessionExpiredError, sessionFetch } from "./session-fetch";
 
 type LoadState =
   | { status: "loading"; data: null; error: null }
   | { status: "ready"; data: WorkflowAgentConsoleData; error: null }
-  | { status: "error"; data: null; error: string };
+  | { status: "error"; data: null; error: string; expired: boolean };
+
+type ConfirmationChallenge = { token: string; summary?: string };
+
+/** The 409 `confirmation` challenge in an action error body, if there is one. */
+function confirmationFrom(body: unknown): ConfirmationChallenge | null {
+  if (!body || typeof body !== "object") return null;
+  const challenge = (body as { confirmation?: unknown }).confirmation;
+  if (!challenge || typeof challenge !== "object") return null;
+  const { token, summary } = challenge as { token?: unknown; summary?: unknown };
+  if (typeof token !== "string" || !token) return null;
+  return { token, summary: typeof summary === "string" ? summary : undefined };
+}
 
 export function AgentConsoleClient() {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
   const [state, setState] = useState<LoadState>({ status: "loading", data: null, error: null });
   const [refreshIndex, setRefreshIndex] = useState(0);
-  const [session, setSession] = useState<{ token: string; userId: string } | null>(null);
   const [actionState, setActionState] = useState<WorkflowAgentActionState>({ status: "idle" });
   const [confirmation, setConfirmation] = useState<{
     token: string;
@@ -40,29 +56,15 @@ export function AgentConsoleClient() {
   } | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Realtime invalidation is keyed by the user id only, so a token refresh
+  // never tears down and re-creates the channel.
   useEffect(() => {
-    let active = true;
-    void supabase.auth.getSession().then(({ data, error }) => {
-      const authSession = data.session;
-      if (!active) return;
-      if (error || !authSession?.access_token || !authSession.user.id) {
-        setState({ status: "error", data: null, error: "Authentication required" });
-        return;
-      }
-      setSession({ token: authSession.access_token, userId: authSession.user.id });
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!session) return;
+    if (!userId) return;
     const scheduleRefresh = () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => setRefreshIndex((value) => value + 1), 150);
     };
-    const unsubscribe = subscribeToWorkflowAgentConsole(session.userId, {
+    const unsubscribe = subscribeToWorkflowAgentConsole(userId, {
       onInvalidate: scheduleRefresh,
       onStatus: () => undefined,
     });
@@ -70,11 +72,10 @@ export function AgentConsoleClient() {
       unsubscribe();
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
     };
-  }, [session]);
+  }, [userId]);
 
   useEffect(() => {
-    if (!session) return;
-    const activeSession = session;
+    if (!userId) return;
     const controller = new AbortController();
 
     async function load() {
@@ -82,15 +83,10 @@ export function AgentConsoleClient() {
         current.status === "ready" ? current : { status: "loading", data: null, error: null },
       );
       try {
-        const response = await fetch("/api/dashboard/agent-console", {
-          headers: { authorization: `Bearer ${activeSession.token}` },
+        const response = await sessionFetch("/api/dashboard/agent-console", {
           signal: controller.signal,
         });
-        if (!response.ok) {
-          throw new Error(
-            (await response.text()) || `Agent console request failed (${response.status})`,
-          );
-        }
+        if (!response.ok) throw await apiErrorFromResponse(response);
 
         const payload = (await response.json()) as { data: WorkflowAgentConsoleData };
         if (!controller.signal.aborted) {
@@ -101,7 +97,8 @@ export function AgentConsoleClient() {
           setState({
             status: "error",
             data: null,
-            error: error instanceof Error ? error.message : "Agent console request failed",
+            error: errorText(error, "The agent console could not be loaded."),
+            expired: error instanceof SessionExpiredError,
           });
         }
       }
@@ -111,41 +108,36 @@ export function AgentConsoleClient() {
     return () => {
       controller.abort();
     };
-  }, [refreshIndex, session]);
+  }, [refreshIndex, userId]);
 
   async function runAction(input: DashboardAgentAction): Promise<void> {
-    if (!session) throw new Error("Authentication required");
     setActionState({ status: "pending", message: "Applying the trusted workflow action..." });
     try {
-      const response = await fetch("/api/dashboard/agent-console/actions", {
+      const response = await sessionFetch("/api/dashboard/agent-console/actions", {
         method: "POST",
-        headers: {
-          authorization: `Bearer ${session.token}`,
-          "content-type": "application/json",
-        },
+        headers: { "content-type": "application/json" },
         body: JSON.stringify(input),
       });
-      const payload = (await response.json()) as {
-        error?: { message?: string };
-        confirmation?: { token: string; summary?: string };
-      };
-      if (response.status === 409 && payload.confirmation?.token) {
-        setConfirmation({
-          token: payload.confirmation.token,
-          summary: payload.confirmation.summary ?? "Confirm this workflow action.",
-          input,
-        });
-        setActionState({ status: "confirming", message: "Confirmation required." });
-        return;
+      if (!response.ok) {
+        const error = await apiErrorFromResponse(response);
+        const challenge = response.status === 409 ? confirmationFrom(error.body) : null;
+        if (challenge) {
+          setConfirmation({
+            token: challenge.token,
+            summary: challenge.summary ?? "Confirm this workflow action.",
+            input,
+          });
+          setActionState({ status: "confirming", message: "Confirmation required." });
+          return;
+        }
+        throw error;
       }
-      if (!response.ok)
-        throw new Error(payload.error?.message ?? `Workflow action failed (${response.status})`);
       setActionState({ status: "success", message: "Workflow action completed." });
       setRefreshIndex((value) => value + 1);
     } catch (error) {
       setActionState({
         status: "error",
-        message: error instanceof Error ? error.message : "Workflow action failed",
+        message: errorText(error, "Workflow action failed"),
       });
       throw error;
     }
@@ -155,7 +147,13 @@ export function AgentConsoleClient() {
     if (!confirmation) return;
     const { input, token } = confirmation;
     setConfirmation(null);
-    await runAction({ ...input, confirmationToken: token });
+    // A failure is already shown through actionState.
+    await runAction({ ...input, confirmationToken: token }).catch(() => undefined);
+  }
+
+  function signInAgain() {
+    const next = `${window.location.pathname}${window.location.search}`;
+    window.location.assign(`/login?next=${encodeURIComponent(next)}`);
   }
 
   if (state.status === "ready") {
@@ -191,7 +189,10 @@ export function AgentConsoleClient() {
   }
 
   return (
-    <main className="mx-auto flex min-h-[50vh] max-w-4xl items-center justify-center px-6 py-16">
+    <main
+      id="main"
+      className="mx-auto flex min-h-[50vh] max-w-4xl items-center justify-center px-6 py-16"
+    >
       <div className="w-full rounded-lg border border-border bg-card p-6 shadow-sm">
         {state.status === "loading" ? (
           <div className="flex items-center gap-3 text-sm text-muted-foreground">
@@ -202,16 +203,25 @@ export function AgentConsoleClient() {
           <div className="space-y-4">
             <div>
               <h1 className="text-xl font-semibold">Workflow Agent Console</h1>
-              <p className="mt-2 text-sm text-muted-foreground">{state.error}</p>
+              <p role="alert" className="mt-2 text-sm text-muted-foreground">
+                {state.error}
+              </p>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRefreshIndex((value) => value + 1)}
-            >
-              <RefreshCw className="h-4 w-4" aria-hidden="true" />
-              Retry
-            </Button>
+            {state.expired ? (
+              <Button type="button" onClick={signInAgain}>
+                <LogIn className="h-4 w-4" aria-hidden="true" />
+                Sign in again
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRefreshIndex((value) => value + 1)}
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                Retry
+              </Button>
+            )}
           </div>
         )}
       </div>

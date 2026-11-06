@@ -51,10 +51,16 @@ describe("support authorization", () => {
   it("rejects requests without a bearer token", async () => {
     const { requireSupportUser } = await import("@/lib/support/auth.server");
 
-    await expect(
-      requireSupportUser(new Request("https://example.test/support")),
-    ).rejects.toMatchObject({
-      status: 401,
+    const thrown = await requireSupportUser(new Request("https://example.test/support")).catch(
+      (error: unknown) => error,
+    );
+    expect(thrown).toBeInstanceOf(Response);
+    const response = thrown as Response;
+    expect(response.status).toBe(401);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "authentication_required", message: "Authentication required" },
     });
     expect(supabaseMocks.getUser).not.toHaveBeenCalled();
   });
@@ -108,7 +114,14 @@ describe("support authorization", () => {
       headers: { authorization: `Bearer ${SESSION_TOKEN}` },
     });
 
-    await expect(requireSupportAdmin(request)).rejects.toMatchObject({ status: 403 });
+    const thrown = await requireSupportAdmin(request).catch((error: unknown) => error);
+    expect(thrown).toBeInstanceOf(Response);
+    const response = thrown as Response;
+    expect(response.status).toBe(403);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: { code: "forbidden", message: "Forbidden" },
+    });
   });
 
   it("rejects admin authorization when the role lookup fails", async () => {

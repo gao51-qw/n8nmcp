@@ -260,18 +260,3 @@ export async function deleteInstance(userId: string, instanceId: string): Promis
   if (error) throw new InstanceError("Could not delete the instance", 500);
   if (!data || data.length === 0) throw new InstanceError("Instance not found", 404);
 }
-
-const NO_STORE = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex,nofollow" };
-
-/** Maps auth responses and InstanceError to JSON responses for the route handlers. */
-export async function handleInstanceRequest(run: () => Promise<Response>): Promise<Response> {
-  try {
-    return await run();
-  } catch (error) {
-    if (error instanceof Response) return error;
-    if (error instanceof InstanceError) {
-      return Response.json({ error: error.message }, { status: error.status, headers: NO_STORE });
-    }
-    return Response.json({ error: "Request failed" }, { status: 500, headers: NO_STORE });
-  }
-}

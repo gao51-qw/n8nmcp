@@ -75,6 +75,7 @@ describe("trusted partial workflow versions", () => {
     trustedPreviewMocks.loadTrustedWorkflowPreview.mockResolvedValueOnce({
       id: "preview-1",
       user_id: "user-1",
+      instance_id: "instance-1",
       tool_name: "preview_workflow_diff",
       status: "ok",
       created_at: new Date().toISOString(),

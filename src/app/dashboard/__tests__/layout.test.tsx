@@ -19,7 +19,12 @@ vi.mock("@/components/auth-provider", () => ({
   useAuth: () => ({
     user: { id: "10000000-0000-4000-8000-000000000001" },
     loading: false,
+    signOut: vi.fn(),
   }),
+}));
+
+vi.mock("@/lib/support/admin-role.client", () => ({
+  hasSupportAdminRole: vi.fn(async () => false),
 }));
 
 vi.mock("@/components/support/support-launcher", () => ({
@@ -75,6 +80,14 @@ describe("dashboard support mount", () => {
         mcpRequestId: "mcp-456",
       }),
     );
+  });
+
+  it("wraps dashboard pages in the navigation shell", async () => {
+    await renderLayout();
+
+    const nav = document.querySelector('nav[aria-label="Dashboard"]');
+    expect(nav).not.toBeNull();
+    expect(nav?.querySelector('a[href="/dashboard/usage"]')).not.toBeNull();
   });
 
   it("drops overlong correlation IDs instead of persisting or forwarding them", async () => {

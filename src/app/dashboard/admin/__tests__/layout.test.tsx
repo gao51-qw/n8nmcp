@@ -25,7 +25,8 @@ vi.mock("@/lib/support/admin-role.client", () => ({
   hasSupportAdminRole: mocks.hasSupportAdminRole,
 }));
 
-import AdminLayout from "../layout";
+import AdminLayout, { metadata } from "../layout";
+import { metadata as supportMetadata } from "../support/layout";
 
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT =
   true;
@@ -57,6 +58,14 @@ describe("dashboard admin role gate", () => {
       ),
     );
   }
+
+  it("gives admin routes a title and keeps them out of search indexes", () => {
+    expect(metadata.title).toBe("Admin");
+    expect(supportMetadata.title).toBe("Support workbench");
+    for (const entry of [metadata, supportMetadata]) {
+      expect(entry.robots).toEqual({ index: false, follow: false });
+    }
+  });
 
   it("renders the admin shell only for users with the admin role", async () => {
     mocks.hasSupportAdminRole.mockResolvedValue(true);

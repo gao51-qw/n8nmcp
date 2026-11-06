@@ -4,14 +4,20 @@ import type { Tier } from "./tiers";
 
 let _client: Paddle | null = null;
 
+export type PaddleEnvironmentName = "sandbox" | "production";
+
+/** `PADDLE_ENV`; anything other than "production" means the sandbox. */
+export function paddleEnvironment(): PaddleEnvironmentName {
+  return (process.env.PADDLE_ENV ?? "sandbox").trim().toLowerCase() === "production"
+    ? "production"
+    : "sandbox";
+}
+
 export function getPaddle(): Paddle {
   if (_client) return _client;
   const key = process.env.PADDLE_API_KEY;
   if (!key) throw new Error("PADDLE_API_KEY is not configured");
-  const env =
-    (process.env.PADDLE_ENV ?? "sandbox").toLowerCase() === "production"
-      ? Environment.production
-      : Environment.sandbox;
+  const env = paddleEnvironment() === "production" ? Environment.production : Environment.sandbox;
   _client = new Paddle(key, { environment: env });
   return _client;
 }

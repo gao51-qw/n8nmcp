@@ -5,20 +5,12 @@
 import { useState, type FormEvent } from "react";
 import { Loader2, UserRound } from "lucide-react";
 import { useAuth } from "@/components/auth-provider";
+import { errorText } from "@/components/dashboard/error-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { supportFetch } from "@/lib/support/http.client";
-
-function errorText(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  try {
-    return (JSON.parse(message) as { error?: string }).error ?? message;
-  } catch {
-    return message;
-  }
-}
 
 export default function AccountPage() {
   const { user } = useAuth();

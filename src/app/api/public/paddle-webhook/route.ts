@@ -1,77 +1,166 @@
-// Paddle webhook receiver. Verifies HMAC signature, then mirrors subscription
-// state into public.subscriptions.
+// Paddle webhook receiver. Verifies the Paddle-Signature HMAC first, then
+// mirrors subscription state into public.subscriptions.
+//
+// Binding rules (see src/lib/billing/checkout-binding.server.ts):
+// - An event for a subscription that is already stored
+//   (billing_provider = paddle and billing_subscription_id = sub.id) updates
+//   that row only. customData never picks the user; when it names a different
+//   user the mismatch is logged and customData is ignored. This also keeps
+//   subscriptions created before signed bindings existed working.
+// - Only `subscription.created` may create a new user <-> subscription
+//   binding, and only from server-signed customData whose `ts` is at most 24h
+//   older than the subscription's Paddle `createdAt`.
+// - Unsigned, forged, expired or unbound events are logged and acknowledged
+//   with 200 so Paddle does not retry them forever. They change nothing.
 import {
   EventName,
   type SubscriptionNotification,
   type TransactionNotification,
 } from "@paddle/paddle-node-sdk";
-import { getPaddle, isPaddleConfigured, tierFromPriceId } from "@/lib/paddle.server";
+import { getPaddle, isPaddleConfigured } from "@/lib/paddle.server";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { log } from "@/lib/logger.server";
+import {
+  claimedCheckoutUserId,
+  verifyCheckoutBinding,
+} from "@/lib/billing/checkout-binding.server";
+import { subscriptionUpdateFromPaddle } from "@/lib/billing/subscription-sync.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-function extractUserId(customData: unknown): string | undefined {
-  if (customData && typeof customData === "object" && "user_id" in customData) {
-    const v = (customData as Record<string, unknown>).user_id;
-    if (typeof v === "string") return v;
-  }
-  return undefined;
+type SubscriptionSnapshot = Pick<
+  SubscriptionNotification,
+  "id" | "status" | "customerId" | "createdAt" | "currentBillingPeriod" | "items" | "customData"
+>;
+
+type StoredBinding = { user_id: string };
+
+/** The row already bound to this Paddle subscription, if any. */
+async function findStoredBinding(
+  subscriptionId: string,
+): Promise<StoredBinding | "ambiguous" | null> {
+  const { data, error } = await supabaseAdmin
+    .from("subscriptions")
+    .select("user_id")
+    .eq("billing_provider", "paddle")
+    .eq("billing_subscription_id", subscriptionId)
+    .limit(2);
+  if (error) throw new Error(`Subscription binding lookup failed: ${error.message}`);
+  const rows = (data ?? []) as StoredBinding[];
+  if (rows.length > 1) return "ambiguous";
+  return rows[0] ?? null;
 }
 
-async function upsertFromSubscription(sub: SubscriptionNotification) {
-  const userId = extractUserId(sub.customData);
-  if (!userId) {
-    log.warn("paddle.webhook.subscription_missing_user_id", { subscription_id: sub.id });
+function bindingReferenceTime(sub: SubscriptionSnapshot, occurredAt: string | undefined): number {
+  const createdAt = Date.parse(sub.createdAt ?? "");
+  if (Number.isFinite(createdAt)) return createdAt;
+  // Without any usable Paddle timestamp the result is NaN, which fails closed.
+  return Date.parse(occurredAt ?? "");
+}
+
+async function applySubscription(
+  sub: SubscriptionSnapshot,
+  opts: { eventType: string; occurredAt?: string; mayCreateBinding: boolean },
+) {
+  if (!sub?.id) {
+    log.warn("paddle.webhook.subscription_missing_id", { event_type: opts.eventType });
     return;
   }
 
-  const priceId = sub.items?.[0]?.price?.id ?? null;
-  const tier = tierFromPriceId(priceId);
-  const periodEnd = sub.currentBillingPeriod?.endsAt ?? null;
-  const customerId = sub.customerId ?? null;
-  const rawStatus = sub.status;
-  const status =
-    rawStatus === "active" || rawStatus === "trialing"
-      ? "active"
-      : rawStatus === "past_due"
-        ? "past_due"
-        : rawStatus === "canceled"
-          ? "canceled"
-          : String(rawStatus);
-  const effectiveTier = rawStatus === "canceled" ? "free" : tier;
+  const fields = subscriptionUpdateFromPaddle(sub);
+  const stored = await findStoredBinding(sub.id);
+
+  if (stored === "ambiguous") {
+    log.error("paddle.webhook.binding_ambiguous", {
+      subscription_id: sub.id,
+      event_type: opts.eventType,
+    });
+    return;
+  }
+
+  if (stored) {
+    const claimedUserId = claimedCheckoutUserId(sub.customData);
+    if (claimedUserId && claimedUserId !== stored.user_id.toLowerCase()) {
+      log.warn("paddle.webhook.custom_data_mismatch", {
+        subscription_id: sub.id,
+        user_id: stored.user_id,
+        claimed_user_id: claimedUserId,
+        event_type: opts.eventType,
+      });
+    }
+    const { error } = await supabaseAdmin
+      .from("subscriptions")
+      .update(fields)
+      .eq("user_id", stored.user_id)
+      .eq("billing_subscription_id", sub.id);
+    if (error) {
+      log.error("paddle.webhook.update_failed", { user_id: stored.user_id, err: error.message });
+    } else {
+      log.info("paddle.webhook.subscription_synced", {
+        user_id: stored.user_id,
+        tier: fields.tier,
+        status: fields.status,
+      });
+    }
+    return;
+  }
+
+  if (!opts.mayCreateBinding) {
+    log.warn("paddle.webhook.subscription_unbound", {
+      subscription_id: sub.id,
+      event_type: opts.eventType,
+    });
+    return;
+  }
+
+  const verified = verifyCheckoutBinding(
+    sub.customData,
+    bindingReferenceTime(sub, opts.occurredAt),
+  );
+  if (!verified.ok) {
+    log.warn("paddle.webhook.binding_rejected", {
+      subscription_id: sub.id,
+      event_type: opts.eventType,
+      reason: verified.reason,
+      claimed_user_id: verified.claimedUserId,
+    });
+    return;
+  }
 
   const { error } = await supabaseAdmin.from("subscriptions").upsert(
     {
-      user_id: userId,
-      tier: effectiveTier,
-      status,
+      user_id: verified.userId,
       billing_provider: "paddle",
-      billing_customer_id: customerId,
       billing_subscription_id: sub.id,
-      current_period_end: periodEnd ? new Date(periodEnd).toISOString() : null,
-      updated_at: new Date().toISOString(),
+      ...fields,
     },
     { onConflict: "user_id" },
   );
-
-  if (error) log.error("paddle.webhook.upsert_failed", { user_id: userId, err: error.message });
-  else
-    log.info("paddle.webhook.subscription_synced", {
-      user_id: userId,
-      tier: effectiveTier,
-      status,
+  if (error) {
+    log.error("paddle.webhook.upsert_failed", { user_id: verified.userId, err: error.message });
+  } else {
+    log.info("paddle.webhook.subscription_bound", {
+      user_id: verified.userId,
+      subscription_id: sub.id,
+      tier: fields.tier,
+      status: fields.status,
     });
+  }
 }
 
 async function markPastDueFromTransaction(tx: TransactionNotification) {
   const subId = tx.subscriptionId;
   if (!subId) return;
-  await supabaseAdmin
+  // Resolved through the stored binding only.
+  const { error } = await supabaseAdmin
     .from("subscriptions")
     .update({ status: "past_due", updated_at: new Date().toISOString() })
+    .eq("billing_provider", "paddle")
     .eq("billing_subscription_id", subId);
+  if (error) {
+    log.error("paddle.webhook.update_failed", { subscription_id: subId, err: error.message });
+  }
   log.warn("paddle.webhook.payment_failed", { subscription_id: subId });
 }
 
@@ -106,19 +195,34 @@ export async function POST(request: Request) {
   try {
     switch (event.eventType) {
       case EventName.SubscriptionCreated:
+        await applySubscription(event.data as SubscriptionNotification, {
+          eventType: event.eventType,
+          occurredAt: event.occurredAt,
+          mayCreateBinding: true,
+        });
+        break;
       case EventName.SubscriptionUpdated:
       case EventName.SubscriptionActivated:
       case EventName.SubscriptionResumed:
       case EventName.SubscriptionCanceled:
       case EventName.SubscriptionPastDue:
       case EventName.SubscriptionTrialing:
-        await upsertFromSubscription(event.data as SubscriptionNotification);
+        await applySubscription(event.data as SubscriptionNotification, {
+          eventType: event.eventType,
+          occurredAt: event.occurredAt,
+          mayCreateBinding: false,
+        });
         break;
       case EventName.TransactionCompleted: {
         const tx = event.data as TransactionNotification;
         if (tx.subscriptionId) {
+          // Fetched from the Paddle API, then resolved through the stored binding only.
           const sub = await paddle.subscriptions.get(tx.subscriptionId);
-          await upsertFromSubscription(sub as unknown as SubscriptionNotification);
+          await applySubscription(sub as unknown as SubscriptionSnapshot, {
+            eventType: event.eventType,
+            occurredAt: event.occurredAt,
+            mayCreateBinding: false,
+          });
         }
         break;
       }

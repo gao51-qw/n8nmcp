@@ -840,6 +840,18 @@ export type Database = {
         Returns: number;
       };
       publish_due_announcements: { Args: never; Returns: number };
+      release_mcp_usage: {
+        Args: { _n?: number; _user_id: string };
+        Returns: number;
+      };
+      reserve_mcp_usage: {
+        Args: { _limit: number; _n?: number; _user_id: string };
+        Returns: {
+          allowed: boolean;
+          quota_limit: number;
+          used: number;
+        }[];
+      };
     };
     Enums: {
       app_role: "admin" | "user";

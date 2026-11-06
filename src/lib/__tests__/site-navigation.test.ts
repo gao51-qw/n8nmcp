@@ -83,3 +83,73 @@ describe("site navigation targets", () => {
     }
   });
 });
+
+describe("auth page links", () => {
+  const production = {
+    NEXT_PUBLIC_MCP_SITE_URL: "https://mcp.example.test",
+    NEXT_PUBLIC_DOCS_URL: "https://docs.example.test",
+    NEXT_PUBLIC_BLOG_URL: "https://blog.example.test",
+    NEXT_PUBLIC_DASHBOARD_URL: "https://dashboard.example.test",
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  it("points sign-in, sign-up and password reset at the dashboard host", async () => {
+    const nav = await loadNavigation(production);
+
+    expect(nav.signupHref()).toBe("https://dashboard.example.test/signup");
+    expect(nav.forgotPasswordHref()).toBe("https://dashboard.example.test/forgot-password");
+    expect(nav.loginHref("/dashboard/billing")).toBe(
+      "https://dashboard.example.test/login?next=%2Fdashboard%2Fbilling",
+    );
+    expect(nav.signupHref("/dashboard/billing?plan=pro")).toBe(
+      "https://dashboard.example.test/signup?next=%2Fdashboard%2Fbilling%3Fplan%3Dpro",
+    );
+  });
+
+  it("drops unsafe or default next destinations", async () => {
+    const nav = await loadNavigation(production);
+
+    expect(nav.signupHref("https://evil.example")).toBe("https://dashboard.example.test/signup");
+    expect(nav.signupHref("//evil.example")).toBe("https://dashboard.example.test/signup");
+    expect(nav.loginHref("/dashboard")).toBe("https://dashboard.example.test/login");
+    expect(nav.forgotPasswordHref(null)).toBe("https://dashboard.example.test/forgot-password");
+  });
+
+  it("uses same-origin paths when every surface shares one origin", async () => {
+    const nav = await loadNavigation({
+      NEXT_PUBLIC_MCP_SITE_URL: "http://localhost:3000",
+      NEXT_PUBLIC_DOCS_URL: "http://localhost:3000",
+      NEXT_PUBLIC_BLOG_URL: "http://localhost:3000",
+      NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:3000",
+    });
+
+    expect(nav.signupHref()).toBe("/signup");
+    expect(nav.forgotPasswordHref()).toBe("/forgot-password");
+    expect(nav.loginHref("/dashboard/billing")).toBe("/login?next=%2Fdashboard%2Fbilling");
+  });
+
+  it("builds absolute Supabase redirect URLs on the dashboard host", async () => {
+    const nav = await loadNavigation(production);
+
+    expect(nav.authRedirectUrl("/reset-password")).toBe(
+      "https://dashboard.example.test/reset-password",
+    );
+    expect(nav.authRedirectUrl("/reset-password", "https://mcp.example.test")).toBe(
+      "https://dashboard.example.test/reset-password",
+    );
+    expect(nav.authRedirectUrl("//evil.example/x", "https://dashboard.example.test")).toBe(
+      "https://dashboard.example.test/dashboard",
+    );
+    // An unconfigured origin (preview build, another dev port) returns to itself.
+    expect(nav.authRedirectUrl("/dashboard", "http://localhost:4000")).toBe(
+      "http://localhost:4000/dashboard",
+    );
+    expect(nav.authRedirectUrl("/dashboard", "javascript:alert(1)")).toBe(
+      "https://dashboard.example.test/dashboard",
+    );
+  });
+});

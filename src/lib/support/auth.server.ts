@@ -1,13 +1,21 @@
 import { decodeJwt } from "jose";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { jsonError } from "@/lib/http/api-response.server";
 
 export type SupportUser = {
   userId: string;
   email: string | null;
 };
 
+// Thrown Responses use the shared JSON error shape. Route handlers usually
+// remap them by status (withApiErrors, supportRouteError) to add a request id;
+// a handler that returns the thrown Response as-is still sends valid JSON.
 function unauthorized(): Response {
-  return new Response("Unauthorized", { status: 401 });
+  return jsonError(401, "authentication_required", "Authentication required");
+}
+
+function forbidden(): Response {
+  return jsonError(403, "forbidden", "Forbidden");
 }
 
 /** The token was already validated by getUser; this only reads its claims. */
@@ -58,7 +66,7 @@ export async function requireSupportAdmin(request: Request): Promise<SupportUser
     .maybeSingle();
 
   if (error || !data) {
-    throw new Response("Forbidden", { status: 403 });
+    throw forbidden();
   }
 
   return user;

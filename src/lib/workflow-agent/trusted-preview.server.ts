@@ -1,11 +1,17 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { WorkflowOperation } from "@/lib/workflow-agent";
+import {
+  PREVIEW_INSTANCE_MISMATCH_MESSAGE,
+  assertSameInstance,
+} from "@/lib/workflow-agent/action-conflict";
 
 export const WORKFLOW_PREVIEW_TTL_MS = 30 * 60_000;
 
 export type TrustedPreviewRow = {
   id: string;
   user_id: string;
+  /** n8n instance the preview was computed against (null if it was deleted). */
+  instance_id?: string | null;
   tool_name: string | null;
   status: string;
   created_at: string;
@@ -28,6 +34,11 @@ type TrustedPreviewInput = {
   operations: unknown[];
   operationIndexes?: number[];
   sessionId?: string;
+  /**
+   * Instance the update will run on. When given, the preview must have been
+   * recorded against exactly this instance (a null recorded id fails closed).
+   */
+  instanceId?: string;
   now?: Date;
 };
 
@@ -37,7 +48,7 @@ export async function loadTrustedWorkflowPreview(
 ): Promise<TrustedPreviewRow | null> {
   const { data, error } = await supabaseAdmin
     .from("mcp_call_logs")
-    .select("id,user_id,tool_name,status,created_at,workflow_id,session_id,metadata")
+    .select("id,user_id,instance_id,tool_name,status,created_at,workflow_id,session_id,metadata")
     .eq("id", previewCallId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -76,6 +87,9 @@ export function assertTrustedWorkflowPreview(input: TrustedPreviewInput): Truste
     (preview.workflow_id !== null && preview.workflow_id !== trustedWorkflowId)
   ) {
     throw new Error("Workflow preview scope does not match the requested workflow");
+  }
+  if (input.instanceId !== undefined) {
+    assertSameInstance(preview.instance_id, input.instanceId, PREVIEW_INSTANCE_MISMATCH_MESSAGE);
   }
 
   const storedOperations = Array.isArray(metadata.operations) ? metadata.operations : [];
