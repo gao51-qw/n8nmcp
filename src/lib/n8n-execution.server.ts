@@ -105,14 +105,23 @@ export async function triggerWorkflowWebhook(
   baseUrl: string,
   workflow: WorkflowLike,
   data: Record<string, unknown> = {},
-  options: { assumeActive?: boolean } = {},
+  options: {
+    assumeActive?: boolean;
+    /**
+     * n8n registers production webhooks asynchronously: for a few hundred
+     * milliseconds after `activate` returns, the webhook still answers 404
+     * "not registered". Right after activating, pass a budget here to retry
+     * that 404 (and only that — nothing ran) until it is registered.
+     */
+    waitForRegistrationMs?: number;
+    sleep?: (ms: number) => Promise<void>;
+  } = {},
 ): Promise<WebhookTriggerResult> {
   const trigger = resolveWebhookTrigger(workflow, options);
   let url = buildProductionWebhookUrl(baseUrl, trigger.path);
   const init: RequestInit = {
     method: trigger.httpMethod,
     headers: { Accept: "application/json" },
-    signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
   };
   if (trigger.httpMethod === "GET" || trigger.httpMethod === "HEAD") {
     const query = new URLSearchParams();
@@ -127,7 +136,18 @@ export async function triggerWorkflowWebhook(
   }
 
   const { safeFetchPublicUrl } = await import("./ssrf-guard.server");
-  const res = await safeFetchPublicUrl(url, init);
+  const sleep = options.sleep ?? ((ms: number) => new Promise((r) => setTimeout(r, ms)));
+  const deadline = Date.now() + Math.max(0, options.waitForRegistrationMs ?? 0);
+  let res: Response;
+  for (let attempt = 0; ; attempt++) {
+    res = await safeFetchPublicUrl(url, {
+      ...init,
+      signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
+    });
+    if (res.status !== 404 || Date.now() >= deadline) break;
+    await res.body?.cancel().catch(() => undefined);
+    await sleep(Math.min(100 * 2 ** attempt, 1000, Math.max(0, deadline - Date.now())));
+  }
   const text = await res.text();
   let body: unknown = text;
   try {

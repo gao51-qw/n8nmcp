@@ -236,6 +236,7 @@ export class OrchestratedToolsService {
           const previousExecutionId = await latestExecutionId(request, workflowId);
           await triggerWorkflowWebhook(this.inst.base_url, workflow, testData, {
             assumeActive: true,
+            waitForRegistrationMs: 5_000,
           });
           const execution = await waitForNewExecution(request, workflowId, {
             excludeId: previousExecutionId,

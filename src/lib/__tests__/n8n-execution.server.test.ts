@@ -118,6 +118,62 @@ describe("triggerWorkflowWebhook", () => {
     await expect(triggerWorkflowWebhook("https://n8n.example.com", workflow)).rejects.toThrow(
       /status 404.*not registered/,
     );
+    expect(safeFetchPublicUrl).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries the 404 while n8n is still registering a just-activated webhook", async () => {
+    // n8n 2.45 answers 404 for ~100-300 ms after activate returns.
+    safeFetchPublicUrl
+      .mockReset()
+      .mockResolvedValueOnce(response({ message: "not registered" }, 404))
+      .mockResolvedValueOnce(response({ message: "not registered" }, 404))
+      .mockResolvedValueOnce(response({ ok: true }));
+    const sleep = vi.fn(async () => undefined);
+
+    const result = await triggerWorkflowWebhook(
+      "https://n8n.example.com",
+      workflow,
+      {},
+      { waitForRegistrationMs: 5_000, sleep },
+    );
+
+    expect(result.status).toBe(200);
+    expect(safeFetchPublicUrl).toHaveBeenCalledTimes(3);
+    expect(sleep).toHaveBeenCalledTimes(2);
+  });
+
+  it("gives up on the 404 once the registration budget is spent", async () => {
+    safeFetchPublicUrl.mockReset().mockResolvedValue(response({ message: "not registered" }, 404));
+    let now = 1_000_000;
+    const spy = vi.spyOn(Date, "now").mockImplementation(() => now);
+    const sleep = vi.fn(async (ms: number) => {
+      now += ms;
+    });
+
+    await expect(
+      triggerWorkflowWebhook(
+        "https://n8n.example.com",
+        workflow,
+        {},
+        { waitForRegistrationMs: 1_000, sleep },
+      ),
+    ).rejects.toThrow(/status 404.*not registered/);
+    spy.mockRestore();
+    expect(safeFetchPublicUrl.mock.calls.length).toBeGreaterThan(1);
+    expect(safeFetchPublicUrl.mock.calls.length).toBeLessThan(10);
+  });
+
+  it("does not retry other failures", async () => {
+    safeFetchPublicUrl.mockReset().mockResolvedValueOnce(response({ message: "boom" }, 500));
+    await expect(
+      triggerWorkflowWebhook(
+        "https://n8n.example.com",
+        workflow,
+        {},
+        { waitForRegistrationMs: 5_000 },
+      ),
+    ).rejects.toThrow(/status 500/);
+    expect(safeFetchPublicUrl).toHaveBeenCalledTimes(1);
   });
 });
 
