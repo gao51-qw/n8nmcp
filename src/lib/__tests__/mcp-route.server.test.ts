@@ -99,6 +99,61 @@ describe("mcp route elicitation transport", () => {
       });
     });
 
+    it("passes the confirmation token challenge through to the client", async () => {
+      // The prompt contains "confirmationToken"; the generic secret filter used
+      // to drop it, so deploy_and_test_workflow could never be confirmed.
+      mcpServerMocks.dispatchTool.mockRejectedValue(
+        new Error(
+          'Deploy and test workflow requires confirmation. Re-send with {"confirm": true, "confirmationToken": "mcp_confirm_kJupli2ld6PehWeqiGhGZg"} to proceed.',
+        ),
+      );
+
+      const response = await mcpPost(
+        new Request("https://example.com/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "confirm-token",
+            method: "tools/call",
+            params: {
+              name: "deploy_and_test_workflow",
+              arguments: { workflowId: "wf-1", testData: { id: 1 } },
+            },
+          }),
+        }),
+      );
+      const payload = await response.json();
+
+      expect(payload.result.isError).toBe(true);
+      expect(payload.result.content[0].text).toContain(
+        '"confirmationToken": "mcp_confirm_kJupli2ld6PehWeqiGhGZg"',
+      );
+    });
+
+    it("still hides other errors that mention tokens or keys", async () => {
+      mcpServerMocks.dispatchTool.mockRejectedValue(
+        new Error("n8n rejected token abc123 for https://n8n.example.com"),
+      );
+
+      const response = await mcpPost(
+        new Request("https://example.com/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: "secret-error",
+            method: "tools/call",
+            params: { name: "list_workflows", arguments: {} },
+          }),
+        }),
+      );
+      const payload = await response.json();
+
+      expect(payload.result.content[0].text).not.toContain("abc123");
+      expect(payload.result.content[0].text).toMatch(/^Tool execution failed\./);
+    });
+
     it("returns a structured elicitation required error when confirm is not provided", async () => {
       mcpServerMocks.dispatchTool.mockImplementation(async () => {
         const { ElicitationRequiredError } = await import("@/lib/mcp.server");
