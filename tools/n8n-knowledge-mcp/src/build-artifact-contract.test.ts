@@ -65,10 +65,10 @@ describe("verified knowledge image contract", () => {
 
   it("copies every verified artifact and only compiles application code in Docker", () => {
     expect(dockerfile).toContain("COPY vitest.global-setup.ts ./");
-    expect(dockerfile).toContain("COPY data/nodes.db ./data/nodes.db");
-    expect(dockerfile).toContain("COPY data/stats.json ./data/stats.json");
+    expect(dockerfile).toContain("COPY --chown=app:nogroup data/nodes.db ./data/nodes.db");
+    expect(dockerfile).toContain("COPY --chown=app:nogroup data/stats.json ./data/stats.json");
     expect(dockerfile).toContain(
-      "COPY data/knowledge-quality-report.json ./data/knowledge-quality-report.json",
+      "COPY --chown=app:nogroup data/knowledge-quality-report.json ./data/knowledge-quality-report.json",
     );
     expect(() => assertDockerfileBuildIsCompilationOnly(dockerfile)).not.toThrow();
     for (const unsafeInstruction of [
