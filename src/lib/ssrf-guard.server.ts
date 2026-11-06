@@ -20,41 +20,92 @@ function ipv4ToInt(ip: string): number | null {
   return n >>> 0;
 }
 
-function isPrivateIPv4(ip: string): boolean {
-  const n = ipv4ToInt(ip);
-  if (n === null) return false;
-  // 0.0.0.0/8
-  if (n >>> 24 === 0) return true;
-  // 10.0.0.0/8
-  if (n >>> 24 === 10) return true;
-  // 127.0.0.0/8
-  if (n >>> 24 === 127) return true;
-  // 169.254.0.0/16 (link-local incl. cloud metadata)
-  if (n >>> 16 === ((169 << 8) | 254)) return true;
-  // 172.16.0.0/12
-  if (n >>> 24 === 172 && ((n >>> 20) & 0xf) >= 1 && ((n >>> 20) & 0xf) <= 1) {
-    // 172.16-31
-  }
-  if (n >>> 24 === 172) {
-    const second = (n >>> 16) & 0xff;
-    if (second >= 16 && second <= 31) return true;
-  }
-  // 192.168.0.0/16
-  if (n >>> 16 === ((192 << 8) | 168)) return true;
-  // 100.64.0.0/10 (CGNAT)
-  if (n >>> 24 === 100 && ((n >>> 16) & 0xff) >= 64 && ((n >>> 16) & 0xff) <= 127) return true;
+function isPrivateIPv4Int(n: number): boolean {
+  const a = n >>> 24;
+  const b = (n >>> 16) & 0xff;
+  if (a === 0) return true; // 0.0.0.0/8
+  if (a === 10) return true; // 10.0.0.0/8
+  if (a === 127) return true; // 127.0.0.0/8
+  if (a === 169 && b === 254) return true; // 169.254.0.0/16 (link-local, cloud metadata)
+  if (a === 172 && b >= 16 && b <= 31) return true; // 172.16.0.0/12
+  if (a === 192 && b === 168) return true; // 192.168.0.0/16
+  if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 (CGNAT)
+  if (a === 192 && b === 0 && ((n >>> 8) & 0xff) === 0) return true; // 192.0.0.0/24 (IETF)
+  if (a === 198 && (b === 18 || b === 19)) return true; // 198.18.0.0/15 (benchmarking, proxy fake-IP)
+  if (a >= 224) return true; // 224.0.0.0/4 multicast, 240.0.0.0/4 reserved, broadcast
   return false;
 }
 
+function isPrivateIPv4(ip: string): boolean {
+  const n = ipv4ToInt(ip);
+  return n !== null && isPrivateIPv4Int(n);
+}
+
+/** Parses an IPv6 literal (brackets optional) into eight 16-bit groups. */
+function parseIPv6(ip: string): number[] | null {
+  let text = ip.toLowerCase().replace(/^\[|\]$/g, "");
+  if (text.includes("%")) return null; // zone ids never belong in a public URL
+  const groups: number[] = [];
+  // A trailing dotted quad carries the last 32 bits.
+  const dotted = text.match(/^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/);
+  let tail: number[] = [];
+  if (dotted) {
+    const v4 = ipv4ToInt(dotted[2]);
+    if (v4 === null) return null;
+    tail = [v4 >>> 16, v4 & 0xffff];
+    text = dotted[1].endsWith("::") ? dotted[1] : dotted[1].slice(0, -1);
+  }
+  const halves = text.split("::");
+  if (halves.length > 2) return null;
+  const parse = (part: string): number[] | null => {
+    if (part === "") return [];
+    const out: number[] = [];
+    for (const g of part.split(":")) {
+      if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+      out.push(parseInt(g, 16));
+    }
+    return out;
+  };
+  const head = parse(halves[0]);
+  const rest = halves.length === 2 ? parse(halves[1]) : [];
+  if (!head || !rest) return null;
+  const explicit = head.length + rest.length + tail.length;
+  if (halves.length === 1) {
+    if (explicit !== 8) return null;
+    groups.push(...head, ...tail);
+  } else {
+    if (explicit > 7) return null;
+    groups.push(...head, ...new Array(8 - explicit).fill(0), ...rest, ...tail);
+  }
+  return groups.length === 8 ? groups : null;
+}
+
+/**
+ * True for loopback, unspecified, ULA, link-local, site-local and multicast
+ * addresses, and for every form that embeds an IPv4 address (mapped,
+ * translated, compatible, NAT64, 6to4) whose IPv4 address is private.
+ * Unparseable input counts as private so the guard fails closed.
+ */
 function isPrivateIPv6(ip: string): boolean {
-  const lower = ip.toLowerCase().replace(/^\[|\]$/g, "");
-  if (lower === "::1" || lower === "::") return true;
-  // fc00::/7 (ULA), fe80::/10 (link-local), fd00::/8
-  if (/^f[cd][0-9a-f]{2}:/.test(lower)) return true;
-  if (/^fe[89ab][0-9a-f]:/.test(lower)) return true;
-  // IPv4-mapped (::ffff:a.b.c.d)
-  const m = lower.match(/^::ffff:([0-9.]+)$/);
-  if (m && isPrivateIPv4(m[1])) return true;
+  const g = parseIPv6(ip);
+  if (!g) return true;
+  const embedded = (hi: number, lo: number) => isPrivateIPv4Int(((hi << 16) | lo) >>> 0);
+  const zeroUntil = (end: number) => g.slice(0, end).every((x) => x === 0);
+
+  if (zeroUntil(7) && (g[7] === 0 || g[7] === 1)) return true; // :: and ::1
+  if ((g[0] & 0xfe00) === 0xfc00) return true; // fc00::/7 unique local
+  if ((g[0] & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
+  if ((g[0] & 0xffc0) === 0xfec0) return true; // fec0::/10 site-local (deprecated)
+  if ((g[0] & 0xff00) === 0xff00) return true; // ff00::/8 multicast
+  if (zeroUntil(5) && g[5] === 0xffff) return embedded(g[6], g[7]); // ::ffff:a.b.c.d mapped
+  if (zeroUntil(4) && g[4] === 0xffff && g[5] === 0) return embedded(g[6], g[7]); // ::ffff:0:a.b.c.d
+  if (zeroUntil(6)) return embedded(g[6], g[7]); // ::a.b.c.d compatible (deprecated)
+  if (g[0] === 0x64 && g[1] === 0xff9b) {
+    if (g[2] === 1) return true; // 64:ff9b:1::/48 local-use NAT64
+    if (g.slice(2, 6).every((x) => x === 0)) return embedded(g[6], g[7]); // 64:ff9b::/96
+  }
+  if (g[0] === 0x2002) return embedded(g[1], g[2]); // 2002::/16 6to4
+  if (g[0] === 0x2001 && g[1] === 0) return true; // 2001::/32 Teredo hides the IPv4 target
   return false;
 }
 
