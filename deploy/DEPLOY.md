@@ -76,10 +76,19 @@ below, so it can run as several replicas behind Caddy. Before scaling:
    		refresh 10s
    	}
    	lb_policy round_robin
+   	# A stopped replica stays in the A records until the next refresh;
+   	# retry a failed connection on the other replica instead of
+   	# answering 502, and mark the dead one down for a while.
+   	lb_try_duration 5s
+   	lb_try_interval 250ms
+   	fail_duration 30s
    	health_uri /
    	flush_interval -1
    }
    ```
+
+   Without the three retry lines, the 2026-11-06 sandbox drill saw 2 of 88
+   requests answered 502 in the seconds after `docker stop` of one replica.
 
 4. Start with the override:
    `sudo docker compose -f docker-compose.yml -f docker-compose.replicas.yml up -d`.
@@ -89,7 +98,13 @@ JWKS cache, and the legacy client-capability cache keyed by session (a
 legacy client that lands on another replica after `initialize` falls back to
 the confirmation-token flow).
 
-Drill checklist (not run yet): OAuth sign-in and a tool call, a confirmation
-that is completed on one replica and replayed on the other (repeat until both
-replicas served a step), the rate limit counted across replicas, and
+Drill checklist: OAuth sign-in and a tool call, a confirmation that is
+completed on one replica and replayed on the other (repeat until both replicas
+served a step), the rate limit counted across replicas, and
 `docker compose stop` of one replica while requests keep succeeding.
+
+Last run 2026-11-06 in a local sandbox (two replicas behind this Caddy block,
+local Supabase): all four pass. The short-window limiter is a fixed 10 s
+window, so a burst that straddles a window boundary can be allowed up to twice
+the per-window limit; that is the limiter's design, not a replica effect. See
+`docs/audits/sandbox-verification-2026-11-06.md`.
