@@ -3,11 +3,11 @@ select plan(13);
 
 -- table + columns
 select has_table('public', 'oauth_grants', 'oauth_grants table exists');
-select has_column('public', 'oauth_grants', 'user_id');
-select has_column('public', 'oauth_grants', 'client_id');
-select has_column('public', 'oauth_grants', 'scopes');
-select has_column('public', 'oauth_grants', 'revoked_at');
-select has_index('public', 'oauth_grants', 'idx_oauth_grants_active_user');
+select has_column('public', 'oauth_grants', 'user_id', 'oauth_grants.user_id exists');
+select has_column('public', 'oauth_grants', 'client_id', 'oauth_grants.client_id exists');
+select has_column('public', 'oauth_grants', 'scopes', 'oauth_grants.scopes exists');
+select has_column('public', 'oauth_grants', 'revoked_at', 'oauth_grants.revoked_at exists');
+select has_index('public', 'oauth_grants', 'idx_oauth_grants_active_user', 'index idx_oauth_grants_active_user exists');
 
 select is(
   (select relrowsecurity from pg_class where oid = 'public.oauth_grants'::regclass),

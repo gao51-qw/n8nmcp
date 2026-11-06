@@ -2,7 +2,7 @@ begin;
 select plan(7);
 
 select has_table('public', 'mcp_ephemeral_state', 'mcp_ephemeral_state exists');
-select has_index('public', 'mcp_ephemeral_state', 'idx_mcp_ephemeral_state_expires_at');
+select has_index('public', 'mcp_ephemeral_state', 'idx_mcp_ephemeral_state_expires_at', 'index idx_mcp_ephemeral_state_expires_at exists');
 
 select is(
   (select relrowsecurity from pg_class where oid = 'public.mcp_ephemeral_state'::regclass),

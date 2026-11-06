@@ -5,21 +5,21 @@ set search_path = public, extensions;
 
 select plan(141);
 
-select has_column('public', 'support_tickets', 'source');
-select has_column('public', 'support_tickets', 'first_response_due_at');
-select has_column('public', 'support_tickets', 'first_responded_at');
-select has_column('public', 'support_tickets', 'sla_breached_at');
-select has_column('public', 'support_tickets', 'sentry_event_id');
-select has_column('public', 'support_tickets', 'mcp_request_id');
+select has_column('public', 'support_tickets', 'source', 'support_tickets.source exists');
+select has_column('public', 'support_tickets', 'first_response_due_at', 'support_tickets.first_response_due_at exists');
+select has_column('public', 'support_tickets', 'first_responded_at', 'support_tickets.first_responded_at exists');
+select has_column('public', 'support_tickets', 'sla_breached_at', 'support_tickets.sla_breached_at exists');
+select has_column('public', 'support_tickets', 'sentry_event_id', 'support_tickets.sentry_event_id exists');
+select has_column('public', 'support_tickets', 'mcp_request_id', 'support_tickets.mcp_request_id exists');
 
-select has_table('public', 'support_agent_presence');
-select has_table('public', 'support_ticket_tags');
-select has_table('public', 'support_ticket_internal_notes');
-select has_table('public', 'support_ticket_events');
-select has_table('public', 'support_calendar_days');
-select has_table('public', 'support_notification_outbox');
-select has_column('public', 'support_notification_outbox', 'claimed_at');
-select has_column('public', 'support_notification_outbox', 'lease_token');
+select has_table('public', 'support_agent_presence', 'support_agent_presence table exists');
+select has_table('public', 'support_ticket_tags', 'support_ticket_tags table exists');
+select has_table('public', 'support_ticket_internal_notes', 'support_ticket_internal_notes table exists');
+select has_table('public', 'support_ticket_events', 'support_ticket_events table exists');
+select has_table('public', 'support_calendar_days', 'support_calendar_days table exists');
+select has_table('public', 'support_notification_outbox', 'support_notification_outbox table exists');
+select has_column('public', 'support_notification_outbox', 'claimed_at', 'support_notification_outbox.claimed_at exists');
+select has_column('public', 'support_notification_outbox', 'lease_token', 'support_notification_outbox.lease_token exists');
 
 select ok(
   (select relrowsecurity from pg_class where oid = 'public.support_agent_presence'::regclass),
@@ -419,6 +419,25 @@ select is(
   ),
   0,
   'failed create RPC rolls back presence last_assigned_at'
+);
+
+-- The successful create RPC above auto-assigned its ticket to agent 1 and
+-- stamped that agent's last_assigned_at. Take the ticket out of the open load
+-- and restore the seeded assignment order so the load and tie-break checks
+-- below start from the documented fixture.
+update public.support_tickets
+set status = 'resolved'
+where id = '50000000-0000-4000-8000-000000000001';
+update public.support_agent_presence
+set last_assigned_at = case agent_id
+  when '20000000-0000-0000-0000-000000000001' then now() - interval '30 minutes'
+  when '20000000-0000-0000-0000-000000000002' then now() - interval '20 minutes'
+  when '20000000-0000-0000-0000-000000000003' then now() - interval '10 minutes'
+end
+where agent_id in (
+  '20000000-0000-0000-0000-000000000001',
+  '20000000-0000-0000-0000-000000000002',
+  '20000000-0000-0000-0000-000000000003'
 );
 
 insert into public.support_tickets (id, user_id, title, description, status, assigned_to)

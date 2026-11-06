@@ -1,11 +1,11 @@
 begin;
 select plan(6);
 
-select has_column('public', 'n8n_instances', 'mcp_token_encrypted');
-select has_column('public', 'n8n_instances', 'mcp_token_iv');
-select has_column('public', 'n8n_instances', 'mcp_token_tag');
-select has_column('public', 'n8n_instances', 'mcp_capabilities');
-select has_column('public', 'n8n_instances', 'mcp_checked_at');
+select has_column('public', 'n8n_instances', 'mcp_token_encrypted', 'n8n_instances.mcp_token_encrypted exists');
+select has_column('public', 'n8n_instances', 'mcp_token_iv', 'n8n_instances.mcp_token_iv exists');
+select has_column('public', 'n8n_instances', 'mcp_token_tag', 'n8n_instances.mcp_token_tag exists');
+select has_column('public', 'n8n_instances', 'mcp_capabilities', 'n8n_instances.mcp_capabilities exists');
+select has_column('public', 'n8n_instances', 'mcp_checked_at', 'n8n_instances.mcp_checked_at exists');
 
 select ok(
   exists (
