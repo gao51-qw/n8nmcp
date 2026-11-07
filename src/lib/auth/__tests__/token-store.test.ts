@@ -211,6 +211,27 @@ describe("auth token store", () => {
     store.dispose();
   });
 
+  it("retries when the server says to, not after the default delay", async () => {
+    // /api/auth/refresh answers 5xx with Retry-After: 2 when Supabase did not
+    // answer, so a token it may already have rotated is retried while the old
+    // one is still inside Supabase's reuse interval.
+    const outcomes: RefreshOutcome[] = [
+      { kind: "error", retryAfterMs: 2_000 },
+      { kind: "session", session: session("recovered") },
+    ];
+    const refreshRequest = vi.fn(async () => outcomes.shift()!);
+    const store = createAuthTokenStore({ refreshRequest, retryDelayMs: 15_000 });
+    store.setSession(session("current"));
+
+    await store.refresh();
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(refreshRequest).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refreshRequest).toHaveBeenCalledTimes(2);
+    expect(store.getSnapshot().session?.access_token).toBe("recovered");
+    store.dispose();
+  });
+
   it("treats a thrown refresh as a transient error", async () => {
     const store = createAuthTokenStore({
       refreshRequest: async () => {

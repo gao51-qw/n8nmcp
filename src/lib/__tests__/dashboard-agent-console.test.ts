@@ -308,6 +308,113 @@ describe("buildWorkflowAgentConsoleData", () => {
     expect(data.auditLog).toEqual([]);
   });
 
+  it("keeps timestamps as ISO 8601 and labels throttled requests", () => {
+    const data = buildWorkflowAgentConsoleData({
+      now: new Date("2026-07-09T10:00:05.000Z"),
+      workflowId: "wf-1",
+      instance: null,
+      subscription: null,
+      usageToday: null,
+      callLogs: [
+        {
+          id: "call-throttled",
+          tool_name: null,
+          status: "rate_limited",
+          latency_ms: 0,
+          created_at: "2026-07-09T10:00:01.000Z",
+        },
+        {
+          id: "call-ok",
+          tool_name: "search_nodes",
+          status: "ok",
+          latency_ms: 12,
+          created_at: "2026-07-08T09:30:00+02:00",
+        },
+      ],
+      auditRows: [
+        {
+          id: "audit-1",
+          workflow_id: "wf-1",
+          workflow_name: null,
+          operation: "update",
+          tool_name: "update_partial_workflow",
+          ai_reasoning: null,
+          is_rolled_back: false,
+          created_at: "2026-07-09T10:00:03.500Z",
+          snapshot_before: { id: "wf-1" },
+          snapshot_after: { id: "wf-1" },
+          changes: [],
+          tool_params: {},
+        },
+      ],
+    });
+
+    // Full timestamps, so the console can show the date; the offset is normalised.
+    expect(data.toolCalls.map((call) => call.timestamp)).toEqual([
+      "2026-07-08T07:30:00.000Z",
+      "2026-07-09T10:00:01.000Z",
+    ]);
+    expect(data.auditLog[0]?.timestamp).toBe("2026-07-09T10:00:03.500Z");
+    expect(data.toolCalls.at(-1)).toMatchObject({ label: "Rate limited", status: "blocked" });
+    expect(data.toolCalls.at(-1)?.tool).not.toBe("unknown");
+  });
+
+  it("reports an unlimited plan and the UTC-midnight reset instead of the billing period", () => {
+    const data = buildWorkflowAgentConsoleData({
+      now: new Date("2026-07-09T10:00:05.000Z"),
+      instance: null,
+      subscription: {
+        tier: "enterprise",
+        status: "active",
+        current_period_end: "2026-08-01T00:00:00Z",
+      },
+      usageToday: { mcp_calls: 7 },
+      callLogs: [],
+      auditRows: [],
+    });
+
+    expect(data.quota).toMatchObject({
+      plan: "Enterprise",
+      used: 7,
+      unlimited: true,
+      limit: 0,
+      resetAt: "2026-07-10T00:00:00.000Z",
+    });
+  });
+
+  it("names added nodes and connection ends in preview summaries", () => {
+    const data = buildWorkflowAgentConsoleData({
+      now: new Date("2026-07-09T10:10:00.000Z"),
+      workflowId: "wf-1",
+      callLogs: [
+        {
+          id: "preview-3",
+          tool_name: "preview_workflow_diff",
+          status: "ok",
+          latency_ms: 20,
+          created_at: "2026-07-09T10:05:00.000Z",
+          workflow_id: "wf-1",
+          metadata: {
+            workflowId: "wf-1",
+            baseFingerprint: "fingerprint-3",
+            operations: [
+              { type: "addNode", node: { id: "if-1", name: "IF", type: "n8n-nodes-base.if" } },
+              { type: "removeConnection", source: "Webhook", target: "Old retry" },
+              { type: "cleanStaleConnections" },
+            ],
+          },
+        },
+      ],
+      auditRows: [],
+    });
+
+    expect(data.pendingUpdate?.operations.map((entry) => entry.summary)).toEqual([
+      expect.objectContaining({ operation: "add", target: "IF" }),
+      expect.objectContaining({ operation: "remove", target: "Webhook -> Old retry" }),
+      expect.objectContaining({ operation: "update", target: "Operation 3" }),
+    ]);
+  });
+
   it("treats a structured business failure as blocked even if transport status is ok", () => {
     const data = buildWorkflowAgentConsoleData({
       now: new Date("2026-07-09T10:00:05.000Z"),

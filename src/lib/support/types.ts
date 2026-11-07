@@ -37,6 +37,8 @@ export type SupportTicket = {
 
 export type SupportAgentPresence = {
   agentId: string;
+  /** Profile display name, else email; null when the agent has no profile row. */
+  displayName?: string | null;
   status: SupportPresenceStatus;
   lastHeartbeatAt: string;
   lastAssignedAt: string | null;

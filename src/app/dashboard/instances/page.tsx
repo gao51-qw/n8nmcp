@@ -2,10 +2,10 @@
 
 // n8n instances: add one (URL + API key, checked against n8n before it is
 // stored encrypted), choose the one MCP tools work with, set or clear the
-// optional instance-level MCP token, and remove an instance. Secrets are never
-// shown again after they are saved.
+// optional instance-level MCP token, re-check the stored key, and remove an
+// instance. Secrets are never shown again after they are saved.
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { CheckCircle2, Loader2, Server } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, Server } from "lucide-react";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { errorText } from "@/components/dashboard/error-text";
 import { Badge } from "@/components/ui/badge";
@@ -19,16 +19,48 @@ type Instance = {
   name: string;
   base_url: string;
   status: string;
+  /** When the stored API key was last checked against n8n (null for legacy rows). */
+  last_checked_at?: string | null;
   created_at: string;
   /** The instance MCP tools work with; exactly one per account. */
   is_default: boolean;
   native_mcp: { configured: boolean; tools: string[]; checked_at: string | null };
 };
 
-function NativeTokenForm({ instance, onSaved }: { instance: Instance; onSaved: () => void }) {
+type CheckResponse = { instance: Instance; check: { ok: boolean; error: string | null } };
+
+const RELATIVE = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+/** "3 hours ago" / "2 days ago"; the raw value when it is not a date. */
+function formatRelative(value: string | null | undefined, now = Date.now()): string | null {
+  if (!value) return null;
+  const time = new Date(value).getTime();
+  if (!Number.isFinite(time)) return value;
+  const minutes = Math.round((time - now) / 60_000);
+  if (Math.abs(minutes) < 1) return "just now";
+  if (Math.abs(minutes) < 60) return RELATIVE.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 48) return RELATIVE.format(hours, "hour");
+  return RELATIVE.format(Math.round(hours / 24), "day");
+}
+
+function NativeTokenForm({
+  instance,
+  resetSignal,
+  onSaved,
+}: {
+  instance: Instance;
+  /** Changes whenever the list reloads after a successful action: stale errors go. */
+  resetSignal: number;
+  onSaved: () => void;
+}) {
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setError(null);
+  }, [resetSignal]);
 
   async function save(value: string | null) {
     setBusy(true);
@@ -106,12 +138,17 @@ export default function InstancesPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Instance | null>(null);
   const [pendingDefault, setPendingDefault] = useState<Instance | null>(null);
+  const [checking, setChecking] = useState<string | null>(null);
+  const [checkResult, setCheckResult] = useState<{ id: string; error: string | null } | null>(null);
+  // Bumped after every successful reload so per-instance forms drop old errors.
+  const [resetSignal, setResetSignal] = useState(0);
 
   const load = useCallback(async () => {
     try {
       const data = await supportFetch<{ instances: Instance[] }>("/api/dashboard/instances");
       setInstances(data.instances);
       setLoadError(null);
+      setResetSignal((value) => value + 1);
     } catch (err) {
       setLoadError(errorText(err));
     }
@@ -142,6 +179,8 @@ export default function InstancesPage() {
   async function remove(instance: Instance) {
     try {
       await supportFetch(`/api/dashboard/instances/${instance.id}`, { method: "DELETE" });
+      setCreateError(null);
+      if (checkResult?.id === instance.id) setCheckResult(null);
       await load();
     } catch (err) {
       setLoadError(errorText(err));
@@ -154,9 +193,27 @@ export default function InstancesPage() {
         method: "PATCH",
         body: JSON.stringify({ is_default: true }),
       });
+      setCreateError(null);
       await load();
     } catch (err) {
       setLoadError(errorText(err));
+    }
+  }
+
+  async function check(instance: Instance) {
+    setChecking(instance.id);
+    setCheckResult(null);
+    try {
+      const data = await supportFetch<CheckResponse>(`/api/dashboard/instances/${instance.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ recheck: true }),
+      });
+      setCheckResult({ id: instance.id, error: data.check.error });
+      await load();
+    } catch (err) {
+      setCheckResult({ id: instance.id, error: errorText(err) });
+    } finally {
+      setChecking(null);
     }
   }
 
@@ -195,50 +252,89 @@ export default function InstancesPage() {
       ) : null}
 
       <ul className="mt-8 grid gap-4">
-        {instances?.map((instance) => (
-          <li
-            key={instance.id}
-            className={
-              instance.is_default
-                ? "rounded-lg border border-primary/60 bg-card p-5"
-                : "rounded-lg border border-border bg-card p-5"
-            }
-          >
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="font-semibold">{instance.name}</p>
-                  {instance.is_default ? (
-                    <Badge className="gap-1">
-                      <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-                      Active for MCP
+        {instances?.map((instance) => {
+          const checked = formatRelative(instance.last_checked_at);
+          const result = checkResult?.id === instance.id ? checkResult : null;
+          return (
+            <li
+              key={instance.id}
+              className={
+                instance.is_default
+                  ? "rounded-lg border border-primary/60 bg-card p-5"
+                  : "rounded-lg border border-border bg-card p-5"
+              }
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-semibold">{instance.name}</p>
+                    {instance.is_default ? (
+                      <Badge className="gap-1">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                        Active for MCP
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 break-all text-sm text-muted-foreground">
+                    {instance.base_url}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Badge variant={instance.status === "ok" ? "secondary" : "destructive"}>
+                      API: {instance.status}
                     </Badge>
-                  ) : null}
+                    <Badge variant={instance.native_mcp.configured ? "default" : "outline"}>
+                      {instance.native_mcp.configured
+                        ? `Native MCP: ${instance.native_mcp.tools.length} tools`
+                        : "Native MCP: off"}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {checked ? `Key checked ${checked}` : "Key not checked yet"}
+                    </span>
+                  </div>
                 </div>
-                <p className="mt-1 break-all text-sm text-muted-foreground">{instance.base_url}</p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <Badge variant="secondary">API: {instance.status}</Badge>
-                  <Badge variant={instance.native_mcp.configured ? "default" : "outline"}>
-                    {instance.native_mcp.configured
-                      ? `Native MCP: ${instance.native_mcp.tools.length} tools`
-                      : "Native MCP: off"}
-                  </Badge>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {instance.is_default ? null : (
-                  <Button variant="outline" onClick={() => setPendingDefault(instance)}>
-                    Use for MCP
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => void check(instance)}
+                    disabled={checking === instance.id}
+                    aria-label={`Check ${instance.name} now`}
+                  >
+                    {checking === instance.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                    )}
+                    Check now
                   </Button>
-                )}
-                <Button variant="outline" onClick={() => setPendingRemoval(instance)}>
-                  Remove
-                </Button>
+                  {instance.is_default ? null : (
+                    <Button variant="outline" onClick={() => setPendingDefault(instance)}>
+                      Use for MCP
+                    </Button>
+                  )}
+                  <Button variant="outline" onClick={() => setPendingRemoval(instance)}>
+                    Remove
+                  </Button>
+                </div>
               </div>
-            </div>
-            <NativeTokenForm instance={instance} onSaved={() => void load()} />
-          </li>
-        ))}
+              {result ? (
+                result.error ? (
+                  <p role="alert" className="mt-3 text-sm text-destructive">
+                    {result.error}
+                  </p>
+                ) : (
+                  <p role="status" className="mt-3 text-sm text-muted-foreground">
+                    n8n accepted the stored API key just now.
+                  </p>
+                )
+              ) : null}
+              <NativeTokenForm
+                instance={instance}
+                resetSignal={resetSignal}
+                onSaved={() => void load()}
+              />
+            </li>
+          );
+        })}
       </ul>
 
       {instances?.length === 0 ? (

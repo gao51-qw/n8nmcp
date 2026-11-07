@@ -1,6 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import type { Event as SentryEvent } from "@sentry/core";
-import { sanitizeSentryEvent } from "@/lib/logger.server";
+import { sanitizeSentryEvent } from "@/lib/sentry-sanitize";
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,

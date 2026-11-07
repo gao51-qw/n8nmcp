@@ -115,6 +115,37 @@ describe("admin support service", () => {
     }
   });
 
+  it("labels agents with their profile name or email", async () => {
+    const presence = query({
+      data: [
+        { agent_id: "agent-1", status: "online", last_heartbeat_at: "t1", updated_at: "t1" },
+        { agent_id: "agent-2", status: "away", last_heartbeat_at: "t0", updated_at: "t0" },
+        { agent_id: "agent-3", status: "online", last_heartbeat_at: "t0", updated_at: "t0" },
+      ],
+      error: null,
+    });
+    const profiles = query({
+      data: [
+        { id: "agent-1", display_name: "Ada", email: "ada@example.com" },
+        { id: "agent-2", display_name: null, email: "grace@example.com" },
+      ],
+      error: null,
+    });
+    supabaseMocks.from.mockImplementation((table: string) =>
+      table === "profiles" ? profiles.builder : presence.builder,
+    );
+    const { listAdminAgents } = await import("../admin.server");
+
+    const agents = await listAdminAgents();
+
+    expect(profiles.calls).toContainEqual(["in", "id", ["agent-1", "agent-2", "agent-3"]]);
+    expect(agents.map((agent) => [agent.agentId, agent.displayName])).toEqual([
+      ["agent-1", "Ada"],
+      ["agent-2", "grace@example.com"],
+      ["agent-3", null],
+    ]);
+  });
+
   it("transfers through the atomic event-writing RPC", async () => {
     supabaseMocks.rpc.mockResolvedValue({
       data: { id: "ticket-1", assigned_to: "agent-2" },

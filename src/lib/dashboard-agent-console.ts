@@ -209,8 +209,11 @@ export function buildWorkflowAgentConsoleData(
     quota: {
       plan: TIER_LABELS[tier],
       used,
-      limit: Number.isFinite(limit) ? limit : 1_000_000,
-      resetAt: input.subscription?.current_period_end ?? nextUtcMidnight(now),
+      limit: Number.isFinite(limit) ? limit : 0,
+      unlimited: !Number.isFinite(limit),
+      // usage_daily is keyed by UTC day for every tier, so the counter resets
+      // at UTC midnight; the billing period end is a different date.
+      resetAt: nextUtcMidnight(now),
       rateRemaining: Math.max(0, rateLimit - recentCalls),
       rateLimit,
       window: "10 seconds",
@@ -322,11 +325,18 @@ function summarizePreviewOperation(
   diff: Record<string, unknown>,
 ): DiffEntry {
   const record = asRecord(operation);
+  const node = asRecord(record.node);
   const type = stringOrNull(record.type) ?? "update";
+  const source = stringOrNull(record.source);
+  const connectionTarget = stringOrNull(record.target);
   const target =
     stringOrNull(record.nodeId) ??
     stringOrNull(record.nodeName) ??
-    stringOrNull(record.source) ??
+    // addNode carries the new node itself.
+    stringOrNull(node.name) ??
+    stringOrNull(node.id) ??
+    // Connection operations name both ends.
+    (source && connectionTarget ? `${source} -> ${connectionTarget}` : source) ??
     toStringArray(diff.changedNodes)[index] ??
     `Operation ${index + 1}`;
   return {
@@ -341,6 +351,17 @@ function summarizePreviewOperation(
 }
 
 function mapToolCall(row: McpCallLogRow): ToolCallEvent {
+  // A throttled request is logged before any tool name is known.
+  if (!row.tool_name && row.status === "rate_limited") {
+    return {
+      id: row.id,
+      label: "Rate limited",
+      tool: "request throttled before dispatch",
+      status: "blocked",
+      durationMs: row.latency_ms ?? 0,
+      timestamp: isoTimestamp(row.created_at),
+    };
+  }
   const tool = row.tool_name ?? "unknown";
   return {
     id: row.id,
@@ -348,7 +369,7 @@ function mapToolCall(row: McpCallLogRow): ToolCallEvent {
     tool,
     status: mapToolStatus(row.status, row.metadata),
     durationMs: row.latency_ms ?? 0,
-    timestamp: formatTime(row.created_at),
+    timestamp: isoTimestamp(row.created_at),
   };
 }
 
@@ -373,7 +394,7 @@ function mapAuditEntry(row: WorkflowAuditConsoleRow): AuditEntry {
     message:
       row.ai_reasoning ??
       `${humanizeToolName(tool)} recorded ${row.operation} for workflow ${row.workflow_id}.`,
-    timestamp: formatTime(row.created_at),
+    timestamp: isoTimestamp(row.created_at),
     ...(concurrency ? { concurrency } : {}),
   };
 }
@@ -630,10 +651,10 @@ function nextUtcMidnight(now: Date): string {
   return next.toISOString();
 }
 
-function formatTime(value: string): string {
+/** The row's time as ISO 8601; the console renders it with its date in the viewer's locale. */
+function isoTimestamp(value: string): string {
   const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) return value;
-  return date.toISOString().slice(11, 19);
+  return Number.isFinite(date.getTime()) ? date.toISOString() : value;
 }
 
 function firstString(value: unknown): string | null {

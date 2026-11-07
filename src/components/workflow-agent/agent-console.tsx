@@ -53,6 +53,9 @@ export interface QuotaSnapshot {
   plan: string;
   used: number;
   limit: number;
+  /** No daily cap on this plan (`limit` is 0 then). */
+  unlimited?: boolean;
+  /** ISO 8601 when it comes from the API; fixture text is shown as-is. */
   resetAt: string;
   rateRemaining: number;
   rateLimit: number;
@@ -271,10 +274,19 @@ export const workflowAgentConsoleFixture: WorkflowAgentConsoleData = {
   ],
 };
 
+// Semantic chips in light and dark pairs; the site defaults to the dark theme.
+const EMERALD_CHIP =
+  "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300";
+const AMBER_CHIP =
+  "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300";
+const SKY_CHIP =
+  "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-300";
+const DESTRUCTIVE_CHIP = "border-destructive/30 bg-destructive/10 text-destructive";
+
 function statusBadgeClass(status: ToolCallStatus) {
-  if (status === "complete") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (status === "blocked") return "border-destructive/30 bg-destructive/10 text-destructive";
-  return "border-amber-200 bg-amber-50 text-amber-700";
+  if (status === "complete") return EMERALD_CHIP;
+  if (status === "blocked") return DESTRUCTIVE_CHIP;
+  return AMBER_CHIP;
 }
 
 const CONCURRENCY_BADGES: Record<
@@ -284,12 +296,12 @@ const CONCURRENCY_BADGES: Record<
   concurrent_write_after: {
     label: "Concurrent edit detected",
     detail: "n8n saved another edit right after this change. Review the workflow in n8n.",
-    className: "border-destructive/30 bg-destructive/10 text-destructive",
+    className: DESTRUCTIVE_CHIP,
   },
   concurrent_write_suspected: {
     label: "Concurrent edit suspected",
     detail: "Another edit may have been saved around this change. Review the workflow in n8n.",
-    className: "border-amber-200 bg-amber-50 text-amber-700",
+    className: AMBER_CHIP,
   },
   unverified: {
     label: "Write not verified",
@@ -300,19 +312,30 @@ const CONCURRENCY_BADGES: Record<
 
 function validationIcon(severity: ValidationSeverity) {
   if (severity === "error") return <AlertCircle className="h-4 w-4 text-destructive" />;
-  if (severity === "warning") return <ShieldAlert className="h-4 w-4 text-amber-600" />;
-  return <CheckCircle2 className="h-4 w-4 text-emerald-600" />;
+  if (severity === "warning") {
+    return <ShieldAlert className="h-4 w-4 text-amber-600 dark:text-amber-400" />;
+  }
+  return <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
 }
 
 function diffClass(operation: DiffOperation) {
-  if (operation === "add") return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  if (operation === "remove") return "border-destructive/30 bg-destructive/10 text-destructive";
-  return "border-sky-200 bg-sky-50 text-sky-700";
+  if (operation === "add") return EMERALD_CHIP;
+  if (operation === "remove") return DESTRUCTIVE_CHIP;
+  return SKY_CHIP;
 }
 
 function formatPercent(value: number, limit: number) {
   if (limit <= 0) return 0;
   return Math.min(100, Math.round((value / limit) * 100));
+}
+
+const DATE_TIME = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "medium" });
+
+/** ISO timestamps from the API get their date in the viewer's locale; other text is kept. */
+function formatTimestamp(value: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(value)) return value;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? DATE_TIME.format(date) : value;
 }
 
 export function WorkflowAgentConsole({
@@ -378,7 +401,7 @@ export function WorkflowAgentConsole({
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+    <main id="main" className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
       <div className="flex flex-col gap-4 border-b border-border pb-5 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
@@ -542,7 +565,7 @@ export function WorkflowAgentConsole({
                       <p className="mt-1 font-mono text-xs text-muted-foreground">{call.tool}</p>
                     </div>
                     <div className="text-right text-xs text-muted-foreground">
-                      <div>{call.timestamp}</div>
+                      <div>{formatTimestamp(call.timestamp)}</div>
                       <div>{call.durationMs}ms</div>
                     </div>
                   </div>
@@ -559,15 +582,15 @@ export function WorkflowAgentConsole({
               </CardHeader>
               <CardContent className="space-y-3 px-4 pb-4">
                 <div className="grid grid-cols-3 gap-2 text-center text-xs">
-                  <div className="rounded-md border border-emerald-200 bg-emerald-50 p-2 text-emerald-700">
+                  <div className={cn("rounded-md border p-2", EMERALD_CHIP)}>
                     <div className="text-lg font-semibold">{validationSummary.pass}</div>
                     Pass
                   </div>
-                  <div className="rounded-md border border-amber-200 bg-amber-50 p-2 text-amber-700">
+                  <div className={cn("rounded-md border p-2", AMBER_CHIP)}>
                     <div className="text-lg font-semibold">{validationSummary.warning}</div>
                     Warnings
                   </div>
-                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-2 text-destructive">
+                  <div className={cn("rounded-md border p-2", DESTRUCTIVE_CHIP)}>
                     <div className="text-lg font-semibold">{validationSummary.error}</div>
                     Errors
                   </div>
@@ -658,10 +681,12 @@ export function WorkflowAgentConsole({
                 <div className="flex items-center justify-between text-sm">
                   <span className="font-medium">{data.quota.plan} quota</span>
                   <span className="text-muted-foreground">
-                    {data.quota.used}/{data.quota.limit}
+                    {data.quota.unlimited
+                      ? `${data.quota.used} used · no daily limit`
+                      : `${data.quota.used}/${data.quota.limit}`}
                   </span>
                 </div>
-                <Progress value={quotaPercent} className="mt-2" />
+                <Progress value={data.quota.unlimited ? 0 : quotaPercent} className="mt-2" />
               </div>
               <div>
                 <div className="flex items-center justify-between text-sm">
@@ -679,7 +704,7 @@ export function WorkflowAgentConsole({
                 </div>
                 <div className="flex items-center gap-2">
                   <FileClock className="h-4 w-4" aria-hidden="true" />
-                  Reset: {data.quota.resetAt}
+                  Reset: {formatTimestamp(data.quota.resetAt)}
                 </div>
               </div>
             </CardContent>
@@ -700,7 +725,7 @@ export function WorkflowAgentConsole({
                       <GitBranch className="h-3.5 w-3.5" aria-hidden="true" />
                       {entry.level}
                     </span>
-                    <span>{entry.timestamp}</span>
+                    <span>{formatTimestamp(entry.timestamp)}</span>
                   </div>
                   {entry.concurrency ? (
                     <div className="mt-2 space-y-1" data-testid="audit-concurrency-warning">

@@ -440,6 +440,39 @@ describe("admin ticket workbench", () => {
     expect(timeline?.textContent).not.toContain("do-not-render");
   });
 
+  it("shows agents by display name in the transfer list and the event timeline", async () => {
+    mocks.supportFetch.mockImplementation((url: string) => {
+      if (url === "/api/support/admin/agents") {
+        return Promise.resolve({
+          agents: [
+            {
+              agentId,
+              displayName: "Ada Lovelace",
+              status: "online",
+              lastHeartbeatAt: "2026-06-12T10:00:00.000Z",
+              lastAssignedAt: null,
+              updatedAt: "2026-06-12T10:00:00.000Z",
+            },
+          ],
+        });
+      }
+      if (url.startsWith("/api/support/admin/tickets?")) {
+        return Promise.resolve({ tickets: [ticket()] });
+      }
+      return Promise.resolve(detail());
+    });
+    const view = await render(<AdminTicketWorkbench />);
+    roots.push(view.root);
+
+    const option = view.host.querySelector(
+      `select[aria-label="Transfer ticket"] option[value="${agentId}"]`,
+    );
+    expect(option?.textContent).toBe("Ada Lovelace");
+    const timeline = view.host.querySelector('[data-testid="ticket-events"]');
+    expect(timeline?.textContent).toContain("Actor: Ada Lovelace");
+    expect(timeline?.textContent).not.toContain(agentId);
+  });
+
   it("gets attachment links from the signing API and never renders storage paths", async () => {
     const storagePath = `${ticket().userId}/${ticketId}/private-storage-name.txt`;
     mocks.supportFetch.mockImplementation((url: string) => {

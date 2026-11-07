@@ -27,8 +27,11 @@ export type RefreshOutcome =
   | { kind: "session"; session: AuthSession }
   /** The server has no usable session (no cookie, or it was rejected). */
   | { kind: "signed_out" }
-  /** Network or server failure: the session may still be valid. */
-  | { kind: "error" };
+  /**
+   * Network or server failure: the session may still be valid. The server
+   * may suggest when to retry (its `Retry-After`); otherwise retryDelayMs.
+   */
+  | { kind: "error"; retryAfterMs?: number };
 
 export type AuthBroadcast =
   { type: "session"; session: AuthSession; persisted: boolean } | { type: "signed_out" };
@@ -177,7 +180,7 @@ export function createAuthTokenStore(deps: TokenStoreDeps): AuthTokenStore {
         return null;
       }
       const kept = snapshot.session;
-      if (kept) schedule(retryDelayMs);
+      if (kept) schedule(outcome.retryAfterMs ?? retryDelayMs);
       return kept && msLeft(kept) > 0 ? kept : null;
     };
     inflight = (deps.withLock ? deps.withLock(run) : run()).finally(() => {

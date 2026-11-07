@@ -22,6 +22,10 @@ function publicEnv(phase: string): Record<string, string> {
     NEXT_PUBLIC_BLOG_URL: process.env.NEXT_PUBLIC_BLOG_URL ?? (isDev ? DEV_ORIGIN : undefined),
     NEXT_PUBLIC_DASHBOARD_URL:
       process.env.NEXT_PUBLIC_DASHBOARD_URL ?? (isDev ? DEV_ORIGIN : undefined),
+    // The browser Sentry init follows the server sample rate unless a public
+    // value is set explicitly (instrumentation-client.ts).
+    NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE:
+      process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? process.env.SENTRY_TRACES_SAMPLE_RATE,
   };
   return Object.fromEntries(
     Object.entries(candidates).filter((entry): entry is [string, string] => Boolean(entry[1])),

@@ -287,6 +287,12 @@ export function AdminTicketWorkbench() {
   }
 
   const activeAgents = useMemo(() => agents.filter((agent) => agent.status === "online"), [agents]);
+  // Agents are shown by profile name (or email); ids only when no profile exists.
+  const agentNames = useMemo(
+    () => new Map(agents.map((agent) => [agent.agentId, agent.displayName ?? agent.agentId])),
+    [agents],
+  );
+  const agentLabel = (id: string) => agentNames.get(id) ?? id;
   const attachments = useMemo(() => {
     if (!detail) return [];
     return [
@@ -374,7 +380,7 @@ export function AdminTicketWorkbench() {
                       <span className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline">{formatLabel(ticket.priority)}</Badge>
                         {state === "due" ? (
-                          <Badge className="border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-50">
+                          <Badge className="border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/40">
                             Due soon
                           </Badge>
                         ) : null}
@@ -423,7 +429,7 @@ export function AdminTicketWorkbench() {
                       <option value="">Unassigned</option>
                       {activeAgents.map((agent) => (
                         <option key={agent.agentId} value={agent.agentId}>
-                          {agent.agentId}
+                          {agentLabel(agent.agentId)}
                         </option>
                       ))}
                     </select>
@@ -631,7 +637,9 @@ export function AdminTicketWorkbench() {
                       <li key={item.id ?? index} className="rounded-md border p-3 text-xs">
                         <p className="font-medium">{formatLabel(eventType)}</p>
                         {actor ? (
-                          <p className="mt-1 break-all text-muted-foreground">Actor: {actor}</p>
+                          <p className="mt-1 break-all text-muted-foreground">
+                            Actor: {agentLabel(actor)}
+                          </p>
                         ) : null}
                         {createdAt ? (
                           <time className="text-muted-foreground" dateTime={createdAt}>

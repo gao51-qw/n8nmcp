@@ -110,6 +110,16 @@ export async function recoverRequest(email: string, next: string): Promise<void>
   if (!response.ok) throw await errorFrom(response);
 }
 
+const MIN_RETRY_AFTER_MS = 1_000;
+const MAX_RETRY_AFTER_MS = 60_000;
+
+/** The server's `Retry-After` (delay-seconds) as milliseconds, bounded; undefined when absent. */
+export function retryAfterMs(response: Response): number | undefined {
+  const header = response.headers.get("retry-after")?.trim();
+  if (!header || !/^\d+$/.test(header)) return undefined;
+  return Math.min(MAX_RETRY_AFTER_MS, Math.max(MIN_RETRY_AFTER_MS, Number(header) * 1000));
+}
+
 /** Never throws: a refresh either yields a session, a definite sign-out, or an error. */
 export async function refreshRequest(): Promise<RefreshOutcome> {
   let response: Response;
@@ -120,7 +130,8 @@ export async function refreshRequest(): Promise<RefreshOutcome> {
   }
   // 204: no refresh cookie at all (a signed-out visitor); 401: it was rejected.
   if (response.status === 204 || response.status === 401) return { kind: "signed_out" };
-  if (!response.ok) return { kind: "error" };
+  // 429/5xx: the cookie is still there; the server may say how soon to retry.
+  if (!response.ok) return { kind: "error", retryAfterMs: retryAfterMs(response) };
   const parsed = sessionSchema.safeParse(await response.json().catch(() => null));
   return parsed.success ? { kind: "session", session: toSession(parsed.data) } : { kind: "error" };
 }

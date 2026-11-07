@@ -41,13 +41,12 @@ function formatDay(value: string): string {
       }).format(date);
 }
 
+// The statuses recordCall() writes to mcp_call_logs (src/lib/mcp/quota.server.ts);
+// anything else is shown as-is.
 const STATUS_LABELS: Record<string, string> = {
   ok: "Succeeded",
   error: "Failed",
   rate_limited: "Rate limited",
-  needs_instance: "No instance",
-  input_required: "Input required",
-  insufficient_scope: "Not permitted",
 };
 
 function StatusBadge({ status }: { status: string }) {

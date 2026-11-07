@@ -115,14 +115,37 @@ export async function heartbeatAndAssignTickets(agentId: string, maxAssignments 
   return { presence: heartbeat.data, assignedCount };
 }
 
+function text(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+/** Display name (else email) per agent from public.profiles; agents without a profile are absent. */
+async function agentDisplayNames(agentIds: string[]): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (agentIds.length === 0) return names;
+  const { data, error } = await db
+    .from("profiles")
+    .select("id,display_name,email")
+    .in("id", agentIds);
+  if (error) databaseError(error, "Unable to load support agent profiles");
+  for (const row of (Array.isArray(data) ? data : []) as Record<string, unknown>[]) {
+    const label = text(row.display_name) ?? text(row.email);
+    if (label) names.set(String(row.id), label);
+  }
+  return names;
+}
+
 export async function listAdminAgents(): Promise<SupportAgentPresence[]> {
   const { data, error } = await db
     .from("support_agent_presence")
     .select("*")
     .order("last_heartbeat_at", { ascending: false });
   if (error) databaseError(error, "Unable to list support agents");
-  return ((Array.isArray(data) ? data : []) as Record<string, unknown>[]).map((row) => ({
+  const rows = (Array.isArray(data) ? data : []) as Record<string, unknown>[];
+  const names = await agentDisplayNames(rows.map((row) => String(row.agent_id)));
+  return rows.map((row) => ({
     agentId: String(row.agent_id),
+    displayName: names.get(String(row.agent_id)) ?? null,
     status: row.status as SupportAgentPresence["status"],
     lastHeartbeatAt: String(row.last_heartbeat_at),
     lastAssignedAt: row.last_assigned_at ? String(row.last_assigned_at) : null,

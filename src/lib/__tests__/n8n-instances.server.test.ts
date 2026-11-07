@@ -40,6 +40,11 @@ vi.mock("@/integrations/supabase/client.server", () => {
 
 vi.mock("@/lib/crypto.server", () => ({
   encryptSecret: (plain: string) => ({ ciphertext: `enc(${plain})`, iv: "iv", tag: "tag" }),
+  decryptSecret: ({ ciphertext }: { ciphertext: string }) => {
+    const match = /^enc\((.*)\)$/.exec(ciphertext);
+    if (!match) throw new Error("Unsupported state or unable to authenticate data");
+    return match[1];
+  },
 }));
 
 vi.mock("@/lib/ssrf-guard.server", () => ({ safeFetchPublicUrl: vi.fn() }));
@@ -51,6 +56,7 @@ import {
   InstanceError,
   listInstances,
   normalizeBaseUrl,
+  recheckInstance,
   setDefaultInstance,
   setNativeMcpToken,
 } from "../n8n-instances.server";
@@ -388,5 +394,66 @@ describe("default instance", () => {
       status: 500,
       message: "Could not change the MCP instance",
     });
+  });
+});
+
+describe("recheckInstance", () => {
+  const stored = {
+    id: row.id,
+    base_url: row.base_url,
+    api_key_encrypted: "enc(key)",
+    api_key_iv: "iv",
+    api_key_tag: "tag",
+  };
+
+  function updated() {
+    return db.calls.find(([method]) => method === "update")?.[1] as Record<string, unknown>;
+  }
+
+  it("records a working key as ok with a fresh check time", async () => {
+    db.results = [
+      { data: stored, error: null },
+      { data: { ...row, status: "ok" }, error: null },
+    ];
+
+    const result = await recheckInstance("user-1", row.id, { fetchImpl: okFetch });
+
+    expect(okFetch).toHaveBeenCalledWith(
+      "https://n8n.example.com/api/v1/workflows?limit=1",
+      expect.objectContaining({ headers: expect.objectContaining({ "X-N8N-API-KEY": "key" }) }),
+    );
+    expect(updated()).toMatchObject({ status: "ok", last_checked_at: expect.any(String) });
+    expect(result.error).toBeNull();
+    expect(JSON.stringify(result)).not.toMatch(/enc\(|"key"/);
+  });
+
+  it("records a rejected key as error and returns the reason", async () => {
+    db.results = [
+      { data: stored, error: null },
+      { data: { ...row, status: "error" }, error: null },
+    ];
+    const reject = vi.fn(async () => new Response("", { status: 401 }));
+
+    const result = await recheckInstance("user-1", row.id, { fetchImpl: reject });
+
+    expect(updated()).toMatchObject({ status: "error" });
+    expect(result).toMatchObject({
+      error: "n8n rejected the API key",
+      instance: { status: "error" },
+    });
+  });
+
+  it("refuses instances of other users and unreadable keys", async () => {
+    db.results = [{ data: null, error: null }];
+    await expect(recheckInstance("user-2", row.id, { fetchImpl: okFetch })).rejects.toMatchObject({
+      status: 404,
+    });
+
+    db.results = [{ data: { ...stored, api_key_encrypted: "garbage" }, error: null }];
+    await expect(recheckInstance("user-1", row.id, { fetchImpl: okFetch })).rejects.toMatchObject({
+      status: 500,
+      message: expect.stringContaining("can no longer be read"),
+    });
+    expect(okFetch).not.toHaveBeenCalled();
   });
 });

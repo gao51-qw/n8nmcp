@@ -20,6 +20,7 @@ function instance(id: string, name: string, createdAt: string, isDefault = false
     name,
     base_url: `https://${id}.example.com`,
     status: "ok",
+    last_checked_at: null as string | null,
     created_at: createdAt,
     is_default: isDefault,
     native_mcp: { configured: false, tools: [], checked_at: null },
@@ -186,6 +187,33 @@ describe("dashboard destructive actions", () => {
     expect(host.querySelectorAll("li")[0].textContent).toContain("Active for MCP");
   });
 
+  it("re-checks the stored key on demand and shows the outcome", async () => {
+    let instances = [instance("first", "Production", "2026-01-01T00:00:00.000Z", true)];
+    mocks.supportFetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        instances = [
+          { ...instances[0], status: "error", last_checked_at: new Date().toISOString() },
+        ];
+        return { instance: instances[0], check: { ok: false, error: "n8n rejected the API key" } };
+      }
+      return { instances };
+    });
+
+    const host = await render(<InstancesPage />);
+    expect(host.textContent).toContain("Key not checked yet");
+
+    await act(async () => buttons("Check now")[0].click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(mocks.supportFetch).toHaveBeenCalledWith("/api/dashboard/instances/first", {
+      method: "PATCH",
+      body: JSON.stringify({ recheck: true }),
+    });
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain("n8n rejected the API key");
+    expect(host.textContent).toContain("API: error");
+    expect(host.textContent).toContain("Key checked just now");
+  });
+
   it("revokes an API key only after the dialog is confirmed", async () => {
     mocks.supportFetch.mockImplementation(async (_url: string, init?: RequestInit) => {
       if (init?.method === "DELETE") return { ok: true };
@@ -224,5 +252,48 @@ describe("dashboard destructive actions", () => {
       method: "DELETE",
     });
     expect(confirmSpy).not.toHaveBeenCalled();
+  });
+
+  it("stops showing a new key's secret once that key is revoked", async () => {
+    const created = {
+      id: "key-2",
+      name: "Audit",
+      key_prefix: "nmcp_new",
+      created_at: "2026-01-02T00:00:00.000Z",
+      last_used_at: null,
+      revoked_at: null as string | null,
+    };
+    let keys: Array<typeof created> = [];
+    mocks.supportFetch.mockImplementation(async (_url: string, init?: RequestInit) => {
+      if (init?.method === "POST") {
+        keys = [created];
+        return { key: created, secret: "nmcp_new_secret_value" };
+      }
+      if (init?.method === "DELETE") {
+        keys = keys.map((key) => ({ ...key, revoked_at: "2026-01-03T00:00:00.000Z" }));
+        return { ok: true };
+      }
+      return { keys };
+    });
+
+    const host = await render(<ApiKeysPage />);
+    const nameInput = host.querySelector("#key-name") as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+        nameInput,
+        "Audit",
+      );
+      nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () => buttons("Create key")[0].click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(host.querySelector('input[aria-label="New API key"]')).not.toBeNull();
+
+    await act(async () => buttons("Revoke")[0].click());
+    await act(async () => buttons("Revoke key")[0].click());
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    expect(host.querySelector('input[aria-label="New API key"]')).toBeNull();
+    expect(host.textContent).not.toContain("nmcp_new_secret_value");
   });
 });

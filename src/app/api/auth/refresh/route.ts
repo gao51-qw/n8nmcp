@@ -31,6 +31,14 @@ export const dynamic = "force-dynamic";
 
 const SESSION_ENDED = "Your session has ended. Sign in again.";
 
+/**
+ * Retry hint for the browser when Supabase did not answer. If Supabase had in
+ * fact rotated the token before the answer was lost, the token still in the
+ * cookie stays usable only during Supabase's refresh-token reuse interval (10 s
+ * by default), so the retry has to land well inside it.
+ */
+const REFRESH_RETRY_AFTER_SECONDS = 2;
+
 export async function POST(request: Request) {
   return withApiErrors(
     request,
@@ -52,7 +60,15 @@ export async function POST(request: Request) {
       const { data, error } = await refreshWithDeadline(anonAuthClient(), refreshToken);
       if (error || !data.session) {
         const failure = authFailure(error, SESSION_ENDED);
-        if (failure.status === 429 || failure.status >= 500) throw failure;
+        if (failure.status === 429) throw failure;
+        if (failure.status >= 500) {
+          // Supabase unavailable or silent: the cookie is kept and the
+          // browser retries soon (see REFRESH_RETRY_AFTER_SECONDS).
+          return jsonError(failure.status, failure.code, failure.message, {
+            requestId,
+            headers: { "Retry-After": String(REFRESH_RETRY_AFTER_SECONDS) },
+          });
+        }
         return clearSessionCookies(
           jsonError(401, "session_expired", SESSION_ENDED, { requestId }),
           context,

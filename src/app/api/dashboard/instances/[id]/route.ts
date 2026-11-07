@@ -2,6 +2,8 @@
 //   PATCH { mcp_token: string | null } → set (after checking) or clear the MCP token
 //   PATCH { is_default: true }          → make it the instance MCP tools work with
 //         (one field per request; to move MCP away, choose another instance)
+//   PATCH { recheck: true }             → re-run the Public API check with the stored key
+//         → { instance, check: { ok, error } }
 //   DELETE → remove the instance and its stored secrets
 import { requireSupportUser } from "@/lib/support/auth.server";
 import {
@@ -14,6 +16,7 @@ import {
 import {
   deleteInstance,
   InstanceError,
+  recheckInstance,
   setDefaultInstance,
   setNativeMcpToken,
 } from "@/lib/n8n-instances.server";
@@ -24,6 +27,8 @@ export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ id: string }> };
 
 const OPTIONS = { expose: [InstanceError] };
+
+const PATCH_FIELDS = ["mcp_token", "is_default", "recheck"] as const;
 
 async function instanceId(context: Context): Promise<string> {
   return parseUuidParam((await context.params).id, "Instance not found");
@@ -36,19 +41,29 @@ export async function PATCH(request: Request, context: Context) {
       const user = await requireSupportUser(request);
       const id = await instanceId(context);
       const body = await readJsonObject(request);
-      const hasToken = body !== null && "mcp_token" in body;
-      const hasDefault = body !== null && "is_default" in body;
-      if (!body || (!hasToken && !hasDefault)) {
-        throw new HttpError(400, "invalid_request", "mcp_token or is_default is required");
+      const fields = body ? PATCH_FIELDS.filter((field) => field in body) : [];
+      if (!body || fields.length === 0) {
+        throw new HttpError(400, "invalid_request", "mcp_token, is_default or recheck is required");
       }
-      if (hasToken && hasDefault) {
+      if (fields.length > 1) {
         throw new HttpError(
           400,
           "invalid_request",
-          "Send either mcp_token or is_default, not both",
+          "Send only one of mcp_token, is_default and recheck",
         );
       }
-      if (hasDefault) {
+      const [field] = fields;
+      if (field === "recheck") {
+        if (body.recheck !== true) {
+          throw new HttpError(400, "invalid_request", "recheck can only be true");
+        }
+        const check = await recheckInstance(user.userId, id);
+        return apiJson(
+          { instance: check.instance, check: { ok: check.error === null, error: check.error } },
+          { requestId },
+        );
+      }
+      if (field === "is_default") {
         if (body.is_default !== true) {
           throw new HttpError(
             400,

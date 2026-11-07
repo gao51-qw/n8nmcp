@@ -1,56 +1,18 @@
 import * as Sentry from "@sentry/nextjs";
 import type { Event as SentryEvent } from "@sentry/core";
+import { sanitizeSentryEvent } from "@/lib/sentry-sanitize";
 
-const SENSITIVE_KEYS = new Set([
-  "authorization",
-  "cookie",
-  "cookies",
-  "apikey",
-  "password",
-  "token",
-  "accesstoken",
-  "refreshtoken",
-  "secret",
-  "session",
-  "body",
-  "attachments",
-  "attachmentmetadata",
-  "chattext",
-  "chatmessage",
-  "messagebody",
-  "replybody",
-]);
-
-function scrub(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(scrub);
-  if (!value || typeof value !== "object") return value;
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      key,
-      SENSITIVE_KEYS.has(key.replace(/[_-]/g, "").toLowerCase()) ? "[REDACTED]" : scrub(item),
-    ]),
-  );
-}
-
-export function sanitizeSentryEvent<T>(event: T): T {
-  const sanitized = scrub(event) as T;
-  if (!sanitized || typeof sanitized !== "object") return sanitized;
-
-  const request = (sanitized as { request?: unknown }).request;
-  if (request && typeof request === "object" && !Array.isArray(request)) {
-    delete (request as Record<string, unknown>).data;
-  }
-
-  return sanitized;
-}
+// One redaction for the browser, edge and server inits (src/lib/sentry-sanitize.ts).
+export { sanitizeSentryEvent };
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
   enabled: Boolean(process.env.NEXT_PUBLIC_SENTRY_DSN),
   sendDefaultPii: false,
   enableLogs: true,
-  tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? "0.05"),
+  // Inlined at build time: next.config.ts fills it from SENTRY_TRACES_SAMPLE_RATE
+  // when no NEXT_PUBLIC_ value is given, so the browser follows the server rate.
+  tracesSampleRate: Number(process.env.NEXT_PUBLIC_SENTRY_TRACES_SAMPLE_RATE ?? "0.05"),
   beforeSend(event: SentryEvent) {
     return sanitizeSentryEvent(event);
   },

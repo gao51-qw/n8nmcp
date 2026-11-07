@@ -33,7 +33,8 @@ export default function ApiKeysPage() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
-  const [secret, setSecret] = useState<string | null>(null);
+  // The new key's secret, shown once; cleared again when that key is revoked.
+  const [secret, setSecret] = useState<{ keyId: string; value: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const [pendingRevoke, setPendingRevoke] = useState<ApiKey | null>(null);
 
@@ -56,11 +57,11 @@ export default function ApiKeysPage() {
     setCreating(true);
     setError(null);
     try {
-      const data = await supportFetch<{ secret: string }>("/api/dashboard/api-keys", {
+      const data = await supportFetch<{ key: ApiKey; secret: string }>("/api/dashboard/api-keys", {
         method: "POST",
         body: JSON.stringify({ name }),
       });
-      setSecret(data.secret);
+      setSecret({ keyId: data.key.id, value: data.secret });
       setCopied(false);
       setName("");
       await load();
@@ -74,6 +75,8 @@ export default function ApiKeysPage() {
   async function revoke(key: ApiKey) {
     try {
       await supportFetch(`/api/dashboard/api-keys/${key.id}`, { method: "DELETE" });
+      // A revoked key's secret is useless: stop showing it.
+      setSecret((current) => (current?.keyId === key.id ? null : current));
       await load();
     } catch (err) {
       setError(errorText(err));
@@ -83,7 +86,7 @@ export default function ApiKeysPage() {
   async function copySecret() {
     if (!secret) return;
     try {
-      await navigator.clipboard.writeText(secret);
+      await navigator.clipboard.writeText(secret.value);
       setCopied(true);
     } catch {
       setCopied(false);
@@ -106,7 +109,12 @@ export default function ApiKeysPage() {
         <section role="status" className="mt-8 rounded-lg border border-primary bg-card p-5">
           <p className="font-semibold">Copy your new key now. It will not be shown again.</p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-            <Input readOnly value={secret} className="font-mono text-xs" aria-label="New API key" />
+            <Input
+              readOnly
+              value={secret.value}
+              className="font-mono text-xs"
+              aria-label="New API key"
+            />
             <Button variant="outline" onClick={copySecret}>
               {copied ? "Copied" : "Copy"}
             </Button>

@@ -315,6 +315,9 @@ describe("POST /api/auth/refresh", () => {
     const response = await refresh(req("refresh", { cookie: "n8nmcp-rt=rt-old" }));
     expect(response.status).toBe(502);
     expect(cookies(response)).toEqual([]);
+    // The browser retries inside Supabase's refresh-token reuse interval.
+    expect(response.headers.get("retry-after")).toBe("2");
+    expect((await response.json()).error.code).toBe("upstream_error");
   });
 
   it("gives up on a hanging Supabase after the deadline and keeps the cookie", async () => {
@@ -326,6 +329,7 @@ describe("POST /api/auth/refresh", () => {
       const response = await pending;
       expect(response.status).toBe(502);
       expect(cookies(response)).toEqual([]);
+      expect(response.headers.get("retry-after")).toBe("2");
     } finally {
       vi.useRealTimers();
     }

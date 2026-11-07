@@ -52,6 +52,33 @@ describe("WorkflowAgentConsole", () => {
     expect(view.host.textContent).toContain("AI reasoning and audit log");
   });
 
+  it("shows API timestamps with their date and an unlimited quota without a cap", async () => {
+    const callAt = "2026-07-06T16:38:02.000Z";
+    const resetAt = "2026-07-07T00:00:00.000Z";
+    const expected = new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "medium",
+    });
+    const view = await render(
+      <WorkflowAgentConsole
+        data={{
+          ...workflowAgentConsoleFixture,
+          quota: { ...workflowAgentConsoleFixture.quota, unlimited: true, limit: 0, resetAt },
+          toolCalls: [{ ...workflowAgentConsoleFixture.toolCalls[0], timestamp: callAt }],
+        }}
+      />,
+    );
+    roots.push(view.root);
+
+    expect(view.host.textContent).toContain(expected.format(new Date(callAt)));
+    expect(view.host.textContent).toContain(`Reset: ${expected.format(new Date(resetAt))}`);
+    expect(view.host.textContent).toContain("738 used · no daily limit");
+    expect(view.host.textContent).not.toContain("738/0");
+    // Fixture-style timestamps that are not ISO stay as they are.
+    expect(view.host.textContent).toContain("16:37:58");
+    expect(view.host.querySelector("main")?.id).toBe("main");
+  });
+
   it("disables rollback and apply while read-only is active", async () => {
     const view = await render(
       <WorkflowAgentConsole data={{ ...workflowAgentConsoleFixture, mode: "read-only" }} />,

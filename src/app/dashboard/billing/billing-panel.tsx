@@ -22,11 +22,17 @@ async function fetchBillingConfig(): Promise<BillingConfigResponse> {
   return billingConfigSchema.parse(await supportFetch<unknown>("/api/billing/config"));
 }
 
+/** "past_due" → "Past due": only the first letter is capitalised, never every word. */
+function sentenceCase(value: string): string {
+  const words = value.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 function statusLabel(config: BillingConfigResponse): string {
   const { status, plan, tier } = config.subscription;
   if (!status || plan === "free") return "No paid subscription";
   if (plan !== tier) return `${TIER_LABELS[plan]} (${status.replace(/_/g, " ")}, not active)`;
-  return status.replace(/_/g, " ");
+  return sentenceCase(status);
 }
 
 function formatDate(value: string | null): string | null {
@@ -188,7 +194,7 @@ export function BillingPanel() {
             </div>
             <div>
               <dt className="text-muted-foreground">Status</dt>
-              <dd className="mt-1 capitalize">{statusLabel(config)}</dd>
+              <dd className="mt-1">{statusLabel(config)}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Daily quota</dt>

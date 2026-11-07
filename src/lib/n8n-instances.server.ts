@@ -14,7 +14,7 @@
 // retried once when the database reports a deadlock or serialization failure.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Json } from "@/integrations/supabase/types";
-import { encryptSecret } from "@/lib/crypto.server";
+import { decryptSecret, encryptSecret } from "@/lib/crypto.server";
 import {
   discoverNativeCapabilities,
   NativeMcpError,
@@ -259,6 +259,65 @@ export async function setNativeMcpToken(
     .single();
   if (updateError || !data) throw new InstanceError("Could not save the MCP token", 500);
   return toSummary(data as Record<string, unknown>);
+}
+
+export type InstanceCheck = {
+  instance: InstanceSummary;
+  /** Why the Public API check failed, or null when the key still works. */
+  error: string | null;
+};
+
+/**
+ * Re-runs the Public API check with the stored key and records the outcome
+ * (`status` ok/error and `last_checked_at`), so "API: ok" reflects a real
+ * check rather than the moment the instance was added. The key never leaves
+ * the server.
+ */
+export async function recheckInstance(
+  userId: string,
+  instanceId: string,
+  deps: InstanceDependencies = {},
+): Promise<InstanceCheck> {
+  const { data: instance, error } = await supabaseAdmin
+    .from("n8n_instances")
+    .select("id,base_url,api_key_encrypted,api_key_iv,api_key_tag")
+    .eq("id", instanceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw new InstanceError("Could not load the instance", 500);
+  if (!instance) throw new InstanceError("Instance not found", 404);
+
+  let apiKey: string;
+  try {
+    apiKey = decryptSecret({
+      ciphertext: instance.api_key_encrypted,
+      iv: instance.api_key_iv,
+      tag: instance.api_key_tag,
+    });
+  } catch {
+    throw new InstanceError(
+      "The stored API key can no longer be read. Remove the instance and add it again.",
+      500,
+    );
+  }
+
+  let failure: string | null = null;
+  try {
+    await checkN8nApiKey(instance.base_url, apiKey, deps.fetchImpl);
+  } catch (checkError) {
+    failure = checkError instanceof InstanceError ? checkError.message : "The check failed";
+  }
+
+  const now = new Date().toISOString();
+  const { data, error: updateError } = await supabaseAdmin
+    .from("n8n_instances")
+    .update({ status: failure ? "error" : "ok", last_checked_at: now, updated_at: now })
+    .eq("id", instanceId)
+    .eq("user_id", userId)
+    .select(SELECT_SUMMARY)
+    .single();
+  if (updateError || !data) throw new InstanceError("Could not record the check", 500);
+  return { instance: toSummary(data as Record<string, unknown>), error: failure };
 }
 
 /**

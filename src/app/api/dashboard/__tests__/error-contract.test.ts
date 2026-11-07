@@ -169,7 +169,7 @@ describe("dashboard API error contract", () => {
       ),
       400,
       "invalid_request",
-      "mcp_token or is_default is required",
+      "mcp_token, is_default or recheck is required",
     );
     await expectError(
       await instance.PATCH(
@@ -205,7 +205,19 @@ describe("dashboard API error contract", () => {
       ),
       400,
       "invalid_request",
-      "Send either mcp_token or is_default, not both",
+      "Send only one of mcp_token, is_default and recheck",
+    );
+    await expectError(
+      await instance.PATCH(
+        req(`/api/dashboard/instances/${KEY_ID}`, {
+          method: "PATCH",
+          body: '{"recheck":false}',
+        }),
+        params(KEY_ID),
+      ),
+      400,
+      "invalid_request",
+      "recheck can only be true",
     );
     expect(mocks.setDefaultInstance).not.toHaveBeenCalled();
     expect(mocks.setNativeMcpToken).not.toHaveBeenCalled();
