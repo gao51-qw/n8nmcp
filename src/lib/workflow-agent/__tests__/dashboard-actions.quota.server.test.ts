@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // Exercises the default (production) dependencies of the dashboard agent
 // actions: checkQuota must reserve atomically and releaseQuota must refund.
 const mcpMocks = vi.hoisted(() => ({
+  assessRollback: vi.fn(),
   checkShortWindowQuota: vi.fn(),
   dispatchTool: vi.fn(),
   effectiveTier: vi.fn(() => "pro"),
@@ -44,6 +45,11 @@ describe("dashboard agent actions: default quota dependencies", () => {
     mcpMocks.reserveDailyQuota.mockResolvedValue({ ok: true, used: 1, limit: 5 });
     mcpMocks.releaseDailyQuota.mockResolvedValue(undefined);
     mcpMocks.getDefaultInstance.mockResolvedValue({ id: "instance-1" });
+    mcpMocks.assessRollback.mockResolvedValue({
+      ok: true,
+      workflowId: "wf-1",
+      concurrency: "unchanged",
+    });
     mcpMocks.dispatchTool.mockResolvedValue({
       output: { success: true },
       upstream: false,

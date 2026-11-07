@@ -29,6 +29,8 @@ const actionSchema = z.discriminatedUnion("action", [
     action: z.literal("rollback"),
     auditLogId: z.string().uuid(),
     reason: z.string().trim().max(500).optional(),
+    // Overwrite newer edits; confirmed with its own token (see dashboard-actions).
+    force: z.boolean().optional(),
     confirmationToken: z.string().min(1).optional(),
   }),
 ]);

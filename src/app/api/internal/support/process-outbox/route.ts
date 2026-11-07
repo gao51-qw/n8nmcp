@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { errorFields } from "@/lib/error-fields.server";
 import { getRequestId, log } from "@/lib/logger.server";
 import {
   processSupportNotificationOutbox,
@@ -40,10 +41,7 @@ export async function POST(request: Request): Promise<Response> {
       headers: { "x-request-id": requestId },
     });
   } catch (error) {
-    log.error("support.outbox.worker.failed", {
-      requestId,
-      errorType: error instanceof Error ? error.name : typeof error,
-    });
+    log.error("support.outbox.worker.failed", { requestId, ...errorFields(error) });
     return Response.json(
       { error: "Support outbox processing failed", requestId },
       { status: 500, headers: { "x-request-id": requestId } },

@@ -1,23 +1,9 @@
 import { z } from "zod";
-import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
+import { emailSchema, passwordSchema, signInPasswordSchema } from "@/lib/auth/schemas";
 
-// Supabase hashes passwords with bcrypt, which ignores bytes past 72.
-export const passwordSchema = z
-  .string()
-  .min(8, "Use at least 8 characters.")
-  .max(72, "Use at most 72 characters.");
+export { emailSchema, passwordSchema, resetPasswordPath } from "@/lib/auth/schemas";
 
-export const emailSchema = z
-  .string()
-  .trim()
-  .min(1, "Enter your email address.")
-  .max(254, "That email address is too long.")
-  .email("Enter a valid email address.");
-
-export const signInSchema = z.object({
-  email: emailSchema,
-  password: z.string().min(1, "Enter your password.").max(72, "Use at most 72 characters."),
-});
+export const signInSchema = z.object({ email: emailSchema, password: signInPasswordSchema });
 
 export const signUpSchema = z
   .object({ email: emailSchema, password: passwordSchema, confirmPassword: z.string() })
@@ -51,12 +37,4 @@ export function authErrorFromLocation(location: Pick<Location, "hash" | "search"
     if (description) return description.replace(/\+/g, " ").slice(0, 300);
   }
   return null;
-}
-
-/** `/reset-password`, carrying a non-default safe destination as `next`. */
-export function resetPasswordPath(destination: string): string {
-  const safe = getSafeLoginDestination(destination);
-  return safe === getSafeLoginDestination(null)
-    ? "/reset-password"
-    : `/reset-password?next=${encodeURIComponent(safe)}`;
 }

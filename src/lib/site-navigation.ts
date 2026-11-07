@@ -7,6 +7,7 @@
 // rewrites, so the same targets are reached through their path prefix on
 // the one origin instead.
 
+import { AUTH_CALLBACK_PATH } from "@/lib/auth/constants";
 import { canonicalUrl, SITE_DOMAINS, siteUrl, type SiteSurface } from "@/lib/site-domains";
 import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
 
@@ -74,14 +75,27 @@ export function forgotPasswordHref(next?: string | null): string {
   return authPageHref("/forgot-password", next);
 }
 
+/** Pages that consume an email-link fragment themselves. */
+const EMAIL_LINK_LANDING_PAGES = new Set([AUTH_CALLBACK_PATH, "/reset-password"]);
+
+/** `/auth/callback?next=<safe path>`: where confirmation links land. */
+export function authCallbackPath(next?: string | null): string {
+  return `${AUTH_CALLBACK_PATH}?next=${encodeURIComponent(getSafeLoginDestination(next))}`;
+}
+
 /**
  * Absolute URL on the dashboard host for Supabase email links
- * (`emailRedirectTo`, `redirectTo`). Unsafe paths collapse to the dashboard.
- * When the page runs on an origin that is not a configured surface (a preview
- * build, or `next dev` on another port) the link returns to that origin.
+ * (`emailRedirectTo`, `redirectTo`). Links land on `/auth/callback` (which
+ * exchanges the fragment for the HttpOnly session cookie and continues to
+ * `path`) unless `path` is already a landing page such as `/reset-password`.
+ * Unsafe paths collapse to the dashboard. When the request comes from an
+ * origin that is not a configured surface (a preview build, or `next dev` on
+ * another port) the link returns to that origin.
  */
 export function authRedirectUrl(path: string, currentOrigin?: string): string {
-  const clean = getSafeLoginDestination(path);
+  const safe = getSafeLoginDestination(path);
+  const pathname = safe.split(/[?#]/, 1)[0];
+  const clean = EMAIL_LINK_LANDING_PAGES.has(pathname) ? safe : authCallbackPath(safe);
   if (currentOrigin) {
     let origin: URL | null = null;
     try {

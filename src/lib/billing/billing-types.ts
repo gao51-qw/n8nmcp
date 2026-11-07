@@ -31,13 +31,15 @@ export const billingConfigSchema = z.object({
     .object({
       email: z.string().nullable(),
       /**
-       * Server-signed checkout binding, passed to Paddle.js as-is. The webhook
-       * binds a new subscription to `user_id` only when `sig` verifies
-       * (HMAC-SHA256 over "v1:<user_id>:<ts>") and `ts` is recent.
+       * Server-signed, single-use checkout binding, passed to Paddle.js as-is.
+       * The webhook binds a new subscription to `user_id` only when `sig`
+       * verifies (HMAC-SHA256 over "v2:<user_id>:<ts>:<nonce>"), `ts` is
+       * recent and `nonce` has not bound another subscription.
        */
       customData: z.object({
         user_id: z.string().uuid(),
         ts: z.number().int().positive(),
+        nonce: z.string().regex(/^[A-Za-z0-9_-]{22}$/),
         sig: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
       }),
     })

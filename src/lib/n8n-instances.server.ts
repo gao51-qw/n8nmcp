@@ -4,6 +4,14 @@
 // checked against the instance before they are stored, encrypted with the app
 // key, and never returned to the browser. All outbound requests go through the
 // SSRF guard, so instances must be publicly reachable.
+//
+// Exactly one instance per user is the default ("Active for MCP"). The database
+// keeps that invariant (see supabase/migrations/20261107110000_*): the first
+// instance becomes the default, deleting the default promotes the next-oldest,
+// and set_default_n8n_instance() is the only way to switch. Rows are deleted
+// only through delete_n8n_instance() (or the cascade of account deletion), so
+// every change takes the per-user lock before any row lock. Both functions are
+// retried once when the database reports a deadlock or serialization failure.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Json } from "@/integrations/supabase/types";
 import { encryptSecret } from "@/lib/crypto.server";
@@ -32,6 +40,8 @@ export type InstanceSummary = {
   status: string;
   last_checked_at: string | null;
   created_at: string;
+  /** The instance MCP tools work with. */
+  is_default: boolean;
   native_mcp: { configured: boolean; tools: string[]; checked_at: string | null };
 };
 
@@ -43,7 +53,7 @@ export type InstanceDependencies = {
 };
 
 const SELECT_SUMMARY =
-  "id,name,base_url,status,last_checked_at,created_at,mcp_token_encrypted,mcp_capabilities,mcp_checked_at";
+  "id,name,base_url,status,last_checked_at,created_at,is_default,mcp_token_encrypted,mcp_capabilities,mcp_checked_at";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -86,6 +96,7 @@ function toSummary(row: Record<string, unknown>): InstanceSummary {
     status: String(row.status ?? "unknown"),
     last_checked_at: (row.last_checked_at as string | null) ?? null,
     created_at: String(row.created_at),
+    is_default: row.is_default === true,
     native_mcp: {
       configured: typeof row.mcp_token_encrypted === "string",
       tools: Array.isArray(capabilities.tools) ? capabilities.tools.map(String) : [],
@@ -250,7 +261,85 @@ export async function setNativeMcpToken(
   return toSummary(data as Record<string, unknown>);
 }
 
+/**
+ * SQLSTATEs of a transaction the database rolled back because it lost a race:
+ * 40P01 deadlock_detected and 40001 serialization_failure. PostgREST returns
+ * the SQLSTATE as `code` of the error body, which supabase-js exposes as
+ * `error.code`.
+ */
+const CONFLICT_SQLSTATES = new Set(["40P01", "40001"]);
+
+function isTransactionConflict(error: unknown): boolean {
+  return isRecord(error) && typeof error.code === "string" && CONFLICT_SQLSTATES.has(error.code);
+}
+
+/** 20–80 ms, so two callers that collided do not collide again in lockstep. */
+function conflictBackoffMs(): number {
+  return 20 + Math.floor(Math.random() * 60);
+}
+
+/**
+ * Runs a single-statement database call and, when the database rolled it back
+ * with a deadlock or serialization failure, runs it once more after a short
+ * jittered pause. The failed attempt changed nothing, so repeating it is safe.
+ */
+async function withConflictRetry<T extends { error: unknown }>(
+  call: () => PromiseLike<T>,
+): Promise<T> {
+  const first = await call();
+  if (!isTransactionConflict(first.error)) return first;
+  await new Promise((resolve) => setTimeout(resolve, conflictBackoffMs()));
+  return call();
+}
+
+/**
+ * Makes the instance the one MCP tools work with. Ownership is checked and the
+ * old default is unset in the same database transaction.
+ */
+export async function setDefaultInstance(
+  userId: string,
+  instanceId: string,
+): Promise<InstanceSummary> {
+  const { data: changed, error } = await withConflictRetry(() =>
+    supabaseAdmin.rpc("set_default_n8n_instance", {
+      _user_id: userId,
+      _instance_id: instanceId,
+    }),
+  );
+  if (error) throw new InstanceError("Could not change the MCP instance", 500);
+  if (changed !== true) throw new InstanceError("Instance not found", 404);
+
+  const { data, error: loadError } = await supabaseAdmin
+    .from("n8n_instances")
+    .select(SELECT_SUMMARY)
+    .eq("id", instanceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (loadError) throw new InstanceError("Could not load the instance", 500);
+  if (!data) throw new InstanceError("Instance not found", 404);
+  return toSummary(data as Record<string, unknown>);
+}
+
+/**
+ * Deletes the instance through delete_n8n_instance(), which checks ownership
+ * and, if it was the default, promotes the next-oldest in the same
+ * transaction. The database rejects plain DELETEs of n8n_instances rows.
+ */
 export async function deleteInstance(userId: string, instanceId: string): Promise<void> {
+  const { data: deleted, error } = await withConflictRetry(() =>
+    supabaseAdmin.rpc("delete_n8n_instance", { _user_id: userId, _instance_id: instanceId }),
+  );
+  if (error?.code === "PGRST202") return deleteInstanceDirectly(userId, instanceId);
+  if (error) throw new InstanceError("Could not delete the instance", 500);
+  if (deleted !== true) throw new InstanceError("Instance not found", 404);
+}
+
+/**
+ * PGRST202: delete_n8n_instance() does not exist yet (app deployed before the
+ * migration). Before the migration a plain DELETE is the only way; after it,
+ * the delete guard rejects this path and the caller gets a 500.
+ */
+async function deleteInstanceDirectly(userId: string, instanceId: string): Promise<void> {
   const { data, error } = await supabaseAdmin
     .from("n8n_instances")
     .delete()

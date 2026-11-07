@@ -1,16 +1,27 @@
-# Opt-in override: run two app replicas behind Caddy (roadmap Phase 6 drill).
+# Opt-in override: run a second app replica behind aaPanel host nginx
+# (roadmap Phase 6).
 #
-#   sudo docker compose -f docker-compose.yml -f docker-compose.replicas.yml up -d
+#   docker compose -f deploy/docker-compose.aapanel.yml \
+#     -f deploy/docker-compose.replicas.yml --env-file deploy/.env up -d --build
 #
-# Before using it, .env.app must contain
-#   MCP_SHORT_WINDOW_LIMITER=supabase
-#   MCP_SHARED_STATE=supabase
-# and migration 20261105120000_mcp_ephemeral_state.sql must be applied.
-# Caddy must load-balance across the replicas: see "Running more than one app
-# replica" in DEPLOY.md for the Caddyfile change.
+# Host nginx cannot discover Compose replicas, so each replica gets its own
+# loopback port: `app` keeps 127.0.0.1:3001 and `app-2` listens on
+# 127.0.0.1:3002. Both run the image that `app` builds.
+#
+# Before using it:
+# - .env.app must contain MCP_SHORT_WINDOW_LIMITER=supabase and
+#   MCP_SHARED_STATE=supabase, and migration
+#   20261105120000_mcp_ephemeral_state.sql must be applied;
+# - the nginx `n8nmcp_app` upstream from "Running more than one app replica" in
+#   DEPLOY.md must be installed, or app-2 receives no traffic.
 services:
-  app:
-    # A fixed container_name prevents scaling; let Compose name the replicas.
-    container_name: !reset null
-    deploy:
-      replicas: 2
+  app-2:
+    extends:
+      file: docker-compose.aapanel.yml
+      service: app
+    build: !reset null
+    image: n8nmcp-app:local
+    pull_policy: never
+    container_name: n8nmcp-app-2
+    ports: !override
+      - "127.0.0.1:3002:3001"

@@ -9,11 +9,10 @@ import { errorText } from "@/components/dashboard/error-text";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
 import { supportFetch } from "@/lib/support/http.client";
 
 export default function AccountPage() {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [confirmEmail, setConfirmEmail] = useState("");
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +30,7 @@ export default function AccountPage() {
         method: "DELETE",
         body: JSON.stringify({ confirm_email: confirmEmail }),
       });
-      await supabase.auth.signOut();
+      await signOut();
       window.location.assign("/");
     } catch (err) {
       setError(errorText(err));
@@ -52,8 +51,9 @@ export default function AccountPage() {
         <h2 className="text-xl font-semibold">Delete account</h2>
         <p className="mt-3 text-sm text-muted-foreground">
           This permanently removes your account, your n8n instances with their stored keys and
-          tokens, your API keys and connected apps. Your n8n workflows themselves are not touched.
-          Cancel any paid subscription first.
+          tokens, your API keys, connected apps, usage history, and your support tickets with their
+          attachments. Your n8n workflows themselves are not touched. Cancel any paid subscription
+          first.
         </p>
         <form className="mt-6 grid gap-3" onSubmit={remove}>
           <Label htmlFor="confirm-email">Type {email || "your email address"} to confirm</Label>

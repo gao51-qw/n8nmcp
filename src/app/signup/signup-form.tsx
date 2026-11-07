@@ -8,8 +8,9 @@ import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
-import { authRedirectUrl, loginHref } from "@/lib/site-navigation";
+import { signupRequest } from "@/lib/auth/auth-api.client";
+import { authStore } from "@/lib/auth/browser-session.client";
+import { loginHref } from "@/lib/site-navigation";
 import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
 import { AuthShell } from "../login/auth-shell";
 import { firstIssue, signUpSchema } from "../login/auth-schemas";
@@ -45,20 +46,22 @@ export function SignupForm() {
     }
 
     setSubmitting(true);
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: parsed.data.email,
-      password: parsed.data.password,
-      options: { emailRedirectTo: authRedirectUrl(destination, window.location.origin) },
-    });
-
-    if (signUpError) {
-      setError(signUpError.message);
+    let result: Awaited<ReturnType<typeof signupRequest>>;
+    try {
+      // The server builds the confirmation link (/auth/callback?next=…) from
+      // this origin and the validated destination.
+      result = await signupRequest(parsed.data.email, parsed.data.password, destination);
+    } catch (signUpError) {
+      setError(
+        signUpError instanceof Error ? signUpError.message : "Could not create the account.",
+      );
       setSubmitting(false);
       return;
     }
 
-    if (data.session) {
+    if (!result.confirmationRequired) {
       // Email confirmation is off for this project: the account is live.
+      authStore().setSession(result.session);
       router.replace(destination);
       router.refresh();
       return;

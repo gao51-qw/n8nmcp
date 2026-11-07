@@ -60,7 +60,7 @@ describe("workflow agent Console action route", () => {
       expect.objectContaining({
         requestId: "request-action-1",
         userAgent: "route-test",
-        // Right-most X-Forwarded-For (added by Caddy); spoofable headers ignored.
+        // Right-most X-Forwarded-For (added by nginx); spoofable headers ignored.
         ip: "203.0.113.7",
       }),
     );
@@ -177,6 +177,84 @@ describe("workflow agent Console action route", () => {
     await expect(response.json()).resolves.toMatchObject({
       error: { code: "invalid_operation_selection", message: "Invalid selection" },
     });
+  });
+
+  it("passes force through on a rollback and returns precheck conflicts as 409", async () => {
+    mocks.execute.mockRejectedValue(
+      new DashboardAgentActionError(
+        409,
+        "rollback_conflict",
+        "The workflow changed since the audited change; rollback was not applied.",
+      ),
+    );
+    const { POST } = await import("../route");
+
+    const response = await POST(
+      new Request("https://example.test/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: { authorization: "Bearer session-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "rollback",
+          auditLogId: "67f354e9-309d-4e1f-b81b-6d3d419aeb52",
+          force: true,
+        }),
+      }),
+    );
+
+    expect(mocks.execute).toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({ action: "rollback", force: true }),
+      expect.anything(),
+    );
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toMatchObject({
+      error: { code: "rollback_conflict" },
+    });
+  });
+
+  it("returns a missing audit row as 404 not_found instead of a generic 500", async () => {
+    mocks.execute.mockRejectedValue(
+      new DashboardAgentActionError(404, "not_found", "Audit log not found"),
+    );
+    const { POST } = await import("../route");
+
+    const response = await POST(
+      new Request("https://example.test/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: { authorization: "Bearer session-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "rollback",
+          auditLogId: "67f354e9-309d-4e1f-b81b-6d3d419aeb52",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "not_found",
+        message: "Audit log not found",
+        requestId: "request-action-1",
+      },
+    });
+  });
+
+  it("rejects a non-boolean force flag", async () => {
+    const { POST } = await import("../route");
+    const response = await POST(
+      new Request("https://example.test/api/dashboard/agent-console/actions", {
+        method: "POST",
+        headers: { authorization: "Bearer session-token", "content-type": "application/json" },
+        body: JSON.stringify({
+          action: "rollback",
+          auditLogId: "67f354e9-309d-4e1f-b81b-6d3d419aeb52",
+          force: "yes",
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(mocks.execute).not.toHaveBeenCalled();
   });
 
   it("rejects malformed action bodies before execution", async () => {

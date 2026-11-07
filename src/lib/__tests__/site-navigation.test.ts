@@ -135,21 +135,27 @@ describe("auth page links", () => {
   it("builds absolute Supabase redirect URLs on the dashboard host", async () => {
     const nav = await loadNavigation(production);
 
+    // The reset page consumes the email-link fragment itself.
     expect(nav.authRedirectUrl("/reset-password")).toBe(
       "https://dashboard.example.test/reset-password",
     );
-    expect(nav.authRedirectUrl("/reset-password", "https://mcp.example.test")).toBe(
-      "https://dashboard.example.test/reset-password",
+    expect(nav.authRedirectUrl("/reset-password?next=%2Fbilling", "https://mcp.example.test")).toBe(
+      "https://dashboard.example.test/reset-password?next=%2Fbilling",
+    );
+    // Every other destination goes through /auth/callback first.
+    expect(nav.authRedirectUrl("/dashboard/billing", "https://mcp.example.test")).toBe(
+      "https://dashboard.example.test/auth/callback?next=%2Fdashboard%2Fbilling",
     );
     expect(nav.authRedirectUrl("//evil.example/x", "https://dashboard.example.test")).toBe(
-      "https://dashboard.example.test/dashboard",
+      "https://dashboard.example.test/auth/callback?next=%2Fdashboard",
     );
     // An unconfigured origin (preview build, another dev port) returns to itself.
     expect(nav.authRedirectUrl("/dashboard", "http://localhost:4000")).toBe(
-      "http://localhost:4000/dashboard",
+      "http://localhost:4000/auth/callback?next=%2Fdashboard",
     );
     expect(nav.authRedirectUrl("/dashboard", "javascript:alert(1)")).toBe(
-      "https://dashboard.example.test/dashboard",
+      "https://dashboard.example.test/auth/callback?next=%2Fdashboard",
     );
+    expect(nav.authCallbackPath("/x?y=1")).toBe("/auth/callback?next=%2Fx%3Fy%3D1");
   });
 });

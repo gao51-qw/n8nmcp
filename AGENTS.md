@@ -7,7 +7,7 @@ This repository has one application: the Root Next.js application.
 - `src/app/` contains pages, route handlers, and the public MCP endpoint.
 - `src/lib/` contains application, MCP, billing, support, audit, and workflow-agent logic.
 - `tools/n8n-knowledge-mcp/` is the only separately built package/runtime.
-- `deploy/` and the root `Dockerfile` define the VPS Docker deployment.
+- `deploy/` and the root `Dockerfile` define the VPS deployment: Docker Compose (`deploy/docker-compose.aapanel.yml`) behind aaPanel host nginx (`deploy/nginx/aapanel/`).
 - `supabase/` contains database configuration, migrations, and database tests.
 
 The retired Express/dashboard workspace architecture must not be recreated.
@@ -67,4 +67,6 @@ Repository code, tests, documentation, and Dashboard changes use Code Agent Mode
 
 ## Deployment
 
-The production authority is the root Next.js standalone image deployed through VPS Docker Compose and Caddy. Do not add active Vercel, Cloudflare Worker, legacy Express, or split-domain deployment instructions without an approved architecture change.
+The production authority is the root Next.js standalone image deployed with Docker Compose (`deploy/docker-compose.aapanel.yml`) behind aaPanel host nginx. nginx terminates TLS for the mcp, docs, blog and dashboard hosts, sends the baseline security headers, and proxies to the app on `127.0.0.1:3001`; the app sets its own Content-Security-Policy, so nginx must not add one. The runbook is `deploy/DEPLOY.md`.
+
+Do not add active Vercel, Cloudflare Worker, legacy Express, Caddy or other in-container reverse proxy, or split-deployment instructions without an approved architecture change.

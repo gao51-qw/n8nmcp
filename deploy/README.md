@@ -1,23 +1,27 @@
 # VPS Deployment
 
 VPS Docker is the production deployment target for this repository. The
-Next.js standalone Docker image is the production app artifact. Cloudflare
-Worker and Vite build targets have been removed from the active architecture.
+Next.js standalone Docker image is the production app artifact, run with Docker
+Compose behind aaPanel host nginx. Cloudflare Worker, Vite and Caddy targets
+have been removed from the active architecture.
 
 For the production sender, SMTP hostname, DNS records, and delivery gates, follow [Dedicated mail domain](./MAIL.md).
 
-This deployment runs the main Next.js app and the internal n8n knowledge MCP
-server behind Caddy. Caddy owns ports 80/443 and provisions TLS certificates
-automatically.
+The step-by-step runbook (install, update, rollback, nginx settings,
+environment, replicas) is [DEPLOY.md](./DEPLOY.md).
 
 ## Architecture
 
 ```txt
 Internet
-  -> Caddy :80/:443
-       -> app container :3001
-            -> internal knowledge MCP container :3000
-  -> Supabase / Paddle
+  -> aaPanel host nginx :80/:443 (TLS, security headers)
+       mcp/docs/blog/dashboard.n8nworkflow.com
+         -> app container n8nmcp-app on 127.0.0.1:3001
+              -> internal knowledge MCP container n8nmcp-knowledge-mcp :3000
+              -> self-hosted Supabase (Docker network n8nmcp-backend)
+       api.n8nworkflow.com
+         -> Supabase Kong on 127.0.0.1:8100 (auth, rest, storage, realtime, functions)
+  -> Paddle
 ```
 
 End users should connect MCP clients to:
@@ -36,98 +40,88 @@ blog.n8nworkflow.com       -> blog and GEO content
 dashboard.n8nworkflow.com  -> user dashboard, noindex
 ```
 
-The upstream knowledge MCP server is not exposed directly; it is only reachable
-from the app container over the Docker network.
+All four hosts are served by the same app container, which routes by the
+`Host` header. The upstream knowledge MCP server is not exposed; it is only
+reachable from the app container over the Docker network.
 
-## VPS Setup
+## Files
 
-Install Docker on Ubuntu 22.04+:
+| Path                                                                    | Purpose                                                                         |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `docker-compose.aapanel.yml`                                            | Production stack (app + knowledge MCP), built from source in `/opt/n8nmcp-app`. |
+| `nginx/aapanel/*.conf`, `nginx/aapanel/n8nmcp-app-proxy.inc`            | aaPanel vhost templates: TLS, redirects, proxy settings and security headers.   |
+| `install-aapanel-nginx.sh`                                              | Installs the vhost templates, validates with `nginx -t`, restores on failure.   |
+| `configure-aapanel-env.sh`                                              | Writes `.env` and `.env.app` with fresh secrets from the Supabase `.env`.       |
+| `update.sh`                                                             | `git pull` + rebuild + restart of the production stack.                         |
+| `docker-compose.replicas.yml`                                           | Opt-in second app replica on `127.0.0.1:3002` (see DEPLOY.md).                  |
+| `install-support-cron-aapanel.sh`, `verify-support-cron-aapanel.sh`     | Support maintenance cron jobs.                                                  |
+| `supabase/`                                                             | Self-hosted Supabase override, migrations and verification scripts.             |
+| `nginx/preview.conf`, `preview/`                                        | Per-PR preview environments ([PREVIEWS.md](./PREVIEWS.md)).                     |
+| `docker-compose.yml`, `deploy.sh`, `rollback.sh`, `update-knowledge.sh` | GHCR prebuilt-image tooling; not the production path (see DEPLOY.md).           |
+| `docker-compose.local.yml`                                              | Source-build variant without the Supabase network, for a standalone host.       |
 
-```bash
-sudo apt update
-sudo apt install -y curl ca-certificates
-curl -fsSL https://get.docker.com | sudo sh
-sudo usermod -aG docker $USER
-newgrp docker
-```
+## VPS setup
 
-Point DNS A records at the VPS public IP:
+Install Docker on the aaPanel host, then point DNS A records at the VPS public
+IP:
 
 ```txt
 mcp.n8nworkflow.com       -> <VPS_IP>
 docs.n8nworkflow.com      -> <VPS_IP>
 blog.n8nworkflow.com      -> <VPS_IP>
 dashboard.n8nworkflow.com -> <VPS_IP>
+api.n8nworkflow.com       -> <VPS_IP>
 ```
 
-Open only SSH, HTTP, and HTTPS:
+Open only SSH, HTTP and HTTPS. The app (3001), Kong (8100) and the Supabase
+pooler are bound to `127.0.0.1` and must stay unreachable from outside.
 
-```bash
-sudo ufw allow OpenSSH
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-sudo ufw --force enable
-```
+## Environment
 
-## Files On The VPS
+Create the env files in `/opt/n8nmcp-app/deploy` with mode 0600, either with
+`configure-aapanel-env.sh` or from `.env.app.example` with `sudoedit`. Enter
+secret values only inside the secure editor; do not pass them as command
+arguments or paste them into shell commands.
 
-Copy these files into `/opt/n8nworkflow`:
-
-```txt
-docker-compose.yml
-Caddyfile
-deploy.sh
-rollback.sh
-.env.example
-.env.app.example
-```
-
-Then create the real env files:
-
-```bash
-cd /opt/n8nworkflow
-sudo install -m 600 -o root -g root .env.example .env
-sudo install -m 600 -o root -g root .env.app.example .env.app
-sudoedit .env
-sudoedit .env.app
-```
-
-Set the following non-secret values in `.env`. Enter secret values only inside
-the secure editor; do not pass them as command arguments or paste them into
-shell commands:
+`.env` (Compose interpolation and build args):
 
 ```ini
-GHCR_OWNER=your-github-user-or-org
-MCP_DOMAIN=mcp.n8nworkflow.com
-DOCS_DOMAIN=docs.n8nworkflow.com
-BLOG_DOMAIN=blog.n8nworkflow.com
-DASHBOARD_DOMAIN=dashboard.n8nworkflow.com
-APP_IMAGE_TAG=latest
-MCP_IMAGE_TAG=latest
+NEXT_PUBLIC_MCP_SITE_URL=https://mcp.n8nworkflow.com
+NEXT_PUBLIC_MCP_ENDPOINT_URL=https://mcp.n8nworkflow.com/mcp
+NEXT_PUBLIC_DOCS_URL=https://docs.n8nworkflow.com
+NEXT_PUBLIC_BLOG_URL=https://blog.n8nworkflow.com
+NEXT_PUBLIC_DASHBOARD_URL=https://dashboard.n8nworkflow.com
+NEXT_PUBLIC_SECURITY_EMAIL=server@n8nworkflow.com
+NEXT_PUBLIC_SUPABASE_URL=https://api.n8nworkflow.com
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable key>
 MCP_AUTH_TOKEN=<generated secret>
 ```
 
-Edit `.env.app` with Supabase, encryption, billing, and upstream MCP settings.
-`UPSTREAM_N8N_MCP_TOKEN` must match `MCP_AUTH_TOKEN`.
+`.env.app` holds Supabase, encryption, billing, logging, support and upstream
+MCP settings; `.env.app.example` lists every key. `UPSTREAM_N8N_MCP_TOKEN` must
+match `MCP_AUTH_TOKEN`. Keys specific to this release:
 
-## Start
+- `BILLING_CUSTOM_DATA_SECRET`: required for checkout; at least 32 characters
+  and different from the Paddle secrets.
+- `CSP_MODE`: `enforce` (default) or `report`. The app sends its own
+  Content-Security-Policy; nginx must not add one.
+- `CSP_REPORT_URI`: optional `report-uri` target.
+- `TRUST_CLOUDFLARE_HEADERS`: leave unset unless Cloudflare is in front of
+  nginx.
 
-Log in to GHCR if your images are private:
+## Start and update
 
 ```bash
-read -rsp "GHCR token: " GHCR_PAT
-printf '\n'
-printf '%s' "$GHCR_PAT" | docker login ghcr.io -u <github-user> --password-stdin
-unset GHCR_PAT
+cd /opt/n8nmcp-app
+sudo docker compose -f deploy/docker-compose.aapanel.yml --env-file deploy/.env up -d --build
+sudo ./deploy/install-aapanel-nginx.sh
 ```
 
-Start the stack:
+Later updates:
 
 ```bash
-cd /opt/n8nworkflow
-sudo docker compose pull
-sudo docker compose up -d
-sudo docker compose ps
+cd /opt/n8nmcp-app
+sudo ./deploy/update.sh
 ```
 
 Health checks:
@@ -140,72 +134,27 @@ curl -I https://blog.n8nworkflow.com/
 curl -I https://dashboard.n8nworkflow.com/
 ```
 
-## Controlled Deploys
-
-Deploy the latest app image:
-
-```bash
-sudo ./deploy.sh app latest
-```
-
-Deploy a specific app image:
-
-```bash
-sudo ./deploy.sh app <commit-sha>
-```
-
-Deploy the knowledge MCP image:
-
-```bash
-sudo ./deploy.sh mcp latest
-```
-
-Deploy everything:
-
-```bash
-sudo ./deploy.sh all
-```
-
-## Rollback
-
-List locally cached app image tags:
-
-```bash
-sudo ./rollback.sh --list
-```
-
-Roll back to the previous cached app image:
-
-```bash
-sudo ./rollback.sh
-```
-
-Roll back to a specific tag:
-
-```bash
-sudo ./rollback.sh <commit-sha>
-```
-
-Follow `latest` again:
-
-```bash
-sudo ./rollback.sh --latest
-```
-
 ## Operations
 
 Logs:
 
 ```bash
-docker compose logs -f --tail=200 caddy app mcp
+cd /opt/n8nmcp-app
+docker compose -f deploy/docker-compose.aapanel.yml --env-file deploy/.env logs -f --tail=200 app mcp
+sudo tail -f /www/wwwlogs/mcp.n8nworkflow.com.error.log
 ```
 
 Restart one service:
 
 ```bash
-docker compose restart app
-docker compose restart mcp
-docker compose restart caddy
+docker compose -f deploy/docker-compose.aapanel.yml --env-file deploy/.env restart app
+docker compose -f deploy/docker-compose.aapanel.yml --env-file deploy/.env restart mcp
+```
+
+Reload nginx after editing a vhost by hand (the installer does this for you):
+
+```bash
+sudo /www/server/nginx/sbin/nginx -t && sudo /www/server/nginx/sbin/nginx -s reload
 ```
 
 Recommended Docker log rotation:
@@ -219,36 +168,11 @@ sudo systemctl restart docker
 
 ## Support Maintenance Cron
 
-Keep the cron bearer secret outside crontab in a root-readable environment
-file:
-
-```bash
-sudo install -d -m 700 /etc/n8nworkflow
-sudo install -m 600 -o root -g root /dev/null /etc/n8nworkflow/support-cron.env
-sudoedit /etc/n8nworkflow/support-cron.env
-```
-
-Inside the editor, add `SUPPORT_CRON_SECRET=<generated secret>`. As a
-non-editor alternative, prompt without echo and write through standard input:
-
-```bash
-read -rsp "Support cron secret: " SUPPORT_CRON_SECRET
-printf '\n'
-printf 'SUPPORT_CRON_SECRET=%s\n' "$SUPPORT_CRON_SECRET" \
-  | sudo tee /etc/n8nworkflow/support-cron.env >/dev/null
-unset SUPPORT_CRON_SECRET
-sudo chmod 600 /etc/n8nworkflow/support-cron.env
-sudo chown root:root /etc/n8nworkflow/support-cron.env
-```
-
-Install these jobs with `sudo crontab -e`. Each command loads the protected
-environment file at runtime, so the secret itself is not written into
-world-readable crontab text:
-
-```cron
-* * * * * /bin/bash -lc 'set -a; source /etc/n8nworkflow/support-cron.env; curl -fsS -X POST -H "Authorization: Bearer $SUPPORT_CRON_SECRET" https://dashboard.n8nworkflow.com/api/internal/support/process-outbox >/dev/null'
-*/5 * * * * /bin/bash -lc 'set -a; source /etc/n8nworkflow/support-cron.env; curl -fsS -X POST -H "Authorization: Bearer $SUPPORT_CRON_SECRET" https://dashboard.n8nworkflow.com/api/internal/support/run-maintenance >/dev/null'
-```
+Install the jobs with `sudo /opt/n8nmcp-app/deploy/install-support-cron-aapanel.sh`.
+It keeps the cron bearer secret outside crontab in the root-readable
+`/etc/n8nworkflow/support-cron.env`, and each job loads that file at runtime,
+so the secret itself is not written into crontab text. See DEPLOY.md for the
+exact entries.
 
 The maintenance endpoint scans first-response SLA state, removes at most 100
 attachments older than 180 days, and then runs a bounded notification outbox
@@ -263,16 +187,21 @@ local image with a temporary bearer token, and checks that authenticated
 Only that smoke-tested local image is tagged and pushed, first as immutable
 `YYYYMMDD-<run-id>` and then as `latest`.
 
+The deploy step targets the GHCR image stack (`docker-compose.yml`, container
+`n8n-knowledge-mcp`) in `DEPLOY_PATH`. It does not update the aaPanel
+production stack, which rebuilds the knowledge MCP from source on
+`update.sh`.
+
 Configure these six repository Actions secrets:
 
-| Secret | Purpose |
-| --- | --- |
-| `VPS_HOST` | VPS hostname or IP address. |
-| `VPS_PORT` | SSH port. |
-| `VPS_USER` | Restricted deployment account. |
-| `VPS_SSH_KEY` | Private Ed25519 key for that account. |
-| `VPS_KNOWN_HOSTS` | Reviewed OpenSSH known-hosts entry for the VPS. |
-| `DEPLOY_PATH` | Absolute directory containing `.env` and `docker-compose.yml`, for example `/opt/n8nworkflow`. |
+| Secret            | Purpose                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------- |
+| `VPS_HOST`        | VPS hostname or IP address.                                                                    |
+| `VPS_PORT`        | SSH port.                                                                                      |
+| `VPS_USER`        | Restricted deployment account.                                                                 |
+| `VPS_SSH_KEY`     | Private Ed25519 key for that account.                                                          |
+| `VPS_KNOWN_HOSTS` | Reviewed OpenSSH known-hosts entry for the VPS.                                                |
+| `DEPLOY_PATH`     | Absolute directory containing `.env` and `docker-compose.yml`, for example `/opt/n8nworkflow`. |
 
 The deployment account needs read/write access to `DEPLOY_PATH`, permission to
 replace `.env`, and permission to run Docker Compose without an interactive

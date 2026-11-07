@@ -32,6 +32,23 @@ describe("workflow-agent Docker contract", () => {
     expect(mcp).not.toMatch(/^ {4}ports:/m);
   });
 
+  it.each(composeFiles)(
+    "publishes only the app, on loopback, for aaPanel host nginx in %s",
+    (relativePath) => {
+      const source = readFileSync(resolve(root, relativePath), "utf8");
+      const app = serviceBlock(source, "app");
+
+      expect(app).toMatch(/ports:\s+- "127\.0\.0\.1:3001:3001"/);
+      // Every published port in the file is bound to loopback.
+      for (const [, mapping] of source.matchAll(/^\s+- "(\d[^"]*:\d+)"\s*$/gm)) {
+        expect(mapping).toMatch(/^127\.0\.0\.1:/);
+      }
+      // nginx on the host is the only public entry point; no proxy container.
+      expect(source).not.toMatch(/^ {2}caddy:/m);
+      expect(source).not.toMatch(/"(?:0\.0\.0\.0:)?(?:80|443):/);
+    },
+  );
+
   it("documents the fixed server-only Knowledge MCP configuration", () => {
     const example = readFileSync(resolve(root, "deploy/.env.app.example"), "utf8");
     expect(example).toContain("UPSTREAM_N8N_MCP_URL=http://mcp:3000/mcp");

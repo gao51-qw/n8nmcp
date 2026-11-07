@@ -43,9 +43,12 @@ describe("architecture guardrails", () => {
   });
 
   it("uses a database-backed MCP short-window limiter that fails closed by default", () => {
-    const source = read("src/lib/mcp.server.ts");
+    // The limiter lives in mcp/quota.server.ts; the mcp.server.ts facade re-exports it.
+    const facade = read("src/lib/mcp.server.ts");
+    const source = read("src/lib/mcp/quota.server.ts");
     const route = read("src/lib/mcp-route.server.ts");
 
+    expect(facade).toContain("checkShortWindowQuota");
     expect(source).toContain("checkShortWindowQuota");
     expect(source).toContain("check_mcp_short_window");
     expect(source).toContain('MCP_SHORT_WINDOW_LIMITER === "memory"');
@@ -57,27 +60,114 @@ describe("architecture guardrails", () => {
   it("separates public outbound protection from the fixed internal MCP transport", () => {
     expect(read("src/lib/ssrf-guard.server.ts")).toContain("safeFetchPublicUrl");
     expect(read("src/lib/ssrf-guard.server.ts")).toContain('redirect: "manual"');
-    expect(read("src/lib/mcp.server.ts")).toContain("safeFetchPublicUrl");
+    // The n8n Public API client used by the MCP tools (mcp/n8n-client.server.ts).
+    expect(read("src/lib/mcp/n8n-client.server.ts")).toContain("safeFetchPublicUrl");
     expect(read("src/lib/mcp-upstream.server.ts")).toContain("createKnowledgeMcpTransport");
     expect(read("src/lib/workflow-agent/knowledge-client.server.ts")).toContain(
       'redirect: "manual"',
     );
   });
 
-  it("declares VPS Docker/Caddy as the production deployment target", () => {
+  it("declares VPS Docker Compose behind aaPanel nginx as the production deployment target", () => {
     const pkg = JSON.parse(read("package.json")) as { scripts?: Record<string, string> };
     const deployReadme = read("deploy/README.md");
     const deployRunbook = read("deploy/DEPLOY.md");
+    const agents = read("AGENTS.md");
     const dockerfile = read("Dockerfile");
 
     expect(pkg.scripts?.build).toBe("next build");
     expect(pkg.scripts?.["build:vps"]).toBeUndefined();
     expect(deployReadme).toContain("VPS Docker is the production deployment target");
-    expect(deployRunbook).toContain("Production authority: VPS Docker Compose with Caddy");
+    expect(deployRunbook).toContain(
+      "Production authority: VPS Docker Compose behind aaPanel host nginx",
+    );
+    expect(agents).toMatch(/deployed with Docker Compose .*behind aaPanel host nginx/);
     expect(dockerfile).toContain("RUN npm run build");
     // Tolerate the `--chown=node:node` flag that drops the runtime to a non-root user.
     expect(dockerfile).toMatch(/COPY --from=build\b.*\/app\/\.next\/standalone \.\//);
     expect(dockerfile).toContain('CMD ["node", "server.js"]');
+  });
+
+  it("has no Caddy deployment path", () => {
+    expect(existsSync(resolve(root, "deploy/Caddyfile"))).toBe(false);
+    for (const path of [
+      "Dockerfile",
+      "deploy/docker-compose.yml",
+      "deploy/docker-compose.aapanel.yml",
+      "deploy/docker-compose.local.yml",
+      "deploy/docker-compose.replicas.yml",
+      "deploy/deploy.sh",
+      "deploy/rollback.sh",
+      "deploy/update.sh",
+      "deploy/update-knowledge.sh",
+    ]) {
+      expect(read(path).toLowerCase(), path).not.toContain("caddy");
+    }
+    // Only the "do not add" rule may still name Caddy.
+    const agents = read("AGENTS.md");
+    expect(agents).not.toMatch(/(?:through|with|behind)[^.\n]*Caddy/);
+  });
+
+  it("sends the baseline security headers from the frontend nginx proxy, but no CSP", () => {
+    const proxy = read("deploy/nginx/aapanel/n8nmcp-app-proxy.inc");
+    for (const header of [
+      'add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;',
+      'add_header X-Content-Type-Options "nosniff" always;',
+      'add_header X-Frame-Options "DENY" always;',
+      'add_header Referrer-Policy "strict-origin-when-cross-origin" always;',
+      'add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;',
+      'add_header Cross-Origin-Opener-Policy "same-origin" always;',
+    ]) {
+      expect(proxy).toContain(header);
+    }
+    // The app owns the nonce-based policy; a second CSP header would intersect with it.
+    for (const file of [
+      "n8nmcp-app-proxy.inc",
+      "mcp.n8nworkflow.com.conf",
+      "docs.n8nworkflow.com.conf",
+      "blog.n8nworkflow.com.conf",
+      "dashboard.n8nworkflow.com.conf",
+      "api.n8nworkflow.com.conf",
+    ]) {
+      expect(read(`deploy/nginx/aapanel/${file}`), file).not.toMatch(
+        /add_header\s+Content-Security-Policy/i,
+      );
+    }
+    // add_header in a location would silently drop the server-level headers there.
+    for (const location of proxy.split(/^location\b/m).slice(1)) {
+      expect(location).not.toContain("add_header");
+      expect(location).not.toContain("proxy_set_header");
+    }
+  });
+
+  it("proxies every frontend host to the loopback app with Host, appended XFF and unbuffered MCP", () => {
+    const proxy = read("deploy/nginx/aapanel/n8nmcp-app-proxy.inc");
+
+    expect(proxy).toContain("client_max_body_size 25m;");
+    expect(proxy).toContain("proxy_set_header Host $host;");
+    expect(proxy).toContain("proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;");
+    expect(proxy).toContain("proxy_set_header X-Forwarded-Proto $scheme;");
+    expect(proxy).not.toMatch(/^\s*real_ip_header/m);
+    expect(proxy).toContain("proxy_pass http://127.0.0.1:3001;");
+
+    const mcp = proxy.match(/location ~ \^\/\(\?:api\/public\/\)\?mcp\$ \{([^}]*)\}/);
+    expect(mcp?.[1]).toContain("proxy_buffering off;");
+    expect(mcp?.[1]).toContain("gzip off;");
+
+    for (const domain of ["mcp", "docs", "blog", "dashboard"]) {
+      expect(read(`deploy/nginx/aapanel/${domain}.n8nworkflow.com.conf`)).toContain(
+        "include /www/server/panel/vhost/nginx/n8nmcp-app-proxy.inc;",
+      );
+    }
+    expect(read("deploy/install-aapanel-nginx.sh")).toContain("n8nmcp-app-proxy.inc");
+  });
+
+  it("adds a second replica on its own loopback port for an nginx upstream", () => {
+    const replicas = read("deploy/docker-compose.replicas.yml");
+
+    expect(replicas).toContain("file: docker-compose.aapanel.yml");
+    expect(replicas).toContain('"127.0.0.1:3002:3001"');
+    expect(read("deploy/DEPLOY.md")).toContain("upstream n8nmcp_app");
   });
 
   it("keeps the aaPanel deployment isolated behind loopback Nginx upstreams", () => {

@@ -42,6 +42,11 @@ function dependencies(
       category: "local" as const,
       needsInstance: false,
     })),
+    assessRollback: vi.fn(async () => ({
+      ok: true as const,
+      workflowId: "wf-1",
+      concurrency: "unchanged" as const,
+    })),
     recordCall: vi.fn(async () => undefined),
     checkQuota: vi.fn(async () => undefined),
     releaseQuota: vi.fn(async () => undefined),
@@ -241,10 +246,194 @@ describe("dashboard workflow agent actions", () => {
     );
   });
 
-  it("never persists a raw exception message from a failed action", async () => {
+  it("reports a rollback precheck conflict before confirmation and refunds it", async () => {
+    const { ROLLBACK_CONFLICT_MESSAGE } = await import("../action-conflict");
+    const deps = dependencies({
+      assessRollback: vi.fn(async () => ({
+        ok: false as const,
+        conflict: "rollback_conflict" as const,
+        message: ROLLBACK_CONFLICT_MESSAGE,
+      })),
+    });
+
+    await expect(
+      executeDashboardAgentAction(
+        "user-1",
+        { action: "rollback", auditLogId: "audit-1", confirmationToken: "mcp_confirm_valid" },
+        { requestId: "request-2" },
+        deps,
+      ),
+    ).rejects.toMatchObject({
+      name: "DashboardAgentActionError",
+      status: 409,
+      code: "rollback_conflict",
+      message: ROLLBACK_CONFLICT_MESSAGE,
+    });
+    expect(deps.assessRollback).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "instance-1" }),
+      "user-1",
+      "audit-1",
+    );
+    // The confirmation token is not consumed and nothing is dispatched or charged.
+    expect(deps.confirmation.requireOrConsume).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.recordCall).not.toHaveBeenCalled();
+    expect(deps.releaseQuota).toHaveBeenCalledExactlyOnceWith("user-1");
+  });
+
+  it("reports an unverifiable rollback as its own 409 code", async () => {
+    const { ROLLBACK_UNVERIFIABLE_MESSAGE } = await import("../action-conflict");
+    const deps = dependencies({
+      assessRollback: vi.fn(async () => ({
+        ok: false as const,
+        conflict: "rollback_unverifiable" as const,
+        message: ROLLBACK_UNVERIFIABLE_MESSAGE,
+      })),
+    });
+
+    await expect(
+      executeDashboardAgentAction(
+        "user-1",
+        { action: "rollback", auditLogId: "audit-1" },
+        { requestId: "request-2" },
+        deps,
+      ),
+    ).rejects.toMatchObject({ status: 409, code: "rollback_unverifiable" });
+    expect(deps.confirmation.requireOrConsume).not.toHaveBeenCalled();
+  });
+
+  it("lets force override a rollback conflict with a force-scoped confirmation", async () => {
+    const { ROLLBACK_CONFLICT_MESSAGE } = await import("../action-conflict");
+    const deps = dependencies({
+      assessRollback: vi.fn(async () => ({
+        ok: false as const,
+        conflict: "rollback_conflict" as const,
+        message: ROLLBACK_CONFLICT_MESSAGE,
+      })),
+    });
+
+    await executeDashboardAgentAction(
+      "user-1",
+      {
+        action: "rollback",
+        auditLogId: "audit-1",
+        force: true,
+        confirmationToken: "mcp_confirm_forced",
+      },
+      { requestId: "request-2" },
+      deps,
+    );
+
+    expect(deps.confirmation.requireOrConsume).toHaveBeenCalledExactlyOnceWith({
+      userId: "user-1",
+      action: "Rollback workflow",
+      scope: { auditLogId: "audit-1", force: true },
+      confirmationToken: "mcp_confirm_forced",
+    });
+    expect(deps.dispatch).toHaveBeenCalledWith(
+      "rollback_workflow",
+      expect.objectContaining({ auditLogId: "audit-1", force: true, confirm: true }),
+      expect.objectContaining({ id: "instance-1" }),
+      expect.objectContaining({ confirmationVerified: true }),
+    );
+  });
+
+  it("scopes a non-forced rollback confirmation without force", async () => {
+    const deps = dependencies();
+
+    await executeDashboardAgentAction(
+      "user-1",
+      { action: "rollback", auditLogId: "audit-1", confirmationToken: "mcp_confirm_valid" },
+      { requestId: "request-2" },
+      deps,
+    );
+
+    expect(deps.confirmation.requireOrConsume).toHaveBeenCalledWith(
+      expect.objectContaining({ scope: { auditLogId: "audit-1" } }),
+    );
+    const [, args] = vi.mocked(deps.dispatch).mock.calls[0];
+    expect(args).not.toHaveProperty("force");
+  });
+
+  it("never lets force override an audit instance mismatch", async () => {
+    const { AUDIT_INSTANCE_MISMATCH_MESSAGE } = await import("../action-conflict");
+    const deps = dependencies({
+      assessRollback: vi.fn(async () => ({
+        ok: false as const,
+        conflict: "instance_mismatch" as const,
+        message: AUDIT_INSTANCE_MISMATCH_MESSAGE,
+      })),
+    });
+
+    await expect(
+      executeDashboardAgentAction(
+        "user-1",
+        {
+          action: "rollback",
+          auditLogId: "audit-1",
+          force: true,
+          confirmationToken: "mcp_confirm_forced",
+        },
+        { requestId: "request-2" },
+        deps,
+      ),
+    ).rejects.toMatchObject({ status: 409, code: "instance_mismatch" });
+    expect(deps.confirmation.requireOrConsume).not.toHaveBeenCalled();
+    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.releaseQuota).toHaveBeenCalledExactlyOnceWith("user-1");
+  });
+
+  it.each([
+    ["not_found", 404, "Audit log not found"],
+    ["already_rolled_back", 409, "This change has already been rolled back"],
+  ] as const)(
+    "maps a %s rollback precheck failure to %i with its fixed message, refunded",
+    async (code, status, message) => {
+      const { AuditRollbackError } = await import("../action-conflict");
+      const deps = dependencies({
+        assessRollback: vi.fn(async () => Promise.reject(new AuditRollbackError(code, message))),
+      });
+
+      await expect(
+        executeDashboardAgentAction(
+          "user-1",
+          { action: "rollback", auditLogId: "audit-1", confirmationToken: "mcp_confirm_valid" },
+          { requestId: "request-2" },
+          deps,
+        ),
+      ).rejects.toMatchObject({ name: "DashboardAgentActionError", status, code, message });
+      expect(deps.confirmation.requireOrConsume).not.toHaveBeenCalled();
+      expect(deps.dispatch).not.toHaveBeenCalled();
+      expect(deps.recordCall).not.toHaveBeenCalled();
+      expect(deps.releaseQuota).toHaveBeenCalledExactlyOnceWith("user-1");
+    },
+  );
+
+  it("leaves an unexpected rollback precheck failure unmapped, and still refunds it", async () => {
+    const deps = dependencies({
+      assessRollback: vi.fn(async () => Promise.reject(new Error("n8n request failed"))),
+    });
+
+    const failure = executeDashboardAgentAction(
+      "user-1",
+      { action: "rollback", auditLogId: "audit-1" },
+      { requestId: "request-2" },
+      deps,
+    );
+    await expect(failure).rejects.toThrow("n8n request failed");
+    await expect(failure).rejects.not.toBeInstanceOf(DashboardAgentActionError);
+    expect(deps.dispatch).not.toHaveBeenCalled();
+    expect(deps.releaseQuota).toHaveBeenCalledExactlyOnceWith("user-1");
+  });
+
+  it("maps an already rolled-back audit row found during dispatch to 409", async () => {
+    const { AuditRollbackError } = await import("../action-conflict");
     const deps = dependencies({
       dispatch: vi.fn(async () => {
-        throw new TypeError("connect ECONNREFUSED 10.0.0.5:5678 Bearer abc.def");
+        throw new AuditRollbackError(
+          "already_rolled_back",
+          "This change has already been rolled back",
+        );
       }),
     });
 
@@ -255,13 +444,111 @@ describe("dashboard workflow agent actions", () => {
         { requestId: "request-2" },
         deps,
       ),
-    ).rejects.toBeInstanceOf(TypeError);
+    ).rejects.toMatchObject({ status: 409, code: "already_rolled_back" });
+    // The tool was dispatched, so the call is charged like other tool conflicts.
+    expect(deps.releaseQuota).not.toHaveBeenCalled();
+  });
+
+  it("maps a stale preview found while applying to a 409 preview_stale", async () => {
+    const { WorkflowActionConflictError, PREVIEW_STALE_MESSAGE } =
+      await import("../action-conflict");
+    const deps = dependencies({
+      dispatch: vi.fn(async () => {
+        throw new WorkflowActionConflictError("preview_stale", PREVIEW_STALE_MESSAGE);
+      }),
+    });
+
+    await expect(
+      executeDashboardAgentAction(
+        "user-1",
+        {
+          action: "apply",
+          previewCallId: "preview-1",
+          selectedOperationIndexes: [0],
+          confirmationToken: "mcp_confirm_valid",
+        },
+        { requestId: "request-2" },
+        deps,
+      ),
+    ).rejects.toMatchObject({
+      name: "DashboardAgentActionError",
+      status: 409,
+      code: "preview_stale",
+      message: PREVIEW_STALE_MESSAGE,
+    });
+    expect(deps.recordCall).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "error", error_message: PREVIEW_STALE_MESSAGE }),
+    );
+  });
+
+  it("never persists a raw exception message from a failed action", async () => {
+    const deps = dependencies({
+      dispatch: vi.fn(async () => {
+        throw new TypeError("connect ECONNREFUSED 10.0.0.5:5678 Bearer abc.def");
+      }),
+    });
+
+    // An n8n transport failure is the user's instance, not a fault: a 502
+    // with fixed guidance, never the raw message (which carries a token).
+    const failure = executeDashboardAgentAction(
+      "user-1",
+      { action: "rollback", auditLogId: "audit-1", confirmationToken: "mcp_confirm_valid" },
+      { requestId: "request-2" },
+      deps,
+    );
+    await expect(failure).rejects.toMatchObject({
+      name: "DashboardAgentActionError",
+      status: 502,
+      code: "n8n_unavailable",
+    });
+    await expect(failure).rejects.not.toThrow(/ECONNREFUSED|Bearer/);
     expect(deps.recordCall).toHaveBeenCalledWith(
       expect.objectContaining({
         status: "error",
         error_message: "Workflow action failed (TypeError)",
       }),
     );
+  });
+
+  it("returns a tool's safe message as a 422 the console can show", async () => {
+    const deps = dependencies({
+      dispatch: vi.fn(async () => {
+        throw new Error("Cannot rollback: no snapshot_before available");
+      }),
+    });
+
+    await expect(
+      executeDashboardAgentAction(
+        "user-1",
+        { action: "rollback", auditLogId: "audit-1", confirmationToken: "mcp_confirm_valid" },
+        { requestId: "request-2" },
+        deps,
+      ),
+    ).rejects.toMatchObject({
+      name: "DashboardAgentActionError",
+      status: 422,
+      code: "tool_rejected",
+      message: "Cannot rollback: no snapshot_before available",
+    });
+    // Dispatched, so it is charged like any tool error.
+    expect(deps.releaseQuota).not.toHaveBeenCalled();
+  });
+
+  it("keeps unexpected tool failures on the generic 500 path", async () => {
+    const deps = dependencies({
+      dispatch: vi.fn(async () => {
+        throw new RangeError("Maximum call stack size exceeded");
+      }),
+    });
+
+    const failure = executeDashboardAgentAction(
+      "user-1",
+      { action: "rollback", auditLogId: "audit-1", confirmationToken: "mcp_confirm_valid" },
+      { requestId: "request-2" },
+      deps,
+    );
+    await expect(failure).rejects.toBeInstanceOf(RangeError);
+    await expect(failure).rejects.not.toBeInstanceOf(DashboardAgentActionError);
   });
 
   it("fails closed on quota denial", async () => {

@@ -8,11 +8,25 @@ import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { loginRequest } from "@/lib/auth/auth-api.client";
+import { authStore } from "@/lib/auth/browser-session.client";
 import { forgotPasswordHref, signupHref } from "@/lib/site-navigation";
 import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
 import { AuthShell } from "./auth-shell";
 import { firstIssue, signInSchema } from "./auth-schemas";
+
+const COOKIE_BLOCKED =
+  "This browser did not keep the session cookie. Allow cookies for this site, then sign in again.";
+
+/**
+ * The proxy sends dashboard visits without the session cookie back here. A
+ * session that exists only in memory (cookies blocked) would bounce between
+ * the two forever, so only navigate on once the HttpOnly cookie is proven to
+ * round-trip: the store refreshes through it once if it has not yet.
+ */
+function sessionCookiePersisted(): Promise<boolean> {
+  return authStore().ensurePersisted();
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -27,10 +41,17 @@ export function LoginForm() {
   const destination = getSafeLoginDestination(next);
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace(destination);
-    }
-  }, [destination, loading, router, user]);
+    if (loading || !user || submitting) return;
+    let cancelled = false;
+    void sessionCookiePersisted().then((persisted) => {
+      if (cancelled) return;
+      if (persisted) router.replace(destination);
+      else setError(COOKIE_BLOCKED);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [destination, loading, router, submitting, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,10 +64,16 @@ export function LoginForm() {
     }
 
     setSubmitting(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword(parsed.data);
+    try {
+      authStore().setSession(await loginRequest(parsed.data.email, parsed.data.password));
+    } catch (signInError) {
+      setError(signInError instanceof Error ? signInError.message : "Could not sign in.");
+      setSubmitting(false);
+      return;
+    }
 
-    if (signInError) {
-      setError(signInError.message);
+    if (!(await sessionCookiePersisted())) {
+      setError(COOKIE_BLOCKED);
       setSubmitting(false);
       return;
     }

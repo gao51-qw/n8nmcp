@@ -4,6 +4,8 @@ const db = vi.hoisted(() => ({
   calls: [] as Array<[string, ...unknown[]]>,
   results: [] as Array<{ data?: unknown; error?: unknown; count?: number }>,
   deleteUser: vi.fn(),
+  storageList: vi.fn(),
+  storageRemove: vi.fn(),
 }));
 
 vi.mock("@/integrations/supabase/client.server", () => {
@@ -33,6 +35,18 @@ vi.mock("@/integrations/supabase/client.server", () => {
     supabaseAdmin: {
       from: (table: string) => builder(table),
       auth: { admin: { deleteUser: db.deleteUser } },
+      storage: {
+        from: (bucket: string) => ({
+          list: (...args: unknown[]) => {
+            db.calls.push([`storage.${bucket}.list`, ...args]);
+            return db.storageList(...args);
+          },
+          remove: (...args: unknown[]) => {
+            db.calls.push([`storage.${bucket}.remove`, ...args]);
+            return db.storageRemove(...args);
+          },
+        }),
+      },
     },
   };
 });
@@ -44,6 +58,8 @@ beforeEach(() => {
   db.calls = [];
   db.results = [];
   db.deleteUser.mockReset().mockResolvedValue({ error: null });
+  db.storageList.mockReset().mockResolvedValue({ data: [], error: null });
+  db.storageRemove.mockReset().mockResolvedValue({ data: [], error: null });
 });
 
 function call(name: string) {
@@ -118,9 +134,51 @@ describe("account deletion", () => {
     });
   });
 
+  it("deletes support tickets explicitly (no cascade from auth.users) and their uploads", async () => {
+    db.storageList.mockImplementation(async (prefix: string) => ({
+      error: null,
+      data:
+        prefix === "user-1"
+          ? [
+              { name: "ticket-a", id: null },
+              { name: "stray.txt", id: "obj-0" },
+            ]
+          : prefix === "user-1/ticket-a"
+            ? [
+                { name: "log.txt", id: "obj-1" },
+                { name: "shot.png", id: "obj-2" },
+              ]
+            : [],
+    }));
+
+    await deleteUserAccount({ userId: "user-1" });
+
+    expect(db.calls).toContainEqual(["support_tickets.delete"]);
+    expect(db.calls).toContainEqual(["support_tickets.eq", "user_id", "user-1"]);
+    expect(db.storageRemove).toHaveBeenCalledExactlyOnceWith([
+      "user-1/ticket-a/log.txt",
+      "user-1/ticket-a/shot.png",
+      "user-1/stray.txt",
+    ]);
+    // Uploads go before the sign-in so a storage failure keeps the account.
+    expect(db.deleteUser).toHaveBeenCalledWith("user-1");
+  });
+
+  it("keeps the sign-in when the uploads cannot be removed", async () => {
+    db.storageList.mockResolvedValue({ data: [{ name: "a.txt", id: "obj-1" }], error: null });
+    db.storageRemove.mockResolvedValue({ data: null, error: { message: "storage down" } });
+
+    await expect(deleteUserAccount({ userId: "user-1" })).rejects.toThrow(/storage down/);
+    expect(db.deleteUser).not.toHaveBeenCalled();
+  });
+
   it("keeps the sign-in when any data step fails", async () => {
     db.results = [{ error: null }, { error: { message: "permission denied" } }];
-    await expect(deleteUserAccount({ userId: "user-1" })).rejects.toThrow(/auth user kept/);
+    const failure = deleteUserAccount({ userId: "user-1" });
+    await expect(failure).rejects.toThrow(/auth user kept/);
+    // The failed step is named so operators can see what was left behind.
+    await expect(failure).rejects.toThrow(/permission denied/);
     expect(db.deleteUser).not.toHaveBeenCalled();
+    expect(db.storageRemove).not.toHaveBeenCalled();
   });
 });

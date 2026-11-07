@@ -1,8 +1,9 @@
 "use client";
 
 // n8n instances: add one (URL + API key, checked against n8n before it is
-// stored encrypted), set or clear the optional instance-level MCP token, and
-// remove an instance. Secrets are never shown again after they are saved.
+// stored encrypted), choose the one MCP tools work with, set or clear the
+// optional instance-level MCP token, and remove an instance. Secrets are never
+// shown again after they are saved.
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CheckCircle2, Loader2, Server } from "lucide-react";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
@@ -19,6 +20,8 @@ type Instance = {
   base_url: string;
   status: string;
   created_at: string;
+  /** The instance MCP tools work with; exactly one per account. */
+  is_default: boolean;
   native_mcp: { configured: boolean; tools: string[]; checked_at: string | null };
 };
 
@@ -85,6 +88,16 @@ function NativeTokenForm({ instance, onSaved }: { instance: Instance; onSaved: (
   );
 }
 
+/** The instance that becomes active for MCP when `removed` is deleted. */
+function successorOf(removed: Instance, instances: Instance[]): Instance | null {
+  return (
+    instances
+      .filter((candidate) => candidate.id !== removed.id)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id))[0] ??
+    null
+  );
+}
+
 export default function InstancesPage() {
   const [instances, setInstances] = useState<Instance[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -92,6 +105,7 @@ export default function InstancesPage() {
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [pendingRemoval, setPendingRemoval] = useState<Instance | null>(null);
+  const [pendingDefault, setPendingDefault] = useState<Instance | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -134,6 +148,22 @@ export default function InstancesPage() {
     }
   }
 
+  async function makeDefault(instance: Instance) {
+    try {
+      await supportFetch(`/api/dashboard/instances/${instance.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ is_default: true }),
+      });
+      await load();
+    } catch (err) {
+      setLoadError(errorText(err));
+    }
+  }
+
+  const activeInstance = instances?.find((candidate) => candidate.is_default) ?? null;
+  const removalSuccessor =
+    pendingRemoval && instances ? successorOf(pendingRemoval, instances) : null;
+
   const update = (field: keyof typeof form) => (event: { target: { value: string } }) =>
     setForm((current) => ({ ...current, [field]: event.target.value }));
 
@@ -145,9 +175,10 @@ export default function InstancesPage() {
       </div>
       <h1 className="mt-3 text-3xl font-bold">Instances</h1>
       <p className="mt-3 text-sm text-muted-foreground">
-        MCP tools work with the instance you added first, marked &quot;Active for MCP&quot;. If you
-        remove it, MCP moves to the next oldest instance. Keys are checked against n8n, stored
-        encrypted and never shown again. The instance must be reachable from the internet.
+        MCP tools work with the instance marked &quot;Active for MCP&quot;: the first one you added,
+        unless you choose another with &quot;Use for MCP&quot;. If you remove it, MCP moves to your
+        oldest remaining instance. Keys are checked against n8n, stored encrypted and never shown
+        again. The instance must be reachable from the internet.
       </p>
 
       {loadError ? (
@@ -164,11 +195,11 @@ export default function InstancesPage() {
       ) : null}
 
       <ul className="mt-8 grid gap-4">
-        {instances?.map((instance, index) => (
+        {instances?.map((instance) => (
           <li
             key={instance.id}
             className={
-              index === 0
+              instance.is_default
                 ? "rounded-lg border border-primary/60 bg-card p-5"
                 : "rounded-lg border border-border bg-card p-5"
             }
@@ -177,7 +208,7 @@ export default function InstancesPage() {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-semibold">{instance.name}</p>
-                  {index === 0 ? (
+                  {instance.is_default ? (
                     <Badge className="gap-1">
                       <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
                       Active for MCP
@@ -194,9 +225,16 @@ export default function InstancesPage() {
                   </Badge>
                 </div>
               </div>
-              <Button variant="outline" onClick={() => setPendingRemoval(instance)}>
-                Remove
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {instance.is_default ? null : (
+                  <Button variant="outline" onClick={() => setPendingDefault(instance)}>
+                    Use for MCP
+                  </Button>
+                )}
+                <Button variant="outline" onClick={() => setPendingRemoval(instance)}>
+                  Remove
+                </Button>
+              </div>
             </div>
             <NativeTokenForm instance={instance} onSaved={() => void load()} />
           </li>
@@ -218,18 +256,50 @@ export default function InstancesPage() {
         description={
           <>
             <p>Its stored API key and MCP token are deleted. Your n8n workflows are not touched.</p>
-            {pendingRemoval && instances?.[0]?.id === pendingRemoval.id ? (
+            {pendingRemoval?.is_default ? (
               <p className="font-medium text-foreground">
-                {instances.length > 1
-                  ? `This instance is active for MCP. MCP tools will move to ${instances[1].name}.`
+                {removalSuccessor
+                  ? `This instance is active for MCP. MCP tools will move to ${removalSuccessor.name}, your oldest remaining instance. Workflow previews and rollbacks recorded on ${pendingRemoval.name} can no longer be applied.`
                   : "This is your only instance. MCP tools that need n8n stop working until you add another one."}
               </p>
+            ) : pendingRemoval && activeInstance ? (
+              <p>MCP tools keep working with {activeInstance.name}.</p>
             ) : null}
           </>
         }
         confirmLabel="Remove instance"
         onConfirm={async () => {
           if (pendingRemoval) await remove(pendingRemoval);
+        }}
+      />
+
+      <ConfirmDialog
+        open={pendingDefault !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDefault(null);
+        }}
+        title={
+          pendingDefault ? `Use ${pendingDefault.name} for MCP?` : "Use this instance for MCP?"
+        }
+        description={
+          <>
+            <p>
+              {activeInstance
+                ? `MCP tools will work with ${pendingDefault?.name ?? "this instance"} instead of ${activeInstance.name}.`
+                : `MCP tools will work with ${pendingDefault?.name ?? "this instance"}.`}
+            </p>
+            {activeInstance ? (
+              <p className="font-medium text-foreground">
+                Pending workflow previews and rollbacks recorded on {activeInstance.name} will be
+                refused afterwards. Apply or roll them back first, or create the preview again on
+                the new instance.
+              </p>
+            ) : null}
+          </>
+        }
+        confirmLabel="Use for MCP"
+        onConfirm={async () => {
+          if (pendingDefault) await makeDefault(pendingDefault);
         }}
       />
 

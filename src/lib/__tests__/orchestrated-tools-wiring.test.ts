@@ -44,9 +44,13 @@ describe("orchestrated tool wiring", () => {
   });
 
   it("wires the production Knowledge client into one orchestrated creation pipeline", () => {
-    const source = readFileSync(new URL("../mcp.server.ts", import.meta.url), "utf8");
-    expect(source).toContain("createKnowledgeClient");
-    expect(source).toContain("new WorkflowCreationPipeline");
-    expect(source).toContain("creationPipeline");
+    // The Knowledge client singleton lives in mcp/services.server.ts; runTool
+    // (mcp/run-tool.server.ts) builds the creation pipeline from it.
+    const services = readFileSync(new URL("../mcp/services.server.ts", import.meta.url), "utf8");
+    const runTool = readFileSync(new URL("../mcp/run-tool.server.ts", import.meta.url), "utf8");
+    expect(services).toContain("createKnowledgeClient");
+    expect(runTool).toContain("deferredProductionKnowledgeClient");
+    expect(runTool).toContain("new WorkflowCreationPipeline");
+    expect(runTool).toContain("creationPipeline");
   });
 });

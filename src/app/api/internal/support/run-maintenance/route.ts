@@ -1,4 +1,5 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { errorFields } from "@/lib/error-fields.server";
 import { getRequestId, log } from "@/lib/logger.server";
 import { cleanupExpiredSupportAttachments, scanSupportSla } from "@/lib/support/maintenance.server";
 import { processSupportNotificationOutbox } from "@/lib/support/notifications.server";
@@ -36,10 +37,7 @@ export async function POST(request: Request): Promise<Response> {
       { headers: { "x-request-id": requestId } },
     );
   } catch (error) {
-    log.error("support.maintenance.failed", {
-      requestId,
-      errorType: error instanceof Error ? error.name : typeof error,
-    });
+    log.error("support.maintenance.failed", { requestId, ...errorFields(error) });
     return Response.json(
       { error: "Support maintenance failed", requestId },
       { status: 500, headers: { "x-request-id": requestId } },

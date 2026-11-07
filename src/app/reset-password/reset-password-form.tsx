@@ -8,7 +8,8 @@ import { useAuth } from "@/components/auth-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import { updatePasswordRequest } from "@/lib/auth/auth-api.client";
+import { getAccessToken, getEmailLinkStatus } from "@/lib/auth/browser-session.client";
 import { forgotPasswordHref } from "@/lib/site-navigation";
 import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
 import { AuthShell } from "../login/auth-shell";
@@ -16,9 +17,11 @@ import { authErrorFromLocation, firstIssue, resetPasswordSchema } from "../login
 
 /**
  * The recovery email links here with `#access_token=...&type=recovery`. The
- * Supabase client consumes that fragment while it initialises
- * (`detectSessionInUrl`), so by the time `useAuth()` stops loading the
- * recovery session is either present or the link was invalid/expired.
+ * auth bootstrap strips that fragment from the address bar and exchanges it
+ * for the HttpOnly session cookie (/api/auth/exchange), so by the time
+ * `useAuth()` stops loading the recovery session is either present or the
+ * link was invalid/expired. The new password is sent with the in-memory
+ * access token to /api/auth/password.
  */
 export function ResetPasswordForm() {
   const router = useRouter();
@@ -34,8 +37,14 @@ export function ResetPasswordForm() {
   const destination = getSafeLoginDestination(next);
 
   useEffect(() => {
-    setLinkError(authErrorFromLocation(window.location));
-  }, []);
+    if (loading) return;
+    setLinkError(
+      authErrorFromLocation(window.location) ??
+        (getEmailLinkStatus() === "failed"
+          ? "This password reset link is invalid, expired or was already used."
+          : null),
+    );
+  }, [loading]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -48,12 +57,14 @@ export function ResetPasswordForm() {
     }
 
     setSubmitting(true);
-    const { error: updateError } = await supabase.auth.updateUser({
-      password: parsed.data.password,
-    });
-
-    if (updateError) {
-      setError(updateError.message);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Your reset session has ended. Request a new link.");
+      await updatePasswordRequest(token, parsed.data.password);
+    } catch (updateError) {
+      setError(
+        updateError instanceof Error ? updateError.message : "Could not save the new password.",
+      );
       setSubmitting(false);
       return;
     }
@@ -72,7 +83,7 @@ export function ResetPasswordForm() {
     );
   }
 
-  if (!session) {
+  if (!session || linkError) {
     return (
       <AuthShell
         title="Reset link not valid"

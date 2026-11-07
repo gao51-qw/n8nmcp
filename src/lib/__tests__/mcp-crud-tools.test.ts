@@ -174,7 +174,9 @@ describe("Workflow CRUD Tools", () => {
       });
 
       expect(result).toEqual(mockResponse);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // GET, PUT, then exactly one post-write verification GET.
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(getFetchInit(2).method).toBeUndefined();
       expect(String(mockFetch.mock.calls[0][0])).toContain("/workflows/workflow-123");
       expect(getFetchInit(0).method).toBeUndefined();
       expect(String(mockFetch.mock.calls[1][0])).toContain("/workflows/workflow-123");
@@ -748,9 +750,11 @@ describe("Workflow CRUD Tools", () => {
           },
         },
       });
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // GET, PUT, then exactly one post-write verification GET.
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       expect(String(mockFetch.mock.calls[1][0])).toContain("/workflows/workflow-large");
       expect(getFetchInit(1).method).toBe("PUT");
+      expect(getFetchInit(2).method).toBeUndefined();
 
       const patchBody = JSON.parse(getFetchInit(1).body);
       expect(patchBody.nodes).toHaveLength(3);
@@ -1161,9 +1165,11 @@ describe("Workflow CRUD Tools", () => {
         },
         rollback_workflow: { rolledBack: true },
       });
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      // GET, PUT, rollback PUT, then one verification GET of the final write.
+      expect(mockFetch).toHaveBeenCalledTimes(4);
       expect(getFetchInit(1).method).toBe("PUT");
       expect(getFetchInit(2).method).toBe("PUT");
+      expect(getFetchInit(3).method).toBeUndefined();
 
       const rollbackBody = JSON.parse(getFetchInit(2).body);
       expect(

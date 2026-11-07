@@ -7,11 +7,11 @@ import { Loader2, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
-import { authRedirectUrl, loginHref } from "@/lib/site-navigation";
+import { recoverRequest } from "@/lib/auth/auth-api.client";
+import { loginHref } from "@/lib/site-navigation";
 import { getSafeLoginDestination } from "@/lib/support/auth/login-redirect";
 import { AuthShell } from "../login/auth-shell";
-import { firstIssue, forgotPasswordSchema, resetPasswordPath } from "../login/auth-schemas";
+import { firstIssue, forgotPasswordSchema } from "../login/auth-schemas";
 
 export function ForgotPasswordForm() {
   const searchParams = useSearchParams();
@@ -34,15 +34,15 @@ export function ForgotPasswordForm() {
     }
 
     setSubmitting(true);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(parsed.data.email, {
-      redirectTo: authRedirectUrl(resetPasswordPath(destination), window.location.origin),
-    });
-    setSubmitting(false);
-
-    if (resetError) {
-      setError(resetError.message);
+    try {
+      // The server links the email to /reset-password on this origin.
+      await recoverRequest(parsed.data.email, destination);
+    } catch (resetError) {
+      setError(resetError instanceof Error ? resetError.message : "Could not send the link.");
+      setSubmitting(false);
       return;
     }
+    setSubmitting(false);
     setSentTo(parsed.data.email);
   }
 

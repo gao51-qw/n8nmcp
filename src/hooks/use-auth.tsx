@@ -1,9 +1,15 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { clearAuthSessionCookies, supabase } from "@/integrations/supabase/client";
+"use client";
+
+import { createContext, useContext, useEffect, useSyncExternalStore, type ReactNode } from "react";
+import type { User } from "@supabase/supabase-js";
+import { authStore, signOut as endSession } from "@/lib/auth/browser-session.client";
+import type { AuthSession, AuthSnapshot } from "@/lib/auth/token-store";
+
+export type { AuthSession } from "@/lib/auth/token-store";
 
 type AuthState = {
-  session: Session | null;
+  /** The in-memory session (access token, expiry, user). Never holds a refresh token. */
+  session: AuthSession | null;
   user: User | null;
   loading: boolean;
   signOut: () => Promise<void>;
@@ -11,43 +17,25 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+const SERVER_SNAPSHOT: AuthSnapshot = { session: null, loading: true, persisted: false };
+
+const subscribe = (listener: () => void) => authStore().subscribe(listener);
+const getSnapshot = () => authStore().getSnapshot();
+const getServerSnapshot = () => SERVER_SNAPSHOT;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { session, loading } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   useEffect(() => {
-    // Set up the listener before reading the initial session to avoid missing auth changes.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setSession(s);
-      setLoading(false);
-    });
-
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-
-    return () => sub.subscription.unsubscribe();
+    // Exchanges an email-link fragment or a legacy session if present, then
+    // restores the session from the HttpOnly refresh cookie.
+    void authStore().start();
   }, []);
 
-  const signOut = async () => {
-    // A global sign-out revokes the refresh token server-side. If that call
-    // fails (offline, already revoked) fall back to a local sign-out, then
-    // clear the shared parent-domain cookies explicitly either way so no
-    // subdomain keeps the session.
-    try {
-      const { error } = await supabase.auth.signOut();
-      if (error) await supabase.auth.signOut({ scope: "local" });
-    } catch {
-      await supabase.auth.signOut({ scope: "local" }).catch(() => undefined);
-    } finally {
-      clearAuthSessionCookies();
-      setSession(null);
-    }
-  };
-
   return (
-    <AuthContext.Provider value={{ session, user: session?.user ?? null, loading, signOut }}>
+    <AuthContext.Provider
+      value={{ session, user: session?.user ?? null, loading, signOut: endSession }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -3,6 +3,7 @@ import {
   classifyRequest,
   decodeMcpHeaderValue,
   discoverResult,
+  elicitationCapabilityAllowsForm,
   HEADER_MISMATCH,
   looksModern,
   META_SERVER_INFO,
@@ -169,6 +170,22 @@ describe("helpers", () => {
     expect(supportsFormElicitation({ elicitation: {} })).toBe(true);
     expect(supportsFormElicitation({ elicitation: { form: {} } })).toBe(true);
     expect(supportsFormElicitation({ elicitation: { url: {} } })).toBe(false);
+    expect(supportsFormElicitation({ elicitation: { form: {}, url: {} } })).toBe(true);
+  });
+
+  it("applies the same elicitation rules to any capability value", () => {
+    // Objects declare support; {} and objects naming no known mode mean form.
+    expect(elicitationCapabilityAllowsForm({})).toBe(true);
+    expect(elicitationCapabilityAllowsForm({ form: {} })).toBe(true);
+    expect(elicitationCapabilityAllowsForm({ form: {}, url: {} })).toBe(true);
+    expect(elicitationCapabilityAllowsForm({ future: {} })).toBe(true);
+    expect(elicitationCapabilityAllowsForm({ url: {} })).toBe(false);
+    // Older non-spec clients send a boolean.
+    expect(elicitationCapabilityAllowsForm(true)).toBe(true);
+    expect(elicitationCapabilityAllowsForm(false)).toBe(false);
+    for (const value of [undefined, null, [], "true", 1]) {
+      expect(elicitationCapabilityAllowsForm(value)).toBe(false);
+    }
   });
 
   it("adds resultType and serverInfo without dropping existing fields", () => {

@@ -247,13 +247,21 @@ describe("rollback audit lifecycle", () => {
   it("rejects when the row is missing or owned by another user", async () => {
     withRow(null);
     const { getRollbackSnapshotForUser } = await mod();
-    await expect(getRollbackSnapshotForUser("user-1", "missing")).rejects.toThrow();
+    await expect(getRollbackSnapshotForUser("user-1", "missing")).rejects.toMatchObject({
+      name: "AuditRollbackError",
+      code: "not_found",
+      message: "Audit log not found",
+    });
   });
 
   it("rejects an already-rolled-back row", async () => {
     withRow({ id: "a1", user_id: "user-1", is_rolled_back: true, snapshot_before: { name: "x" } });
     const { getRollbackSnapshotForUser } = await mod();
-    await expect(getRollbackSnapshotForUser("user-1", "a1")).rejects.toThrow(/already/i);
+    await expect(getRollbackSnapshotForUser("user-1", "a1")).rejects.toMatchObject({
+      name: "AuditRollbackError",
+      code: "already_rolled_back",
+      message: "This change has already been rolled back",
+    });
   });
 
   it("rejects when there is no snapshot_before to restore", async () => {

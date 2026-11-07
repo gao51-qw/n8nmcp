@@ -1,21 +1,24 @@
 // Client IP for logging, audit and rate-limit keys.
 //
-// Trust rule: production traffic reaches the app only through Caddy (or the
-// aaPanel nginx proxy), and nothing sits in front of them. Caddy v2 without
-// `trusted_proxies` discards a client-supplied `X-Forwarded-For` and sets it to
-// the peer address; nginx `$proxy_add_x_forwarded_for` appends the peer address
-// to whatever the client sent. In both cases the right-most entry is the
-// address the proxy itself observed, so that is the only one trusted.
+// Trust rule: production traffic reaches the app only through aaPanel host
+// nginx (deploy/nginx/aapanel/n8nmcp-app-proxy.inc), the app listens on
+// 127.0.0.1 only, and nothing sits in front of nginx. nginx sets
+// `X-Forwarded-For $proxy_add_x_forwarded_for`, which appends the peer address
+// to whatever the client sent, so the right-most entry is the address nginx
+// itself observed and is the only one trusted.
 //
 // `cf-connecting-ip`, `x-real-ip`, `true-client-ip` and the left-most
 // `X-Forwarded-For` entries are client-controlled here and are ignored.
 // `cf-connecting-ip` is honoured only when TRUST_CLOUDFLARE_HEADERS=true, which
-// must be set only when Cloudflare is actually in front of the proxy (and the
+// must be set only when Cloudflare is actually in front of nginx (and the
 // origin accepts traffic from Cloudflare only).
 //
-// If another proxy layer is ever added in front of Caddy and listed in
-// `trusted_proxies`, the right-most entry becomes that proxy's address; switch
-// to Caddy's `client_ip_headers` and revisit this rule.
+// If another proxy layer is ever added in front of nginx, the right-most entry
+// becomes that proxy's address. Either enable TRUST_CLOUDFLARE_HEADERS (for
+// Cloudflare) or configure nginx `set_real_ip_from` for exactly that layer's
+// ranges, and revisit this rule. Never enable `real_ip_header` without a
+// matching `set_real_ip_from` list: it would make $remote_addr, and therefore
+// the right-most entry, client-controlled.
 
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
 const IPV6 =

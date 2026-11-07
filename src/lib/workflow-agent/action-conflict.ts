@@ -4,7 +4,11 @@
 // show and persist it; the code lets the dashboard map it to an HTTP status.
 
 export type WorkflowActionConflictCode =
-  "instance_mismatch" | "rollback_conflict" | "rollback_unverifiable" | "already_rolled_back";
+  | "instance_mismatch"
+  | "rollback_conflict"
+  | "rollback_unverifiable"
+  | "already_rolled_back"
+  | "preview_stale";
 
 export class WorkflowActionConflictError extends Error {
   constructor(
@@ -30,6 +34,39 @@ export const ROLLBACK_UNVERIFIABLE_MESSAGE =
 
 export const ALREADY_ROLLED_BACK_MESSAGE =
   "This change has already been rolled back; rollback was not applied.";
+
+/** The workflow changed in n8n after the preview update_partial_workflow applies. */
+export const PREVIEW_STALE_MESSAGE =
+  "Workflow preview is stale; preview the workflow again before applying updates.";
+
+/**
+ * A workflow write succeeded, but the post-write check found evidence of
+ * another save in n8n around it (see mcp/write-verification.server.ts). Not an
+ * error: returned in the tool output and shown in the dashboard.
+ */
+export const CONCURRENT_WRITE_DETECTED_MESSAGE =
+  "Another edit to this workflow was saved in n8n around this change, so one of the edits may have been overwritten. Review the workflow in n8n before relying on it.";
+
+// Rollback precheck failures raised while loading the audit row (see
+// getRollbackSnapshotForUser in audit.server.ts). They are not conflicts with
+// the workflow state, so they stay distinct from WorkflowActionConflictError:
+// the MCP gateway keeps treating them as ordinary tool errors, while the
+// dashboard maps the code to an HTTP status.
+
+export type AuditRollbackErrorCode = "not_found" | "already_rolled_back";
+
+export const AUDIT_LOG_NOT_FOUND_MESSAGE = "Audit log not found";
+export const AUDIT_ALREADY_ROLLED_BACK_MESSAGE = "This change has already been rolled back";
+
+export class AuditRollbackError extends Error {
+  constructor(
+    public readonly code: AuditRollbackErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AuditRollbackError";
+  }
+}
 
 /**
  * Fail closed unless the recorded instance is exactly the instance the action

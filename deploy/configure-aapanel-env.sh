@@ -17,6 +17,7 @@ test -n "$service_role_key"
 mcp_auth_token="$(openssl rand -hex 32)"
 app_encryption_key="$(openssl rand -base64 32)"
 billing_cron_secret="$(openssl rand -hex 32)"
+billing_custom_data_secret="$(openssl rand -hex 32)"
 support_cron_secret="$(openssl rand -hex 32)"
 
 umask 077
@@ -57,6 +58,7 @@ PADDLE_CLIENT_TOKEN=
 PADDLE_WEBHOOK_SECRET=
 PADDLE_PRICE_PRO=
 PADDLE_PRICE_ENTERPRISE=
+BILLING_CUSTOM_DATA_SECRET=${billing_custom_data_secret}
 BILLING_CRON_SECRET=${billing_cron_secret}
 
 UPSTREAM_N8N_MCP_URL=http://mcp:3000/mcp
@@ -65,6 +67,11 @@ ENABLE_MULTI_TENANT=true
 
 RATE_LIMITER=supabase
 MCP_SHORT_WINDOW_LIMITER=supabase
+MCP_SHARED_STATE=supabase
+
+# Content-Security-Policy set by the app (nginx adds no CSP).
+CSP_MODE=enforce
+CSP_REPORT_URI=
 
 LOG_LEVEL=info
 LOG_FORMAT=json
@@ -89,3 +96,4 @@ echo "APP_ENV_MODE=0600"
 echo "SUPABASE_KEYS=SET"
 echo "APP_ENCRYPTION_KEY=SET"
 echo "MCP_AUTH_TOKEN=SET"
+echo "BILLING_CUSTOM_DATA_SECRET=SET"

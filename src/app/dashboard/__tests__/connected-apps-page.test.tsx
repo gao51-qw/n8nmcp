@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/support/http.client", () => ({ supportFetch: mocks.supportFetch }));
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { auth: { oauth: { revokeGrant: mocks.revokeGrant } } },
+vi.mock("@/lib/auth/oauth-server.client", () => ({
+  revokeOAuthGrant: (clientId: string) => mocks.revokeGrant({ clientId }),
 }));
 
 import ConnectedAppsPage from "../connected-apps/page";

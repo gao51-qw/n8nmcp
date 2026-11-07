@@ -4,6 +4,8 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CONCURRENT_WRITE_DETECTED_MESSAGE } from "@/lib/workflow-agent/action-conflict";
+
 const USER_ID = "10000000-0000-4000-8000-000000000001";
 
 const mocks = vi.hoisted(() => ({
@@ -22,10 +24,24 @@ vi.mock("@/components/auth-provider", () => ({
   }),
 }));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: {
-    auth: { getSession: mocks.getSession, refreshSession: mocks.refreshSession },
+// The access token lives in the in-memory auth store; these adapters keep the
+// getSession/refreshSession-shaped fixtures below.
+vi.mock("@/lib/auth/browser-session.client", () => ({
+  getAccessToken: async () => {
+    const result = (await mocks.getSession()) as {
+      data: { session: { access_token: string } | null };
+    };
+    return result?.data.session?.access_token ?? null;
   },
+  authStore: () => ({
+    refresh: async () => {
+      const result = (await mocks.refreshSession()) as {
+        data: { session: { access_token: string } | null };
+        error: unknown;
+      };
+      return result?.error ? null : (result?.data.session ?? null);
+    },
+  }),
 }));
 
 vi.mock("@/lib/workflow-agent/realtime.client", () => ({
@@ -46,6 +62,7 @@ vi.mock("@/components/workflow-agent/agent-console", () => ({
       previewCallId: string;
       selectedOperationIndexes: number[];
     }) => Promise<void>;
+    onRollback?: (input: { auditLogId: string; reason: string }) => Promise<void>;
   }) => (
     <div>
       <p data-testid="console">console ready</p>
@@ -61,6 +78,14 @@ vi.mock("@/components/workflow-agent/agent-console", () => ({
         }
       >
         apply
+      </button>
+      <button
+        type="button"
+        onClick={() =>
+          void props.onRollback?.({ auditLogId: "audit-1", reason: "undo" }).catch(() => undefined)
+        }
+      >
+        rollback
       </button>
     </div>
   ),
@@ -246,6 +271,146 @@ describe("agent console client", () => {
     ]);
     expect(document.querySelector('[data-testid="action-state"]')?.textContent).toContain(
       "success",
+    );
+  });
+
+  it("warns after a completed action the gateway flagged as racing another n8n edit", async () => {
+    mocks.getSession.mockResolvedValue(session("token-1"));
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(consoleData))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          action: "apply",
+          output: {
+            success: true,
+            concurrent_write_detected: true,
+            concurrent_write_message: "server text is not shown",
+          },
+        }),
+      )
+      .mockResolvedValue(jsonResponse(consoleData));
+
+    await render();
+    await act(async () => button("apply").click());
+    await settle();
+
+    const state = document.querySelector('[data-testid="action-state"]')?.textContent ?? "";
+    expect(state).toContain("success");
+    expect(state).toContain(CONCURRENT_WRITE_DETECTED_MESSAGE);
+    expect(state).not.toContain("server text is not shown");
+  });
+
+  it("offers a forced overwrite on a rollback conflict, then confirms it", async () => {
+    mocks.getSession.mockResolvedValue(session("token-1"));
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(consoleData))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: {
+              code: "rollback_conflict",
+              message: "The workflow changed since the audited change; rollback was not applied.",
+            },
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse(
+          {
+            error: { code: "confirmation_required", message: "Confirmation required" },
+            confirmation: { token: "mcp_confirm_forced", summary: "Rollback workflow" },
+          },
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(jsonResponse({ action: "rollback", output: { success: true } }))
+      .mockResolvedValue(jsonResponse(consoleData));
+
+    await render();
+    await act(async () => button("rollback").click());
+    await settle();
+
+    expect(document.body.textContent).toContain(
+      "This workflow changed after the audited change. Rolling back will overwrite those newer edits.",
+    );
+    // No confirmation was issued for the conflicting request.
+    expect(() => button("Confirm")).toThrow();
+
+    await act(async () => button("Overwrite anyway").click());
+    await settle();
+
+    const [, forcedInit] = fetchMock.mock.calls[2] as [string, RequestInit];
+    expect(JSON.parse(String(forcedInit.body))).toEqual({
+      action: "rollback",
+      auditLogId: "audit-1",
+      reason: "undo",
+      force: true,
+    });
+    expect(document.body.textContent).toContain(
+      "Newer edits to this workflow will be overwritten.",
+    );
+
+    await act(async () => button("Confirm").click());
+    await settle();
+
+    const [, confirmInit] = fetchMock.mock.calls[3] as [string, RequestInit];
+    expect(JSON.parse(String(confirmInit.body))).toMatchObject({
+      action: "rollback",
+      auditLogId: "audit-1",
+      force: true,
+      confirmationToken: "mcp_confirm_forced",
+    });
+    expect(document.querySelector('[data-testid="action-state"]')?.textContent).toContain(
+      "success",
+    );
+  });
+
+  it("explains an unverifiable rollback before offering the overwrite", async () => {
+    mocks.getSession.mockResolvedValue(session("token-1"));
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(consoleData))
+      .mockResolvedValueOnce(
+        jsonResponse(
+          { error: { code: "rollback_unverifiable", message: "Cannot rule out newer edits." } },
+          409,
+        ),
+      );
+
+    await render();
+    await act(async () => button("rollback").click());
+    await settle();
+
+    expect(document.body.textContent).toContain("the audit entry cannot rule out newer edits");
+    expect(button("Overwrite anyway")).toBeDefined();
+    await act(async () => button("Cancel").click());
+    await settle();
+    expect(document.querySelector('[data-testid="action-state"]')?.textContent).toBe("idle:");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an instance mismatch as an error with no overwrite option", async () => {
+    mocks.getSession.mockResolvedValue(session("token-1"));
+    fetchMock.mockResolvedValueOnce(jsonResponse(consoleData)).mockResolvedValueOnce(
+      jsonResponse(
+        {
+          error: {
+            code: "instance_mismatch",
+            message:
+              "The n8n instance changed since this audit entry was recorded; rollback was not applied.",
+          },
+        },
+        409,
+      ),
+    );
+
+    await render();
+    await act(async () => button("rollback").click());
+    await settle();
+
+    expect(() => button("Overwrite anyway")).toThrow();
+    expect(document.querySelector('[data-testid="action-state"]')?.textContent).toBe(
+      "error:The n8n instance changed since this audit entry was recorded; rollback was not applied.",
     );
   });
 

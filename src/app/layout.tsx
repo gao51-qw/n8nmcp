@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Script from "next/script";
+import { headers } from "next/headers";
 import { Bricolage_Grotesque, Hanken_Grotesk, JetBrains_Mono } from "next/font/google";
 import { AuthProvider } from "@/components/auth-provider";
 import { siteUrl } from "@/lib/site-domains";
@@ -25,6 +25,9 @@ const jetbrains = JetBrains_Mono({
 });
 
 const mcpSiteUrl = siteUrl("mcp");
+
+/** Applies the saved theme before first paint (the server renders "dark"). */
+const THEME_SCRIPT = `try{var t=localStorage.getItem('n8n-mcp-theme')||'dark';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}`;
 
 export const metadata: Metadata = {
   metadataBase: new URL(mcpSiteUrl),
@@ -65,13 +68,33 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Set per request by src/proxy.ts alongside the Content-Security-Policy.
+  // Reading request headers makes every page render dynamically, which a
+  // nonce requires: a prerendered page would carry no (or a stale) nonce.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
   return (
     <html
       lang="en"
       className={`dark ${bricolage.variable} ${hanken.variable} ${jetbrains.variable}`}
       suppressHydrationWarning
     >
+      <head>
+        {/*
+          A plain parser-blocking script, not next/script: beforeInteractive
+          only queues inline code for the Next.js runtime, which runs after
+          first paint. Browsers hide the nonce attribute from the DOM after
+          parsing, so hydration would report a nonce mismatch without
+          suppressHydrationWarning.
+        */}
+        <script
+          id="theme-before-paint"
+          nonce={nonce}
+          suppressHydrationWarning
+          dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }}
+        />
+      </head>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
         <a
           href="#main"
@@ -80,9 +103,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to main content
         </a>
         <AuthProvider>{children}</AuthProvider>
-        <Script id="theme-before-paint" strategy="beforeInteractive">
-          {`try{var t=localStorage.getItem('n8n-mcp-theme')||'dark';var d=t==='dark'||(t==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches);document.documentElement.classList.toggle('dark',d);}catch(e){}`}
-        </Script>
       </body>
     </html>
   );

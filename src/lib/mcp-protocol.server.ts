@@ -225,13 +225,29 @@ export function decodeMcpHeaderValue(value: string): string | null {
   return PLAIN_HEADER_VALUE.test(value) ? value : null;
 }
 
+const ELICITATION_MODES = new Set(["form", "url"]);
+
+/**
+ * Whether a client's `elicitation` capability value allows form-mode
+ * elicitation, the only mode this server issues. Per the MCP spec the
+ * capability is an object: 2025-06-18 declares it as `elicitation: {}` (form
+ * only), and later revisions list modes (`{ form: {} }`, `{ url: {} }`), where
+ * an object naming no known mode still means form for backwards
+ * compatibility. A URL-only client cannot render a form, so it is reported as
+ * unsupported. `true` (older non-spec clients) also counts as form support;
+ * `false`, absent, null, arrays and other values do not.
+ */
+export function elicitationCapabilityAllowsForm(value: unknown): boolean {
+  if (value === true) return true;
+  const elicitation = asRecord(value);
+  if (!elicitation) return false;
+  const modes = Object.keys(elicitation).filter((mode) => ELICITATION_MODES.has(mode));
+  return modes.length === 0 || modes.includes("form");
+}
+
 /** Whether a modern client declared form-mode elicitation support. */
 export function supportsFormElicitation(capabilities: ModernClientCapabilities): boolean {
-  const elicitation = asRecord(capabilities.elicitation);
-  if (!elicitation) return false;
-  // `elicitation: {}` implies form mode; an explicit mode list must include form.
-  const modes = Object.keys(elicitation);
-  return modes.length === 0 || modes.includes("form");
+  return elicitationCapabilityAllowsForm(capabilities.elicitation);
 }
 
 /** Adds the modern result envelope: `resultType` and `_meta` server identity. */

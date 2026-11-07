@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/nextjs";
 import { ZodError } from "zod";
+import { errorFields, sentryEnabled } from "@/lib/error-fields.server";
 import { createSafeErrorDto, getRequestId, log } from "@/lib/logger.server";
 import { SupportHttpError } from "@/lib/support/tickets.server";
 
@@ -47,8 +48,8 @@ export function supportRouteError(error: unknown, requestId: string): Response {
   });
   log.error("support.route.failed", {
     requestId,
-    sentryEventId,
-    errorType: error instanceof Error ? error.name : typeof error,
+    ...(sentryEnabled() ? { sentryEventId } : {}),
+    ...errorFields(error),
   });
   return supportJson(
     createSafeErrorDto("Support request failed", requestId, sentryEventId),

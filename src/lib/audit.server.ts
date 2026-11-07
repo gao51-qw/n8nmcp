@@ -6,6 +6,11 @@
 // AuditService, with rollback/lookup now scoped by user_id (fixes an IDOR).
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { log } from "@/lib/logger.server";
+import {
+  AUDIT_ALREADY_ROLLED_BACK_MESSAGE,
+  AUDIT_LOG_NOT_FOUND_MESSAGE,
+  AuditRollbackError,
+} from "@/lib/workflow-agent/action-conflict";
 
 export type WorkflowAuditOperation = "create" | "update" | "delete" | "activate" | "deactivate";
 
@@ -243,8 +248,10 @@ export async function getRollbackSnapshotForUser(
   auditLogId: string,
 ): Promise<WorkflowAuditRow> {
   const row = await getAuditLogForUser(userId, auditLogId);
-  if (!row) throw new Error("Audit log not found");
-  if (row.is_rolled_back) throw new Error("This change has already been rolled back");
+  if (!row) throw new AuditRollbackError("not_found", AUDIT_LOG_NOT_FOUND_MESSAGE);
+  if (row.is_rolled_back) {
+    throw new AuditRollbackError("already_rolled_back", AUDIT_ALREADY_ROLLED_BACK_MESSAGE);
+  }
   if (!row.snapshot_before) throw new Error("Cannot rollback: no snapshot_before available");
 
   return row;

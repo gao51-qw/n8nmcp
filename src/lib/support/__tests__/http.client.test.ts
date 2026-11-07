@@ -1,14 +1,28 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const mocks = vi.hoisted(() => ({ getSession: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  refresh: vi.fn(),
+  clear: vi.fn(),
+}));
 
-vi.mock("@/integrations/supabase/client", () => ({
-  supabase: { auth: { getSession: mocks.getSession } },
+vi.mock("@/lib/auth/browser-session.client", () => ({
+  getAccessToken: async () => {
+    const result = (await mocks.getSession()) as {
+      data: { session: { access_token: string } | null };
+    };
+    return result?.data.session?.access_token ?? null;
+  },
+  authStore: () => ({ refresh: mocks.refresh, clear: mocks.clear }),
 }));
 
 import { ApiError, apiErrorFromResponse, supportFetch } from "../http.client";
 
 const fetchMock = vi.fn<typeof fetch>();
+
+function bearerOf(call: number): string | null {
+  return new Headers(fetchMock.mock.calls[call]?.[1]?.headers).get("authorization");
+}
 
 describe("supportFetch", () => {
   beforeEach(() => {
@@ -18,6 +32,7 @@ describe("supportFetch", () => {
       data: { session: { access_token: "session-token" } },
       error: null,
     });
+    mocks.refresh.mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -59,6 +74,48 @@ describe("supportFetch", () => {
       code: "conflict",
       requestId: "req-1",
     });
+  });
+
+  it("rotates the token once and retries a request the server answered 401", async () => {
+    fetchMock
+      .mockResolvedValueOnce(Response.json({ error: { code: "x" } }, { status: 401 }))
+      .mockResolvedValueOnce(Response.json({ ok: true }));
+    mocks.refresh.mockResolvedValue({ access_token: "rotated-token" });
+
+    await expect(
+      supportFetch("/api/dashboard/instances", { method: "POST", body: "{}" }),
+    ).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(bearerOf(0)).toBe("Bearer session-token");
+    expect(bearerOf(1)).toBe("Bearer rotated-token");
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ method: "POST", body: "{}" });
+    expect(mocks.clear).not.toHaveBeenCalled();
+  });
+
+  it("ends the local session when the server keeps rejecting the token", async () => {
+    fetchMock.mockResolvedValue(
+      Response.json({ error: { code: "x" } }, { status: 401, headers: { "x-request-id": "r-9" } }),
+    );
+    mocks.refresh.mockResolvedValue({ access_token: "rotated-token" });
+
+    const error = await supportFetch("/api/x").catch((caught: unknown) => caught);
+    expect(error).toMatchObject({
+      status: 401,
+      code: "session_expired",
+      message: "Your session has expired. Sign in again to continue.",
+      requestId: "r-9",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(mocks.clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("ends the local session without a retry when no new token can be obtained", async () => {
+    fetchMock.mockResolvedValue(Response.json({ error: { code: "x" } }, { status: 401 }));
+    mocks.refresh.mockResolvedValue(null);
+
+    await expect(supportFetch("/api/x")).rejects.toMatchObject({ code: "session_expired" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(mocks.clear).toHaveBeenCalledTimes(1);
   });
 });
 

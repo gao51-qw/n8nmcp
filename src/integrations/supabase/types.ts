@@ -149,6 +149,27 @@ export type Database = {
         };
         Relationships: [];
       };
+      billing_checkout_nonces: {
+        Row: {
+          consumed_at: string;
+          nonce: string;
+          subscription_id: string;
+          user_id: string;
+        };
+        Insert: {
+          consumed_at?: string;
+          nonce: string;
+          subscription_id: string;
+          user_id: string;
+        };
+        Update: {
+          consumed_at?: string;
+          nonce?: string;
+          subscription_id?: string;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       chat_conversations: {
         Row: {
           created_at: string;
@@ -335,6 +356,7 @@ export type Database = {
           base_url: string;
           created_at: string;
           id: string;
+          is_default: boolean;
           last_checked_at: string | null;
           name: string;
           status: string;
@@ -353,6 +375,7 @@ export type Database = {
           base_url: string;
           created_at?: string;
           id?: string;
+          is_default?: boolean;
           last_checked_at?: string | null;
           name: string;
           status?: string;
@@ -371,6 +394,7 @@ export type Database = {
           base_url?: string;
           created_at?: string;
           id?: string;
+          is_default?: boolean;
           last_checked_at?: string | null;
           name?: string;
           status?: string;
@@ -534,6 +558,7 @@ export type Database = {
       subscriptions: {
         Row: {
           billing_customer_id: string | null;
+          billing_last_event_at: string | null;
           billing_provider: string;
           billing_subscription_id: string | null;
           created_at: string;
@@ -545,6 +570,7 @@ export type Database = {
         };
         Insert: {
           billing_customer_id?: string | null;
+          billing_last_event_at?: string | null;
           billing_provider?: string;
           billing_subscription_id?: string | null;
           created_at?: string;
@@ -556,6 +582,7 @@ export type Database = {
         };
         Update: {
           billing_customer_id?: string | null;
+          billing_last_event_at?: string | null;
           billing_provider?: string;
           billing_subscription_id?: string | null;
           created_at?: string;
@@ -810,12 +837,48 @@ export type Database = {
         Args: { _target_user_id: string; _tier: string };
         Returns: undefined;
       };
-      check_mcp_short_window: {
+      authenticate_mcp_platform_key: {
+        Args: { _key_hash: string };
+        Returns: {
+          key_id: string;
+          status: string | null;
+          tier: string | null;
+          user_id: string;
+        }[];
+      };
+      bind_paddle_subscription: {
         Args: {
+          _current_period_end?: string;
+          _customer_id?: string;
+          _event_at: string;
+          _nonce: string;
+          _status: string;
+          _subscription_id: string;
+          _tier: string;
+          _user_id: string;
+        };
+        Returns: string;
+      };
+      check_mcp_rate_limit: {
+        Args: {
+          _burst_max: number;
+          _burst_window_seconds: number;
           _max_requests: number;
           _user_id: string;
           _window_seconds: number;
         };
+        Returns: boolean;
+      };
+      check_mcp_short_window: {
+        Args: {
+          _max_requests?: number;
+          _user_id: string;
+          _window_seconds?: number;
+        };
+        Returns: boolean;
+      };
+      delete_n8n_instance: {
+        Args: { _instance_id: string; _user_id: string };
         Returns: boolean;
       };
       get_today_mcp_usage: { Args: { _user_id: string }; Returns: number };
@@ -851,6 +914,10 @@ export type Database = {
           quota_limit: number;
           used: number;
         }[];
+      };
+      set_default_n8n_instance: {
+        Args: { _instance_id: string; _user_id: string };
+        Returns: boolean;
       };
     };
     Enums: {

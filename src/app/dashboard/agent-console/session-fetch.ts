@@ -1,11 +1,11 @@
 // Authenticated fetch for the Agent Console.
 //
 // The Supabase access token expires after about an hour, so it is read from
-// the auth client on every request instead of being kept in component state
-// (`getSession()` refreshes an expired token on its own). If the API still
-// answers 401, the session is refreshed once and the request is retried; a
-// second 401 means the session is really gone.
-import { supabase } from "@/integrations/supabase/client";
+// the in-memory token store on every request instead of being kept in
+// component state (the store refreshes it through the HttpOnly cookie before
+// it expires). If the API still answers 401, the session is refreshed once and
+// the request is retried; a second 401 means the session is really gone.
+import { authStore, getAccessToken } from "@/lib/auth/browser-session.client";
 
 export const SESSION_EXPIRED_MESSAGE = "Your session has expired. Sign in again to continue.";
 
@@ -19,16 +19,14 @@ export class SessionExpiredError extends Error {
 }
 
 async function currentAccessToken(): Promise<string> {
-  const { data, error } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  if (error || !token) throw new SessionExpiredError();
+  const token = await getAccessToken().catch(() => null);
+  if (!token) throw new SessionExpiredError();
   return token;
 }
 
 async function refreshedAccessToken(): Promise<string | null> {
   try {
-    const { data, error } = await supabase.auth.refreshSession();
-    return error ? null : (data.session?.access_token ?? null);
+    return (await authStore().refresh())?.access_token ?? null;
   } catch {
     return null;
   }

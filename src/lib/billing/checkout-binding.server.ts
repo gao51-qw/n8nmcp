@@ -1,21 +1,27 @@
-// Server-issued, HMAC-signed binding between a checkout and a user account.
+// Server-issued, HMAC-signed, single-use binding between a checkout and a
+// user account.
 //
 // Paddle.js `customData` is set in the browser, so a bare `user_id` is
 // attacker-controlled. The billing config route therefore hands the browser
-// `{ user_id, ts, sig }` where
+// `{ user_id, ts, nonce, sig }` where
 //
-//   sig = base64url(HMAC-SHA256(BILLING_CUSTOM_DATA_SECRET, "v1:" + user_id + ":" + ts))
+//   nonce = base64url(16 random bytes)                      (22 characters)
+//   sig   = base64url(HMAC-SHA256(BILLING_CUSTOM_DATA_SECRET,
+//                                 "v2:" + user_id + ":" + ts + ":" + nonce))
 //
-// and `ts` is the issuance time in Unix seconds. The Paddle webhook only
-// creates a user <-> subscription binding from customData whose signature
-// verifies and whose `ts` is at most CHECKOUT_BINDING_MAX_AGE_MS older than
-// the subscription's Paddle `createdAt`. Every later event resolves the user
-// from the stored binding, never from customData.
-import { createHmac, timingSafeEqual } from "node:crypto";
+// and `ts` is the issuance time in Unix seconds. v2 is the only accepted
+// format. The Paddle webhook only creates a user <-> subscription binding from
+// customData whose signature verifies and whose `ts` is at most
+// CHECKOUT_BINDING_MAX_AGE_MS older than the subscription's Paddle
+// `createdAt`. The nonce is then consumed by bind_paddle_subscription()
+// (public.billing_checkout_nonces), so one signed blob binds one
+// subscription only. Every later event resolves the user from the stored
+// binding, never from customData.
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { log } from "@/lib/logger.server";
 
 export const CHECKOUT_BINDING_SECRET_ENV = "BILLING_CUSTOM_DATA_SECRET";
-export const CHECKOUT_BINDING_VERSION = "v1";
+export const CHECKOUT_BINDING_VERSION = "v2";
 
 /**
  * A signed binding may create a subscription binding only when the
@@ -34,15 +40,17 @@ const MIN_SECRET_LENGTH = 32;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** 32-byte HMAC-SHA256 digest, base64url without padding. */
 const SIGNATURE = /^[A-Za-z0-9_-]{43}$/;
+/** 16 random bytes (128 bits), base64url without padding. */
+export const CHECKOUT_NONCE_PATTERN = /^[A-Za-z0-9_-]{22}$/;
 const TIMESTAMP_STRING = /^[0-9]{1,12}$/;
 
-export type SignedCheckoutBinding = { user_id: string; ts: number; sig: string };
+export type SignedCheckoutBinding = { user_id: string; ts: number; nonce: string; sig: string };
 
 export type CheckoutBindingFailure =
   "secret_unset" | "missing" | "malformed" | "bad_signature" | "expired" | "issued_in_future";
 
 export type CheckoutBindingResult =
-  | { ok: true; userId: string; issuedAtMs: number }
+  | { ok: true; userId: string; issuedAtMs: number; nonce: string }
   | { ok: false; reason: CheckoutBindingFailure; claimedUserId: string | null };
 
 /**
@@ -70,21 +78,35 @@ export function isCheckoutBindingConfigured(): boolean {
   return checkoutBindingSecret() !== null;
 }
 
-function computeSignature(secret: string, userId: string, ts: number): Buffer {
+function computeSignature(secret: string, userId: string, ts: number, nonce: string): Buffer {
   return createHmac("sha256", secret)
-    .update(`${CHECKOUT_BINDING_VERSION}:${userId}:${ts}`, "utf8")
+    .update(`${CHECKOUT_BINDING_VERSION}:${userId}:${ts}:${nonce}`, "utf8")
     .digest();
 }
 
-/** Signs a checkout binding for `userId`. Returns null without a usable secret. */
+/** A fresh 128-bit checkout nonce. */
+export function newCheckoutNonce(): string {
+  return randomBytes(16).toString("base64url");
+}
+
+/**
+ * Signs a single-use checkout binding for `userId`. Returns null without a
+ * usable secret. `nonce` is injectable for tests only.
+ */
 export function signCheckoutBinding(
   userId: string,
   nowMs: number = Date.now(),
+  nonce: string = newCheckoutNonce(),
 ): SignedCheckoutBinding | null {
   const secret = checkoutBindingSecret();
-  if (!secret || !UUID.test(userId)) return null;
+  if (!secret || !UUID.test(userId) || !CHECKOUT_NONCE_PATTERN.test(nonce)) return null;
   const ts = Math.floor(nowMs / 1000);
-  return { user_id: userId, ts, sig: computeSignature(secret, userId, ts).toString("base64url") };
+  return {
+    user_id: userId,
+    ts,
+    nonce,
+    sig: computeSignature(secret, userId, ts, nonce).toString("base64url"),
+  };
 }
 
 function parseTimestamp(value: unknown): number | null {
@@ -108,6 +130,7 @@ export function claimedCheckoutUserId(customData: unknown): string | null {
 /**
  * Verifies signed checkout customData. `referenceTimeMs` is the moment the
  * binding is being established (the subscription's Paddle `createdAt`).
+ * Single use is enforced separately, when the nonce is consumed.
  */
 export function verifyCheckoutBinding(
   customData: unknown,
@@ -121,27 +144,29 @@ export function verifyCheckoutBinding(
     return { ok: false, reason: "missing", claimedUserId };
   }
   const data = customData as Record<string, unknown>;
-  if (data.user_id === undefined && data.ts === undefined && data.sig === undefined) {
-    return { ok: false, reason: "missing", claimedUserId };
-  }
-  if (data.sig === undefined || data.ts === undefined) {
+  // Unsigned customData (for example a bare user_id) is "missing"; a signed
+  // blob without every v2 field, such as a v1 blob, is "malformed".
+  if (data.sig === undefined) {
     return { ok: false, reason: "missing", claimedUserId };
   }
 
   const userId = data.user_id;
   const ts = parseTimestamp(data.ts);
+  const nonce = data.nonce;
   const sig = data.sig;
   if (
     typeof userId !== "string" ||
     !UUID.test(userId) ||
     ts === null ||
+    typeof nonce !== "string" ||
+    !CHECKOUT_NONCE_PATTERN.test(nonce) ||
     typeof sig !== "string" ||
     !SIGNATURE.test(sig)
   ) {
     return { ok: false, reason: "malformed", claimedUserId };
   }
 
-  const expected = computeSignature(secret, userId, ts);
+  const expected = computeSignature(secret, userId, ts, nonce);
   const provided = Buffer.from(sig, "base64url");
   if (provided.length !== expected.length || !timingSafeEqual(provided, expected)) {
     return { ok: false, reason: "bad_signature", claimedUserId };
@@ -158,5 +183,5 @@ export function verifyCheckoutBinding(
     return { ok: false, reason: "expired", claimedUserId };
   }
 
-  return { ok: true, userId: userId.toLowerCase(), issuedAtMs };
+  return { ok: true, userId: userId.toLowerCase(), issuedAtMs, nonce };
 }

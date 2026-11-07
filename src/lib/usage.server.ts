@@ -36,8 +36,11 @@ export type DashboardUsage = {
 };
 
 export class UsageUnavailableError extends Error {
-  constructor(readonly source: string) {
-    super(`Usage lookup failed: ${source}`);
+  constructor(
+    readonly source: string,
+    cause?: unknown,
+  ) {
+    super(`Usage lookup failed: ${source}`, cause === undefined ? undefined : { cause });
     this.name = "UsageUnavailableError";
   }
 }
@@ -85,10 +88,12 @@ export async function loadDashboardUsage(
       .limit(recentLimit),
   ]);
 
-  if (usageResult.error) throw new UsageUnavailableError("usage");
-  if (subscriptionResult.error) throw new UsageUnavailableError("subscription");
-  if (dailyResult.error) throw new UsageUnavailableError("daily");
-  if (recentResult.error) throw new UsageUnavailableError("recent");
+  if (usageResult.error) throw new UsageUnavailableError("usage", usageResult.error);
+  if (subscriptionResult.error) {
+    throw new UsageUnavailableError("subscription", subscriptionResult.error);
+  }
+  if (dailyResult.error) throw new UsageUnavailableError("daily", dailyResult.error);
+  if (recentResult.error) throw new UsageUnavailableError("recent", recentResult.error);
 
   const subscription = subscriptionResult.data as { tier: string; status: string } | null;
   const tier = effectiveTier(subscription?.tier, subscription?.status);

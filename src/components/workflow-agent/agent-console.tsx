@@ -42,6 +42,12 @@ export type ToolCallStatus = "complete" | "pending" | "blocked";
 export type DiffOperation = "add" | "update" | "remove";
 export type ValidationSeverity = "error" | "warning" | "pass";
 export type AuditLevel = "info" | "decision" | "warning";
+/**
+ * Post-write concurrency verdict recorded on a workflow write's audit row
+ * (tool_params.concurrencyAfterWrite.status). Clean writes carry none.
+ */
+export type AuditConcurrencyStatus =
+  "concurrent_write_after" | "concurrent_write_suspected" | "unverified";
 
 export interface QuotaSnapshot {
   plan: string;
@@ -83,11 +89,14 @@ export interface AuditEntry {
   actor: string;
   message: string;
   timestamp: string;
+  concurrency?: AuditConcurrencyStatus;
 }
 
 export interface WorkflowAgentConsoleData {
   workflowName: string;
   workflowId: string;
+  /** The n8n instance MCP tools act on (the user's default), when there is one. */
+  instanceName?: string;
   selectedEnvironment: AgentEnvironment;
   mode: AgentMode;
   rollbackStatus: RollbackStatus;
@@ -146,12 +155,6 @@ export type WorkflowAgentConsoleProps = {
   onApply?: (input: { previewCallId: string; selectedOperationIndexes: number[] }) => Promise<void>;
   onRollback?: (input: { auditLogId: string; reason: string }) => Promise<void>;
 };
-
-const environments: Array<{ value: AgentEnvironment; label: string }> = [
-  { value: "development", label: "Development" },
-  { value: "staging", label: "Staging" },
-  { value: "production", label: "Production" },
-];
 
 export const workflowAgentConsoleFixture: WorkflowAgentConsoleData = {
   workflowName: "Invoice enrichment workflow",
@@ -274,6 +277,27 @@ function statusBadgeClass(status: ToolCallStatus) {
   return "border-amber-200 bg-amber-50 text-amber-700";
 }
 
+const CONCURRENCY_BADGES: Record<
+  AuditConcurrencyStatus,
+  { label: string; detail: string; className: string }
+> = {
+  concurrent_write_after: {
+    label: "Concurrent edit detected",
+    detail: "n8n saved another edit right after this change. Review the workflow in n8n.",
+    className: "border-destructive/30 bg-destructive/10 text-destructive",
+  },
+  concurrent_write_suspected: {
+    label: "Concurrent edit suspected",
+    detail: "Another edit may have been saved around this change. Review the workflow in n8n.",
+    className: "border-amber-200 bg-amber-50 text-amber-700",
+  },
+  unverified: {
+    label: "Write not verified",
+    detail: "The post-write check could not read the workflow back from n8n.",
+    className: "border-border bg-muted text-muted-foreground",
+  },
+};
+
 function validationIcon(severity: ValidationSeverity) {
   if (severity === "error") return <AlertCircle className="h-4 w-4 text-destructive" />;
   if (severity === "warning") return <ShieldAlert className="h-4 w-4 text-amber-600" />;
@@ -297,7 +321,8 @@ export function WorkflowAgentConsole({
   onApply,
   onRollback,
 }: WorkflowAgentConsoleProps) {
-  const [environment, setEnvironment] = useState(data.selectedEnvironment);
+  // A page-local lock on Apply/Rollback. The server decides what may run
+  // (instance present, confirmation token); this only guards against stray clicks.
   const [mode, setMode] = useState<AgentMode>(data.mode);
   const [selectedOperations, setSelectedOperations] = useState<number[]>(
     () => data.pendingUpdate?.operations.map(({ index }) => index) ?? [],
@@ -368,19 +393,18 @@ export function WorkflowAgentConsole({
 
         <div className="grid gap-3 sm:grid-cols-[minmax(13rem,1fr)_auto_auto] sm:items-end">
           <div className="space-y-2">
-            <Label htmlFor="workflow-agent-environment">Environment</Label>
-            <select
-              id="workflow-agent-environment"
-              value={environment}
-              onChange={(event) => setEnvironment(event.target.value as AgentEnvironment)}
-              className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            <p className="text-sm font-medium">Target instance</p>
+            {/* Actions always run on the instance marked "Active for MCP" under
+                Instances; there is no separate environment to choose here. */}
+            <div
+              className="flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm"
+              data-testid="workflow-agent-target"
             >
-              {environments.map((item) => (
-                <option key={item.value} value={item.value}>
-                  {item.label}
-                </option>
-              ))}
-            </select>
+              <span className="truncate">{data.instanceName ?? "No n8n instance connected"}</span>
+              <Badge variant="outline" className="capitalize">
+                {data.selectedEnvironment}
+              </Badge>
+            </div>
           </div>
 
           <div className="flex h-9 items-center gap-3 rounded-md border border-border px-3">
@@ -388,10 +412,12 @@ export function WorkflowAgentConsole({
               id="workflow-agent-write-mode"
               checked={mode === "write-enabled"}
               onCheckedChange={(checked) => setMode(checked ? "write-enabled" : "read-only")}
-              aria-label="Toggle write-enabled mode"
+              aria-label="Lock or unlock write actions on this page"
             />
             <Label htmlFor="workflow-agent-write-mode" className="whitespace-nowrap text-sm">
-              {mode === "write-enabled" ? "Write-enabled" : "Read-only"}
+              {mode === "write-enabled"
+                ? "Write actions unlocked (this page)"
+                : "Write actions locked (this page)"}
             </Label>
           </div>
 
@@ -427,7 +453,7 @@ export function WorkflowAgentConsole({
                 </p>
               </div>
               <Badge variant="outline" className="whitespace-nowrap">
-                {environment}
+                {data.selectedEnvironment}
               </Badge>
             </CardHeader>
             <CardContent className="p-0">
@@ -676,6 +702,23 @@ export function WorkflowAgentConsole({
                     </span>
                     <span>{entry.timestamp}</span>
                   </div>
+                  {entry.concurrency ? (
+                    <div className="mt-2 space-y-1" data-testid="audit-concurrency-warning">
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "inline-flex items-center gap-1",
+                          CONCURRENCY_BADGES[entry.concurrency].className,
+                        )}
+                      >
+                        <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+                        {CONCURRENCY_BADGES[entry.concurrency].label}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground">
+                        {CONCURRENCY_BADGES[entry.concurrency].detail}
+                      </p>
+                    </div>
+                  ) : null}
                   <p className="mt-2 text-sm leading-6">{entry.message}</p>
                   <p className="mt-1 text-xs text-muted-foreground">Actor: {entry.actor}</p>
                 </div>

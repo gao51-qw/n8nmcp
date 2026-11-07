@@ -3,6 +3,7 @@
 // Errors use the shared { error: { code, message, requestId } } shape; every
 // response is no-store.
 import { z } from "zod";
+import { errorFields } from "@/lib/error-fields.server";
 import { apiJson, jsonError, withApiErrors } from "@/lib/http/api-response.server";
 import { log } from "@/lib/logger.server";
 import { requireSupportUser } from "@/lib/support/auth.server";
@@ -42,7 +43,11 @@ export async function GET(request: Request) {
         return apiJson({ usage }, { requestId });
       } catch (error) {
         if (!(error instanceof UsageUnavailableError)) throw error;
-        log.error("dashboard.usage.failed", { requestId, source: error.source });
+        log.error("dashboard.usage.failed", {
+          requestId,
+          source: error.source,
+          ...errorFields(error.cause ?? error),
+        });
         return jsonError(
           500,
           "usage_unavailable",

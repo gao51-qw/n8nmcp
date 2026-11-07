@@ -28,10 +28,27 @@ function publicEnv(phase: string): Record<string, string> {
   );
 }
 
+/**
+ * Response headers the app sends on every route, so it does not depend on the
+ * reverse proxy for them. Pages also get a per-request nonce
+ * Content-Security-Policy from src/proxy.ts (see src/lib/csp.ts). HSTS is
+ * left to the TLS terminator, which knows whether the request came over HTTPS.
+ */
+const SECURITY_HEADERS = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "X-Frame-Options", value: "DENY" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+  { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
   reactStrictMode: true,
+  async headers() {
+    return [{ source: "/:path*", headers: SECURITY_HEADERS }];
+  },
 };
 
 export default (phase: string) =>

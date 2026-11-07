@@ -1,38 +1,20 @@
-# VPS production stack: Caddy terminates HTTPS and proxies to the app and MCP containers.
-# Place docker-compose.yml, Caddyfile, .env, and .env.app together on the VPS
-# (for example /opt/n8nworkflow), then run:
+# Prebuilt GHCR image variant of the aaPanel production topology.
+#
+# The production authority is docker-compose.aapanel.yml, built from source in
+# /opt/n8nmcp-app and fronted by aaPanel host nginx (deploy/nginx/aapanel/).
+# This file runs the same two services from the images that
+# .github/workflows/app-image.yml and n8n-knowledge-mcp.yml publish to GHCR, and
+# is what deploy.sh, rollback.sh and update-knowledge.sh drive. It publishes the
+# app on 127.0.0.1:3001 only, so it sits behind the same host nginx vhosts.
+# Never run it on a host that also runs docker-compose.aapanel.yml: both bind
+# 127.0.0.1:3001.
+#
+# Place docker-compose.yml, .env and .env.app together (for example
+# /opt/n8nworkflow), then run:
 #   docker compose pull
 #   docker compose up -d
 
 services:
-  caddy:
-    image: caddy:2.8-alpine
-    container_name: n8nworkflow-caddy
-    restart: unless-stopped
-    depends_on:
-      app:
-        condition: service_started
-      mcp:
-        condition: service_started
-    environment:
-      MCP_DOMAIN: ${MCP_DOMAIN:-mcp.n8nworkflow.com}
-      DOCS_DOMAIN: ${DOCS_DOMAIN:-docs.n8nworkflow.com}
-      BLOG_DOMAIN: ${BLOG_DOMAIN:-blog.n8nworkflow.com}
-      DASHBOARD_DOMAIN: ${DASHBOARD_DOMAIN:-dashboard.n8nworkflow.com}
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-
   app:
     image: ghcr.io/${GHCR_OWNER}/n8nworkflow-app:${APP_IMAGE_TAG:-latest}
     container_name: n8nworkflow-app
@@ -48,8 +30,9 @@ services:
       HOSTNAME: "0.0.0.0"
       UPSTREAM_N8N_MCP_URL: http://mcp:3000/mcp
       UPSTREAM_N8N_MCP_TOKEN: ${MCP_AUTH_TOKEN:?required}
-    expose:
-      - "3001"
+    # Loopback only: aaPanel host nginx is the only public entry point.
+    ports:
+      - "127.0.0.1:3001:3001"
     # Container hardening: no privilege escalation, drop all Linux capabilities
     # (the Node server needs none). The image already runs as the non-root `node`
     # user. Keeps an app-level RCE from trivially escalating.
@@ -82,7 +65,3 @@ services:
       interval: 60s
       timeout: 5s
       retries: 3
-
-volumes:
-  caddy_data:
-  caddy_config:

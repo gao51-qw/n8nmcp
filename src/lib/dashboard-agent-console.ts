@@ -1,13 +1,16 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { Tables } from "@/integrations/supabase/types";
-import { TIER_LABELS, tierLimit, tierOf } from "@/lib/tiers";
+import { rateLimitFor } from "@/lib/mcp-rate-limit";
+import { grantedTier, TIER_LABELS, tierLimit } from "@/lib/tiers";
 import { deriveAgentPlan } from "@/lib/workflow-agent/call-metadata.server";
 import type { WorkflowOperation } from "@/lib/workflow-agent";
 import type {
+  AuditConcurrencyStatus,
   AuditEntry,
   AuditLevel,
   DiffEntry,
   DiffOperation,
+  RollbackStatus,
   ToolCallEvent,
   ToolCallStatus,
   ValidationResult,
@@ -106,13 +109,7 @@ export async function loadWorkflowAgentConsoleData(
 
   const today = new Date().toISOString().slice(0, 10);
   const [instance, subscription, usageToday, callLogs, auditRows] = await Promise.all([
-    supabaseAdmin
-      .from("n8n_instances")
-      .select("id,name,status")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle(),
+    loadMcpInstance(userId),
     supabaseAdmin
       .from("subscriptions")
       .select("tier,status,current_period_end")
@@ -151,6 +148,30 @@ export async function loadWorkflowAgentConsoleData(
   });
 }
 
+/**
+ * The instance MCP tools act on: the user's chosen default, else the oldest —
+ * the same order as getDefaultInstance. Falls back to the oldest when the
+ * is_default column does not exist yet (app deployed before the migration).
+ */
+async function loadMcpInstance(userId: string) {
+  const byDefault = await supabaseAdmin
+    .from("n8n_instances")
+    .select("id,name,status")
+    .eq("user_id", userId)
+    .order("is_default", { ascending: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (byDefault.error?.code !== "42703") return byDefault;
+  return supabaseAdmin
+    .from("n8n_instances")
+    .select("id,name,status")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+}
+
 export function buildWorkflowAgentConsoleData(
   input: BuildWorkflowAgentConsoleInput,
 ): WorkflowAgentConsoleData {
@@ -162,10 +183,12 @@ export function buildWorkflowAgentConsoleData(
     workflowNameFromRow(workflowRow) ??
     (input.instance ? `${input.instance.name} workflow activity` : "No workflow selected");
 
-  const tier = tierOf(input.subscription?.tier);
+  // Same rules the gateway enforces: a lapsed subscription counts as free, and
+  // the 10-second figure is the tier's burst cap.
+  const tier = grantedTier(input.subscription?.tier, input.subscription?.status);
   const limit = tierLimit(tier);
   const used = input.usageToday?.mcp_calls ?? 0;
-  const rateLimit = 60;
+  const rateLimit = rateLimitFor(tier).burst;
   const recentCalls = input.callLogs.filter((row) => {
     const timestamp = new Date(row.created_at).getTime();
     return Number.isFinite(timestamp) && now.getTime() - timestamp <= 10_000;
@@ -179,9 +202,10 @@ export function buildWorkflowAgentConsoleData(
   return {
     workflowName,
     workflowId,
+    instanceName: input.instance?.name ?? undefined,
     selectedEnvironment: "production",
     mode: input.instance ? "write-enabled" : "read-only",
-    rollbackStatus: input.auditRows.some((row) => row.is_rolled_back) ? "rolled-back" : "available",
+    rollbackStatus: rollbackStatusFor(sortedAudit, workflowId, rollbackCandidate),
     quota: {
       plan: TIER_LABELS[tier],
       used,
@@ -257,6 +281,22 @@ function findPendingUpdate(
   };
 }
 
+/**
+ * "rolled-back" means there is nothing left to roll back because the
+ * workflow's newest audited change was itself rolled back. One rolled-back
+ * row further down the history must not disable the button while a newer
+ * candidate exists.
+ */
+function rollbackStatusFor(
+  rows: WorkflowAuditConsoleRow[],
+  workflowId: string,
+  candidate: WorkflowAgentConsoleData["rollbackCandidate"],
+): RollbackStatus {
+  if (candidate) return "available";
+  const newest = rows.find((row) => row.workflow_id === workflowId);
+  return newest?.is_rolled_back ? "rolled-back" : "available";
+}
+
 function findRollbackCandidate(
   rows: WorkflowAuditConsoleRow[],
   workflowId: string,
@@ -321,11 +361,11 @@ function mapToolStatus(status: string, metadata?: unknown): ToolCallStatus {
 
 function mapAuditEntry(row: WorkflowAuditConsoleRow): AuditEntry {
   const tool = row.tool_name ?? row.operation;
-  const level: AuditLevel = row.is_rolled_back
-    ? "warning"
-    : DESTRUCTIVE_TOOLS.has(tool)
-      ? "decision"
-      : "info";
+  const concurrency = auditConcurrency(row.tool_params);
+  const flagged =
+    concurrency === "concurrent_write_after" || concurrency === "concurrent_write_suspected";
+  const level: AuditLevel =
+    row.is_rolled_back || flagged ? "warning" : DESTRUCTIVE_TOOLS.has(tool) ? "decision" : "info";
   return {
     id: row.id,
     level,
@@ -334,7 +374,22 @@ function mapAuditEntry(row: WorkflowAuditConsoleRow): AuditEntry {
       row.ai_reasoning ??
       `${humanizeToolName(tool)} recorded ${row.operation} for workflow ${row.workflow_id}.`,
     timestamp: formatTime(row.created_at),
+    ...(concurrency ? { concurrency } : {}),
   };
+}
+
+/**
+ * The post-write concurrency verdict the gateway recorded on a workflow write
+ * (tool_params.concurrencyAfterWrite, see mcp/write-verification.server.ts).
+ * Clean writes and rows written before the check existed carry none.
+ */
+function auditConcurrency(toolParams: unknown): AuditConcurrencyStatus | undefined {
+  const status = asRecord(asRecord(toolParams).concurrencyAfterWrite).status;
+  return status === "concurrent_write_after" ||
+    status === "concurrent_write_suspected" ||
+    status === "unverified"
+    ? status
+    : undefined;
 }
 
 function extractDiff(rows: WorkflowAuditConsoleRow[]): DiffEntry[] {

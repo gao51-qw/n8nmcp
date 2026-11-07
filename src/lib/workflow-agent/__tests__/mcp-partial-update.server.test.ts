@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { dispatchTool, runTool } from "@/lib/mcp.server";
+import { PREVIEW_STALE_MESSAGE } from "@/lib/workflow-agent/action-conflict";
 
 const trustedPreviewMocks = vi.hoisted(() => ({
   loadTrustedWorkflowPreview: vi.fn(),
@@ -93,7 +94,12 @@ describe("trusted partial workflow versions", () => {
         user_id: "user-1",
         confirmationVerified: true,
       }),
-    ).rejects.toThrow(/stale/i);
+    ).rejects.toMatchObject({
+      // A typed conflict (no Sentry event on the gateway), with the fixed message.
+      name: "WorkflowActionConflictError",
+      code: "preview_stale",
+      message: PREVIEW_STALE_MESSAGE,
+    });
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch.mock.calls[0]?.[1]?.method).toBeUndefined();
   });

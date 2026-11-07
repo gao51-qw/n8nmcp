@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
-# Controlled VPS deploy for the GHCR images.
+# Controlled deploy of the prebuilt GHCR images (docker-compose.yml).
+#
+# The containers publish the app on 127.0.0.1:3001 only; aaPanel host nginx
+# keeps serving the public vhosts and needs no reload when a container is
+# replaced. The aaPanel source-build stack (docker-compose.aapanel.yml) is
+# updated with update.sh instead.
 #
 # Usage from /opt/n8nworkflow:
 #   ./deploy.sh app latest
@@ -83,8 +88,8 @@ esac
 
 echo "==> Starting containers"
 case "$service" in
-  app) $COMPOSE up -d app caddy ;;
-  mcp) $COMPOSE up -d mcp caddy ;;
+  app) $COMPOSE up -d app ;;
+  mcp) $COMPOSE up -d mcp ;;
   all) $COMPOSE up -d ;;
 esac
 
@@ -92,16 +97,13 @@ echo "==> Waiting for health checks"
 case "$service" in
   app)
     wait_for_healthy n8nworkflow-app
-    wait_for_healthy n8nworkflow-caddy
     ;;
   mcp)
     wait_for_healthy n8n-knowledge-mcp
-    wait_for_healthy n8nworkflow-caddy
     ;;
   all)
     wait_for_healthy n8nworkflow-app
     wait_for_healthy n8n-knowledge-mcp
-    wait_for_healthy n8nworkflow-caddy
     ;;
 esac
 

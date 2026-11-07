@@ -7,6 +7,12 @@ function fakeJwt(claims: Record<string, unknown>): string {
 }
 
 const SESSION_TOKEN = fakeJwt({ sub: "user-1", role: "authenticated" });
+/** Expires in an hour, so the verification may be remembered. */
+const FRESH_TOKEN = fakeJwt({
+  sub: "user-1",
+  role: "authenticated",
+  exp: Math.floor(Date.now() / 1000) + 3600,
+});
 
 const supabaseMocks = vi.hoisted(() => ({
   getUser: vi.fn(),
@@ -31,8 +37,9 @@ vi.mock("@/integrations/supabase/client.server", () => ({
 }));
 
 describe("support authorization", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    (await import("@/lib/support/auth.server")).resetSupportUserCache();
     supabaseMocks.getUser.mockResolvedValue({
       data: {
         user: {
@@ -95,6 +102,45 @@ describe("support authorization", () => {
       email: "support@example.com",
     });
     expect(supabaseMocks.getUser).toHaveBeenCalledWith(SESSION_TOKEN);
+  });
+
+  it("remembers a verified token briefly instead of asking Supabase on every call", async () => {
+    const { requireSupportUser } = await import("@/lib/support/auth.server");
+    const request = () =>
+      new Request("https://example.test/support", {
+        headers: { authorization: `Bearer ${FRESH_TOKEN}` },
+      });
+
+    await expect(requireSupportUser(request())).resolves.toMatchObject({ userId: "user-1" });
+    await expect(requireSupportUser(request())).resolves.toMatchObject({ userId: "user-1" });
+    expect(supabaseMocks.getUser).toHaveBeenCalledTimes(1);
+
+    // Routes acting on the sign-in itself always verify again.
+    supabaseMocks.getUser.mockResolvedValueOnce({ data: { user: null }, error: { status: 401 } });
+    await expect(requireSupportUser(request(), { fresh: true })).rejects.toMatchObject({
+      status: 401,
+    });
+    expect(supabaseMocks.getUser).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not remember a token without a readable expiry, nor a rejected one", async () => {
+    const { requireSupportUser } = await import("@/lib/support/auth.server");
+    const request = () =>
+      new Request("https://example.test/support", {
+        headers: { authorization: `Bearer ${SESSION_TOKEN}` },
+      });
+
+    await requireSupportUser(request());
+    await requireSupportUser(request());
+    expect(supabaseMocks.getUser).toHaveBeenCalledTimes(2);
+
+    supabaseMocks.getUser.mockResolvedValue({ data: { user: null }, error: { status: 401 } });
+    const rejected = new Request("https://example.test/support", {
+      headers: { authorization: `Bearer ${fakeJwt({ sub: "user-2", exp: 4102444800 })}` },
+    });
+    await expect(requireSupportUser(rejected)).rejects.toMatchObject({ status: 401 });
+    await expect(requireSupportUser(rejected)).rejects.toMatchObject({ status: 401 });
+    expect(supabaseMocks.getUser).toHaveBeenCalledTimes(4);
   });
 
   it("rejects an empty bearer token", async () => {

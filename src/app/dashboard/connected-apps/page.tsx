@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/dashboard/confirm-dialog";
 import { errorText } from "@/components/dashboard/error-text";
-import { supabase } from "@/integrations/supabase/client";
+import { revokeOAuthGrant } from "@/lib/auth/oauth-server.client";
 import { isMcpScope, SCOPE_LABELS } from "@/lib/oauth/scopes";
 import { supportFetch } from "@/lib/support/http.client";
 
@@ -57,9 +57,7 @@ export default function ConnectedAppsPage() {
       await supportFetch(`/api/oauth/grants?client_id=${encodeURIComponent(grant.client_id)}`, {
         method: "DELETE",
       });
-      const { error: supabaseError } = await supabase.auth.oauth.revokeGrant({
-        clientId: grant.client_id,
-      });
+      const { error: supabaseError } = await revokeOAuthGrant(grant.client_id);
       setNotice(
         supabaseError
           ? `${grant.client_name || "The app"} can no longer use n8n-mcp. Its sign-in session could not be ended; it ends on its own within an hour.`

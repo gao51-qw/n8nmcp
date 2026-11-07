@@ -35,12 +35,14 @@ import {
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
 import { persistedToolErrorMessage, sanitizedToolErrorMessage } from "@/lib/mcp-tool-errors";
+import { WorkflowActionConflictError } from "@/lib/workflow-agent/action-conflict";
 import { mcpSharedState } from "@/lib/mcp-shared-state.server";
 import { rateLimitLogReason, rateLimitMessage } from "@/lib/mcp-rate-limit";
 import { currentTraceId, runWithTrace, traceContextFrom } from "@/lib/trace-context.server";
 import {
   classifyRequest,
   discoverResult,
+  elicitationCapabilityAllowsForm,
   LEGACY_PROTOCOL_VERSION,
   looksModern,
   type ModernRequest,
@@ -151,9 +153,25 @@ function parseClientCapabilities(
         ? legacyCaps
         : asRecord(expCaps);
   return {
-    elicitation: typeof candidate.elicitation === "boolean" ? candidate.elicitation : undefined,
-    sampling: typeof candidate.sampling === "boolean" ? candidate.sampling : undefined,
+    elicitation: isDeclaredCapability(candidate.elicitation)
+      ? elicitationCapabilityAllowsForm(candidate.elicitation)
+      : undefined,
+    sampling: isDeclaredCapability(candidate.sampling) ? candidate.sampling !== false : undefined,
   };
+}
+
+/**
+ * Spec clients declare a capability as an object (`"elicitation": {}`); older
+ * clients here sent a boolean. Both are declarations. Anything else (absent,
+ * null, arrays, strings) declares nothing, so it never overrides a value
+ * stored at initialize. The result is always a boolean, as the shared session
+ * state stores it.
+ */
+function isDeclaredCapability(value: unknown): value is boolean | Record<string, unknown> {
+  return (
+    typeof value === "boolean" ||
+    (value !== null && typeof value === "object" && !Array.isArray(value))
+  );
 }
 
 function sessionName(request: Request, sessionId: string | null): string {
@@ -745,6 +763,44 @@ async function dispatchRpc(
               schema: e.request.schema,
             },
             message: safeMsg ?? msg,
+          });
+        }
+        if (e instanceof WorkflowActionConflictError) {
+          // An expected business outcome (instance mismatch, newer edits, an
+          // already rolled-back entry), not a fault: no Sentry event. Charged
+          // like a business failure, since the tool was dispatched and ran
+          // its checks. The fixed message is safe to return and persist.
+          await recordCall({
+            usage: chargeReservation(reservation),
+            user_id: ctx.user_id,
+            instance_id: instance.loaded?.id ?? null,
+            tool_name: name,
+            status: "error",
+            latency_ms: Date.now() - started,
+            error_message: persistedToolErrorMessage(e),
+            workflow_id: workflowIdFromCall(name, args, null),
+            session_id: sessionId,
+            auth: callAuth(ctx),
+          });
+          log.info("mcp.gateway.request", {
+            method: "tools/call",
+            tool: name,
+            user_id: ctx.user_id,
+            key_id: ctx.key_id,
+            request_id: source.request_id,
+            latency_ms: Date.now() - started,
+            status: "conflict",
+            conflict_code: e.code,
+            ...protocolLog,
+          });
+          return rpcResult(req.id, {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({ success: false, code: e.code, message: e.message }, null, 2),
+              },
+            ],
+            isError: true,
           });
         }
         const sentryEventId = Sentry.captureException(e, {

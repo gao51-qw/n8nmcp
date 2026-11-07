@@ -123,10 +123,17 @@ describe("GET /api/billing/config", () => {
     // The customData binding is server-signed for this user and verifies.
     const customData = body.checkout!.customData;
     expect(Math.abs(customData.ts * 1000 - Date.now())).toBeLessThan(60_000);
+    expect(customData.nonce).toMatch(/^[A-Za-z0-9_-]{22}$/);
     expect(verifyCheckoutBinding(customData, Date.now())).toMatchObject({
       ok: true,
       userId: USER_ID,
+      nonce: customData.nonce,
     });
+    // Every config response carries a fresh single-use nonce.
+    const again = billingConfigSchema.parse(
+      await (await getConfig(request("/api/billing/config"))).json(),
+    );
+    expect(again.checkout!.customData.nonce).not.toBe(customData.nonce);
     // No server secret reaches the browser.
     const serialized = JSON.stringify(body);
     expect(serialized).not.toContain("pdl_sdbx_apikey_secret_value");

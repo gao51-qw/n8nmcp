@@ -104,20 +104,32 @@ export function AdminTicketWorkbench() {
   const [forbidden, setForbidden] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const detailRef = useRef<TicketDetail | null>(null);
+  // The selection as of the latest render or queue load, readable from async
+  // code that must not apply a response for a ticket that is no longer selected.
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
-  const loadQueue = useCallback(async (nextQueue: SupportQueue) => {
+  const loadQueue = useCallback(async (nextQueue: SupportQueue): Promise<string | null> => {
     const result = await supportFetch<{ tickets: SupportTicket[] }>(
       `/api/support/admin/tickets?queue=${nextQueue}`,
     );
     setTickets(result.tickets);
-    setSelectedId((current) => {
-      if (current && result.tickets.some((ticket) => ticket.id === current)) return current;
-      return result.tickets[0]?.id ?? null;
-    });
+    const current = selectedIdRef.current;
+    const next =
+      current && result.tickets.some((ticket) => ticket.id === current)
+        ? current
+        : (result.tickets[0]?.id ?? null);
+    selectedIdRef.current = next;
+    setSelectedId(next);
+    return next;
   }, []);
 
   const loadDetail = useCallback(async (ticketId: string) => {
     const result = await supportFetch<TicketDetail>(`/api/support/admin/tickets/${ticketId}`);
+    // A mutation can move the ticket out of this queue while the detail
+    // request is in flight; its answer must not resurrect a pane whose forms
+    // would then act on no selection.
+    if (selectedIdRef.current !== ticketId) return;
     setDetail(result);
     detailRef.current = result;
     setSignedLinks({});
@@ -159,10 +171,13 @@ export function AdminTicketWorkbench() {
   }, [handleLoadError, loadDetail, selectedId]);
 
   const refreshSelected = useCallback(async () => {
-    const requests: Promise<unknown>[] = [loadQueue(queue)];
-    if (selectedId) requests.push(loadDetail(selectedId));
-    await Promise.all(requests);
-  }, [loadDetail, loadQueue, queue, selectedId]);
+    // Queue first: it decides whether the selected ticket is still in view. A
+    // changed selection is loaded by the selection effect; the same ticket is
+    // refreshed here.
+    const previous = selectedIdRef.current;
+    const next = await loadQueue(queue);
+    if (next && next === previous) await loadDetail(next);
+  }, [loadDetail, loadQueue, queue]);
 
   useEffect(
     () =>
@@ -346,7 +361,10 @@ export function AdminTicketWorkbench() {
                       type="button"
                       data-ticket-id={ticket.id}
                       aria-pressed={selectedId === ticket.id}
-                      onClick={() => setSelectedId(ticket.id)}
+                      onClick={() => {
+                        selectedIdRef.current = ticket.id;
+                        setSelectedId(ticket.id);
+                      }}
                       className={cn(
                         "w-full space-y-2 px-4 py-4 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         selectedId === ticket.id && "bg-muted",

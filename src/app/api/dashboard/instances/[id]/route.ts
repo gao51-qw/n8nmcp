@@ -1,5 +1,7 @@
 // One n8n instance of the signed-in user.
 //   PATCH { mcp_token: string | null } → set (after checking) or clear the MCP token
+//   PATCH { is_default: true }          → make it the instance MCP tools work with
+//         (one field per request; to move MCP away, choose another instance)
 //   DELETE → remove the instance and its stored secrets
 import { requireSupportUser } from "@/lib/support/auth.server";
 import {
@@ -9,7 +11,12 @@ import {
   readJsonObject,
   withApiErrors,
 } from "@/lib/http/api-response.server";
-import { deleteInstance, InstanceError, setNativeMcpToken } from "@/lib/n8n-instances.server";
+import {
+  deleteInstance,
+  InstanceError,
+  setDefaultInstance,
+  setNativeMcpToken,
+} from "@/lib/n8n-instances.server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,8 +36,28 @@ export async function PATCH(request: Request, context: Context) {
       const user = await requireSupportUser(request);
       const id = await instanceId(context);
       const body = await readJsonObject(request);
-      if (!body || !("mcp_token" in body)) {
-        throw new HttpError(400, "invalid_request", "mcp_token is required");
+      const hasToken = body !== null && "mcp_token" in body;
+      const hasDefault = body !== null && "is_default" in body;
+      if (!body || (!hasToken && !hasDefault)) {
+        throw new HttpError(400, "invalid_request", "mcp_token or is_default is required");
+      }
+      if (hasToken && hasDefault) {
+        throw new HttpError(
+          400,
+          "invalid_request",
+          "Send either mcp_token or is_default, not both",
+        );
+      }
+      if (hasDefault) {
+        if (body.is_default !== true) {
+          throw new HttpError(
+            400,
+            "invalid_request",
+            "is_default can only be set to true; choose another instance to move MCP away from this one",
+          );
+        }
+        const instance = await setDefaultInstance(user.userId, id);
+        return apiJson({ instance }, { requestId });
       }
       const instance = await setNativeMcpToken(user.userId, id, body.mcp_token);
       return apiJson({ instance }, { requestId });

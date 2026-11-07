@@ -324,6 +324,29 @@ describe("admin ticket workbench", () => {
     expect(mocks.supportFetch).toHaveBeenCalledWith(`/api/support/admin/tickets/${ticketId}`);
   });
 
+  it("closes the detail pane when a mutation moves the ticket out of the queue", async () => {
+    const view = await render(<AdminTicketWorkbench />);
+    roots.push(view.root);
+    expect(view.host.querySelector('[data-testid="ticket-conversation"]')).not.toBeNull();
+
+    // The status change moves the ticket to "waiting_user": the unassigned
+    // queue comes back empty while the detail request still answers.
+    mocks.supportFetch.mockImplementation((url: string) => {
+      if (url === "/api/support/admin/agents") return Promise.resolve({ agents: [] });
+      if (url.startsWith("/api/support/admin/tickets?")) return Promise.resolve({ tickets: [] });
+      return Promise.resolve(detail({ status: "waiting_user" }));
+    });
+    const select = view.host.querySelector('select[aria-label="Set status"]') as HTMLSelectElement;
+    await change(select, "waiting_user");
+    await click(view.host.querySelector('button[data-action="status"]'));
+    await act(async () => undefined);
+
+    expect(view.host.textContent).toContain("Queue is clear");
+    expect(view.host.textContent).toContain("Select a ticket");
+    expect(view.host.querySelector('[data-testid="ticket-conversation"]')).toBeNull();
+    expect(view.host.querySelector('textarea[aria-label="Internal note"]')).toBeNull();
+  });
+
   it("refreshes queue and selected detail after adding a tag", async () => {
     const view = await render(<AdminTicketWorkbench />);
     roots.push(view.root);

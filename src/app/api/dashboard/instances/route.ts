@@ -1,5 +1,5 @@
 // n8n instances of the signed-in user.
-//   GET  → instances without secrets
+//   GET  → instances without secrets, each with is_default (the instance MCP uses)
 //   POST { name, base_url, api_key, mcp_token? } → checked against n8n, stored encrypted
 import { requireSupportUser } from "@/lib/support/auth.server";
 import { apiJson, HttpError, readJsonObject, withApiErrors } from "@/lib/http/api-response.server";

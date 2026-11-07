@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { authStore, getAccessToken } from "@/lib/auth/browser-session.client";
 
 /**
  * A failed API request. `message` is already user-presentable, parsed from
@@ -71,27 +71,60 @@ export async function apiErrorFromResponse(response: Response): Promise<ApiError
   return new ApiError(message, { status: response.status, requestId: headerRequestId });
 }
 
-export async function supportFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const { data, error } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
+export const SESSION_EXPIRED_MESSAGE = "Your session has expired. Sign in again to continue.";
 
-  if (error || !token) {
+/** A rotated access token, or null when the refresh yielded nothing new. */
+async function refreshedAccessToken(current: string): Promise<string | null> {
+  try {
+    const session = await authStore().refresh();
+    const token = session?.access_token ?? null;
+    return token && token !== current ? token : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function supportFetch<T>(url: string, init: RequestInit = {}): Promise<T> {
+  // The short-lived access token lives in memory only and is refreshed
+  // through the HttpOnly refresh cookie before it expires.
+  const token = await getAccessToken();
+
+  if (!token) {
     throw new ApiError("Authentication required", {
       status: 401,
       code: "authentication_required",
     });
   }
 
-  const headers = new Headers(init.headers);
-  if (!headers.has("content-type")) {
-    headers.set("content-type", "application/json");
-  }
-  headers.set("authorization", `Bearer ${token}`);
+  const send = (bearer: string) => {
+    const headers = new Headers(init.headers);
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
+    headers.set("authorization", `Bearer ${bearer}`);
+    return fetch(url, { ...init, headers });
+  };
 
-  const response = await fetch(url, {
-    ...init,
-    headers,
-  });
+  let response = await send(token);
+
+  if (response.status === 401 && !init.signal?.aborted) {
+    // The server rejected a token the store still considered valid (the
+    // session was revoked elsewhere, or expired during a long request):
+    // rotate it once through the HttpOnly cookie and retry.
+    const fresh = await refreshedAccessToken(token);
+    if (fresh) response = await send(fresh);
+    if (response.status === 401) {
+      // Still rejected: the session is gone. Forgetting it here sends the
+      // dashboard shell to the sign-in page instead of leaving every page
+      // stuck on an "Authentication required" error.
+      authStore().clear();
+      throw new ApiError(SESSION_EXPIRED_MESSAGE, {
+        status: 401,
+        code: "session_expired",
+        requestId: response.headers.get("x-request-id") ?? undefined,
+      });
+    }
+  }
 
   if (!response.ok) {
     throw await apiErrorFromResponse(response);

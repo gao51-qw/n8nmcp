@@ -115,7 +115,7 @@ describe("knowledge publication and deployment contracts", () => {
       'rm -f -- "${ENV_FILE}.bak"',
       'docker image rm "${IMAGE}:${ROLLBACK_TAG}"',
     ]);
-    expect(deploy).not.toMatch(/docker compose[^\n]+(?:up|restart|stop)[^\n]+\b(?:app|caddy)\b/);
+    expect(deploy).not.toMatch(/docker compose[^\n]+(?:up|restart|stop)[^\n]+\b(?:app|nginx)\b/);
 
     const signalOutcome = runDeploymentCommand(
       process.execPath,
@@ -218,7 +218,7 @@ descendant.once("spawn", () => descendant.unref());`,
     expect(result.log).toContain("compose -f compose.yml up -d --no-deps mcp");
     expect(result.log).toContain("exec n8n-knowledge-mcp node");
     expect(result.log).toContain(" 42");
-    expect(result.log).not.toMatch(/\b(?:app|caddy)\b/);
+    expect(result.log).not.toMatch(/\b(?:app|nginx)\b/);
     expect(result.backupExists).toBe(false);
   }, 35_000);
 
@@ -247,7 +247,7 @@ descendant.once("spawn", () => descendant.unref());`,
     expect(result.log).toMatch(/compose -f compose\.yml up -d --no-deps --pull never mcp/);
     expect(result.log.match(/exec n8n-knowledge-mcp node/g)).toHaveLength(2);
     expect(result.log).toContain(`image rm ghcr.io/example/n8n-knowledge-mcp:${rollbackTag}`);
-    expect(result.log).not.toMatch(/\b(?:app|caddy)\b/);
+    expect(result.log).not.toMatch(/\b(?:app|nginx)\b/);
   }, 35_000);
 
   it("fails before pull, tag persistence, or compose when the running image ID is unavailable", async () => {

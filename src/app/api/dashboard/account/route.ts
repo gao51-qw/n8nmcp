@@ -12,7 +12,8 @@ export async function DELETE(request: Request) {
   return withApiErrors(
     request,
     async ({ requestId }) => {
-      const user = await requireSupportUser(request);
+      // Erasure acts on the sign-in itself: never trust a cached verification.
+      const user = await requireSupportUser(request, { fresh: true });
       const body = await readJsonObject(request);
       await deleteOwnAccount(user, body?.confirm_email);
       log.info("account.deleted", { user_id: user.userId });

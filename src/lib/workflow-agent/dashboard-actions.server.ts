@@ -1,5 +1,6 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
+  assessRollback,
   checkShortWindowQuota,
   dispatchTool,
   effectiveTier,
@@ -12,8 +13,11 @@ import {
   buildWorkflowAgentCallMetadata,
   workflowIdFromCall,
 } from "@/lib/workflow-agent/call-metadata.server";
-import { persistedToolErrorMessage } from "@/lib/mcp-tool-errors";
+import { errorFields } from "@/lib/error-fields.server";
+import { log } from "@/lib/logger.server";
+import { persistedToolErrorMessage, sanitizedToolErrorMessage } from "@/lib/mcp-tool-errors";
 import {
+  AuditRollbackError,
   PREVIEW_INSTANCE_MISMATCH_MESSAGE,
   WorkflowActionConflictError,
   assertSameInstance,
@@ -41,6 +45,11 @@ export type DashboardAgentAction =
       action: "rollback";
       auditLogId: string;
       reason?: string;
+      /**
+       * Overwrite edits made after the audited change. Needs its own
+       * confirmation token and never overrides an instance mismatch.
+       */
+      force?: boolean;
       confirmationToken?: string;
     };
 
@@ -55,6 +64,8 @@ export type DashboardAgentActionDependencies = {
   loadPreview: (userId: string, previewCallId: string) => Promise<PreviewRow | null>;
   getInstance: (userId: string) => Promise<N8nInstance | null>;
   dispatch: Dispatch;
+  /** Read-only rollback precheck, run before the confirmation token is consumed. */
+  assessRollback: typeof assessRollback;
   recordCall: typeof recordCall;
   /**
    * Applies the short-window throttle and atomically reserves one unit of
@@ -91,6 +102,7 @@ const defaultDependencies: DashboardAgentActionDependencies = {
   },
   getInstance: getDefaultInstance,
   dispatch: dispatchTool,
+  assessRollback,
   recordCall,
   async checkQuota(userId) {
     // One subscription lookup serves both limiters; without a tier,
@@ -126,8 +138,8 @@ const defaultDependencies: DashboardAgentActionDependencies = {
  * Tracks the unit reserved by checkQuota for one action. Billing rule (same as
  * the MCP gateway, see reserveDailyQuota in mcp.server.ts): the unit is charged
  * once the tool was dispatched (success or tool error); rejected preconditions
- * (preview, instance, confirmation round-trip) and a missing n8n instance are
- * refunded.
+ * (preview, instance, rollback precheck conflict, confirmation round-trip) and
+ * a missing n8n instance are refunded.
  */
 type QuotaReservation = { charged: boolean };
 
@@ -196,15 +208,34 @@ async function performAction(
     );
   }
 
+  const force = input.force === true;
+  const instance = await requireInstance(userId, dependencies);
+  // Precheck before the confirmation token is consumed, so a conflicting
+  // rollback is reported (and refunded) without spending the user's
+  // confirmation. A changed or unverifiable workflow may be overwritten only
+  // with force; an instance mismatch never may.
+  // A missing or already rolled-back audit row is a precondition failure
+  // (404 / 409, refunded), not a server error.
+  let assessment: Awaited<ReturnType<typeof assessRollback>>;
+  try {
+    assessment = await dependencies.assessRollback(instance, userId, input.auditLogId);
+  } catch (error) {
+    throw toDashboardError(error);
+  }
+  if (!assessment.ok && (assessment.conflict === "instance_mismatch" || !force)) {
+    throw new DashboardAgentActionError(409, assessment.conflict, assessment.message);
+  }
   await dependencies.confirmation.requireOrConsume({
     userId,
     action: "Rollback workflow",
-    scope: { auditLogId: input.auditLogId },
+    // Same scope as the MCP path: a forced rollback needs its own token, so a
+    // non-forced token cannot authorize overwriting newer edits.
+    scope: force ? { auditLogId: input.auditLogId, force: true } : { auditLogId: input.auditLogId },
     confirmationToken: input.confirmationToken,
   });
-  // rollback_workflow itself verifies the audit row's instance and that the
-  // workflow is unchanged since the audited change; its structured conflicts
-  // are mapped to 409 responses in dispatchAndRecord.
+  // rollback_workflow repeats these checks right before its PUT; a conflict
+  // raised there (an edit landed after this precheck) is mapped to a 409 in
+  // dispatchAndRecord.
   return dispatchAndRecord(
     userId,
     "rollback",
@@ -212,9 +243,10 @@ async function performAction(
     {
       auditLogId: input.auditLogId,
       reason: input.reason,
+      ...(force ? { force: true } : {}),
       confirm: true,
     },
-    await requireInstance(userId, dependencies),
+    instance,
     context,
     dependencies,
     reservation,
@@ -232,10 +264,54 @@ async function requireInstance(
   return instance;
 }
 
-/** Map a structured workflow-action conflict to a 409 dashboard error. */
+/**
+ * Map typed workflow-action errors to dashboard errors with their fixed
+ * messages: conflicts (instance mismatch, newer edits, stale preview, claimed
+ * rollback) become 409, a missing audit row 404. Anything else is unchanged.
+ */
 function toDashboardError(error: unknown): unknown {
   if (error instanceof WorkflowActionConflictError) {
     return new DashboardAgentActionError(409, error.code, error.message);
+  }
+  if (error instanceof AuditRollbackError) {
+    return error.code === "not_found"
+      ? new DashboardAgentActionError(404, "not_found", error.message)
+      : new DashboardAgentActionError(409, "already_rolled_back", error.message);
+  }
+  return error;
+}
+
+const N8N_UNAVAILABLE_MESSAGE =
+  "n8n did not complete the request. Check that the instance is reachable and that its API key is still valid, then try again.";
+
+const N8N_FAILURE_PATTERNS = [
+  /^n8n (?:MCP )?request failed\b/i,
+  /\bUnable to verify target host\b/i,
+  /\bfetch failed\b/i,
+  /\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH)\b/,
+];
+
+function isN8nFailure(error: Error): boolean {
+  if (error.name === "AbortError" || error.name === "TimeoutError") return true;
+  return N8N_FAILURE_PATTERNS.some((pattern) => pattern.test(error.message));
+}
+
+/**
+ * Errors thrown while the tool ran. Typed conflicts keep their 409/404. A
+ * message the MCP gateway would show to its clients (fixed workflow-agent
+ * texts, validation feedback) becomes a 422 the console can display, and an
+ * n8n transport failure a 502 with fixed guidance: both are expected outcomes
+ * of the user's own instance, not faults, so the route does not report them
+ * as internal errors. Anything else is unexpected and keeps propagating to the
+ * generic 500 (and Sentry).
+ */
+function toolFailure(error: unknown): unknown {
+  const mapped = toDashboardError(error);
+  if (mapped instanceof DashboardAgentActionError || !(error instanceof Error)) return mapped;
+  const safe = sanitizedToolErrorMessage(error.message);
+  if (safe) return new DashboardAgentActionError(422, "tool_rejected", safe);
+  if (isN8nFailure(error)) {
+    return new DashboardAgentActionError(502, "n8n_unavailable", N8N_UNAVAILABLE_MESSAGE);
   }
   return error;
 }
@@ -308,8 +384,14 @@ async function dispatchAndRecord(
       confirmationVerified: true,
     });
   } catch (error) {
-    // Ordinary tool errors are billable: the tool was dispatched.
+    // Ordinary tool errors are billable: the tool was dispatched. The cause is
+    // logged here because the response carries only fixed text.
     reservation.charged = true;
+    log.warn("agent_console.tool_failed", {
+      requestId: context.requestId,
+      tool: toolName,
+      ...errorFields(error),
+    });
     await dependencies.recordCall({
       usage: "reserved",
       user_id: userId,
@@ -322,7 +404,7 @@ async function dispatchAndRecord(
       workflow_id: workflowIdFromCall(toolName, args, null),
       session_id: context.requestId,
     });
-    throw toDashboardError(error);
+    throw toolFailure(error);
   }
 
   if (result.needsInstance) {

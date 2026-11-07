@@ -18,6 +18,10 @@ const upstreamMocks = vi.hoisted(() => ({
   callUpstreamTool: vi.fn(),
 }));
 
+const n8nMocks = vi.hoisted(() => ({
+  safeFetchPublicUrl: vi.fn(),
+}));
+
 function tableResult(table: string, ops: string[]): { data: unknown; error: unknown } {
   if (table === "platform_api_keys") {
     return { data: { id: "key-1", user_id: "user-1", revoked_at: null }, error: null };
@@ -89,6 +93,8 @@ vi.mock("../mcp-upstream.server", () => ({
   listUpstreamTools: vi.fn(async () => []),
 }));
 
+vi.mock("../ssrf-guard.server", () => ({ safeFetchPublicUrl: n8nMocks.safeFetchPublicUrl }));
+
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn(() => "sentry-event") }));
 
 vi.mock("@/lib/logger.server", () => ({
@@ -142,6 +148,12 @@ describe("MCP tools/call round trips", () => {
     clearKnowledgeCacheForTests();
   });
 
+  function n8nMethods(): string[] {
+    return n8nMocks.safeFetchPublicUrl.mock.calls.map(([, init]) =>
+      String((init as RequestInit | undefined)?.method ?? "GET").toUpperCase(),
+    );
+  }
+
   it("serves a knowledge tool without loading or decrypting the n8n instance", async () => {
     const payload = await callTool("search_nodes", { query: `http-${Math.random()}` });
 
@@ -170,5 +182,39 @@ describe("MCP tools/call round trips", () => {
       { base_url: "https://n8n.example.com", api_key: "decrypted-secret" },
       expect.objectContaining({ user_id: "user-1" }),
     );
+  });
+  it("adds exactly one n8n verification read to a workflow write, and no database round trip", async () => {
+    const workflow = {
+      id: "wf-1",
+      name: "Orders",
+      versionId: "v1",
+      nodes: [],
+      connections: {},
+      settings: {},
+    };
+    n8nMocks.safeFetchPublicUrl.mockImplementation(async (_url: string, init?: RequestInit) => {
+      const body =
+        init?.method === "PUT" ? { ...workflow, name: "Renamed", versionId: "v2" } : workflow;
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    });
+
+    const payload = await callTool("update_workflow", {
+      id: "wf-1",
+      name: "Renamed",
+      confirm: true,
+    });
+
+    expect(payload.result).toBeDefined();
+    // Audit before-snapshot read, the tool's own read, the PUT, then one
+    // post-write verification read (the only call this check adds).
+    expect(n8nMethods()).toEqual(["GET", "GET", "PUT", "GET"]);
+    expect(db.calls.map((call) => call.name)).toEqual([
+      "authenticate_mcp_platform_key",
+      "check_mcp_rate_limit",
+      "reserve_mcp_usage",
+      "n8n_instances",
+      "workflow_audit_log",
+      "mcp_call_logs",
+    ]);
   });
 });

@@ -9,6 +9,7 @@
 // `expose`. Anything else becomes a generic 500 and is logged and reported.
 import * as Sentry from "@sentry/nextjs";
 import { ZodError } from "zod";
+import { errorFields, sentryEnabled } from "@/lib/error-fields.server";
 import { getRequestId, log } from "@/lib/logger.server";
 
 export const NO_STORE_HEADERS = {
@@ -161,10 +162,12 @@ export function apiErrorResponse(
   }
 
   const sentryEventId = Sentry.captureException(error, { tags: { requestId, domain: "api" } });
+  // The response hides the cause, so the log line is where it has to survive
+  // (Sentry only receives it when a DSN is configured).
   log.error(options.logEvent ?? "api.request_failed", {
     requestId,
-    sentryEventId,
-    errorType: error instanceof Error ? error.name : typeof error,
+    ...(sentryEnabled() ? { sentryEventId } : {}),
+    ...errorFields(error),
   });
   return jsonError(500, "internal_error", options.internalMessage ?? "Request failed", {
     requestId,

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { Json } from "@/integrations/supabase/types";
 import { buildWorkflowAgentConsoleData } from "../dashboard-agent-console";
 
 describe("buildWorkflowAgentConsoleData", () => {
@@ -251,8 +252,42 @@ describe("buildWorkflowAgentConsoleData", () => {
       status: "failed",
       summary: expect.stringContaining("Smoke test failed"),
     });
-    expect(data.rollbackStatus).toBe("rolled-back");
+    // audit-1 is a live rollback candidate: one rolled-back row further down
+    // the history (audit-2) must not disable the Rollback button.
+    expect(data.instanceName).toBe("Primary");
+    expect(data.rollbackCandidate).toMatchObject({ auditLogId: "audit-1" });
+    expect(data.rollbackStatus).toBe("available");
     expect(data.auditLog.map((entry) => entry.actor)).toContain("update_partial_workflow");
+  });
+
+  it("reports rolled-back only when the newest audited change was rolled back", () => {
+    const row = {
+      workflow_id: "wf-1",
+      workflow_name: null,
+      operation: "update" as const,
+      tool_name: "update_partial_workflow",
+      ai_reasoning: null,
+      changes: [],
+      tool_params: {},
+      snapshot_before: { id: "wf-1" },
+      snapshot_after: { id: "wf-1" },
+    };
+    const data = buildWorkflowAgentConsoleData({
+      now: new Date("2026-07-09T10:00:05.000Z"),
+      workflowId: "wf-1",
+      instance: null,
+      subscription: null,
+      usageToday: null,
+      callLogs: [],
+      auditRows: [
+        { ...row, id: "audit-new", is_rolled_back: true, created_at: "2026-07-09T10:00:04.000Z" },
+        { ...row, id: "audit-old", is_rolled_back: true, created_at: "2026-07-09T10:00:01.000Z" },
+      ],
+    });
+
+    expect(data.rollbackCandidate).toBeUndefined();
+    expect(data.rollbackStatus).toBe("rolled-back");
+    expect(data.instanceName).toBeUndefined();
   });
 
   it("returns an empty real-data state instead of fixture content", () => {
@@ -302,5 +337,55 @@ describe("buildWorkflowAgentConsoleData", () => {
       status: "blocked",
       summary: expect.stringContaining("Missing URL"),
     });
+  });
+  it("maps the post-write concurrency verdict onto audit entries", () => {
+    const row = (id: string, toolParams: Json) => ({
+      id,
+      workflow_id: "wf-1",
+      operation: "update" as const,
+      tool_name: "update_partial_workflow",
+      ai_reasoning: null,
+      is_rolled_back: false,
+      created_at: "2026-07-09T10:06:00.000Z",
+      snapshot_before: { id: "wf-1" },
+      snapshot_after: { id: "wf-1" },
+      changes: [],
+      tool_params: toolParams,
+    });
+    const data = buildWorkflowAgentConsoleData({
+      now: new Date("2026-07-09T10:10:00.000Z"),
+      workflowId: "wf-1",
+      callLogs: [],
+      auditRows: [
+        row("after", {
+          concurrencyAfterWrite: { status: "concurrent_write_after", signal: "versionId" },
+        }),
+        row("suspected", {
+          concurrencyAfterWrite: {
+            status: "concurrent_write_suspected",
+            signal: "preserved_fields",
+          },
+        }),
+        row("unverified", {
+          concurrencyAfterWrite: { status: "unverified", signal: "reread_failed" },
+        }),
+        row("clean", { concurrencyAfterWrite: { status: "clean", signal: null } }),
+        row("legacy", {}),
+        row("bogus", { concurrencyAfterWrite: { status: "<script>" } }),
+      ],
+    });
+
+    const byId = Object.fromEntries(data.auditLog.map((entry) => [entry.id, entry]));
+    expect(byId.after).toMatchObject({ level: "warning", concurrency: "concurrent_write_after" });
+    expect(byId.suspected).toMatchObject({
+      level: "warning",
+      concurrency: "concurrent_write_suspected",
+    });
+    // Unverified is shown but does not escalate the entry's level.
+    expect(byId.unverified).toMatchObject({ level: "decision", concurrency: "unverified" });
+    for (const id of ["clean", "legacy", "bogus"]) {
+      expect(byId[id]).toMatchObject({ level: "decision" });
+      expect(byId[id]).not.toHaveProperty("concurrency");
+    }
   });
 });

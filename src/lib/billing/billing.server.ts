@@ -2,6 +2,7 @@
 // key never leaves this module; only the public client token and price ID
 // are returned to the browser.
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { errorFields } from "@/lib/error-fields.server";
 import { HttpError } from "@/lib/http/api-response.server";
 import { log } from "@/lib/logger.server";
 import {
@@ -78,10 +79,7 @@ async function loadSubscriptionRow(userId: string): Promise<SubscriptionRow | nu
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
-    log.error("billing.subscription.lookup_failed", {
-      user_id: userId,
-      errorType: "SupabaseError",
-    });
+    log.error("billing.subscription.lookup_failed", { user_id: userId, ...errorFields(error) });
     throw new HttpError(500, "billing_unavailable", "Billing details could not be loaded.");
   }
   return (data as SubscriptionRow | null) ?? null;
@@ -141,7 +139,7 @@ export async function createCustomerPortalUrl(userId: string): Promise<string> {
     .eq("user_id", userId)
     .maybeSingle();
   if (error) {
-    log.error("billing.portal.lookup_failed", { user_id: userId, errorType: "SupabaseError" });
+    log.error("billing.portal.lookup_failed", { user_id: userId, ...errorFields(error) });
     throw new HttpError(500, "billing_unavailable", "Billing details could not be loaded.");
   }
 
@@ -166,10 +164,7 @@ export async function createCustomerPortalUrl(userId: string): Promise<string> {
     );
     url = session.urls?.general?.overview;
   } catch (cause) {
-    log.error("billing.portal.create_failed", {
-      user_id: userId,
-      errorType: cause instanceof Error ? cause.name : typeof cause,
-    });
+    log.error("billing.portal.create_failed", { user_id: userId, ...errorFields(cause) });
     throw new HttpError(502, "portal_unavailable", "The billing portal could not be opened.");
   }
 

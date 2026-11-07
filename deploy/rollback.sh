@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Roll the app container back to a previously pulled GHCR image tag.
+# Roll the app container back to a previously pulled GHCR image tag
+# (docker-compose.yml). aaPanel host nginx proxies to 127.0.0.1:3001 and
+# needs no reload when the container is replaced.
 #
 # Usage from /opt/n8nworkflow:
 #   ./rollback.sh                # pick the previous local app image tag
@@ -82,9 +84,8 @@ apply_tag() {
   set_env_tag "$new_tag"
 
   echo "==> Restarting ${SERVICE}"
-  $COMPOSE up -d "$SERVICE" caddy
+  $COMPOSE up -d "$SERVICE"
   wait_for_healthy n8nworkflow-app
-  wait_for_healthy n8nworkflow-caddy
 
   echo "Rollback complete: ${SERVICE} now uses ${new_tag}"
 }

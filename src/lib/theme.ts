@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { authStore } from "@/lib/auth/browser-session.client";
 
 export type ThemeChoice = "light" | "dark" | "system";
 export const THEME_STORAGE_KEY = "n8n-mcp-theme";
@@ -32,8 +33,8 @@ export async function setTheme(next: ThemeChoice, opts?: { remote?: boolean }) {
     window.dispatchEvent(new CustomEvent(THEME_EVENT, { detail: next }));
   }
   if (opts?.remote !== false) {
-    const { data } = await supabase.auth.getUser();
-    const uid = data.user?.id;
+    await authStore().start();
+    const uid = authStore().getSnapshot().session?.user.id;
     if (uid) {
       await supabase.from("profiles").update({ theme_preference: next }).eq("id", uid);
     }

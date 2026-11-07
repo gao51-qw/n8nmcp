@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   listInstances: vi.fn(),
   createInstance: vi.fn(),
   setNativeMcpToken: vi.fn(),
+  setDefaultInstance: vi.fn(),
   deleteInstance: vi.fn(),
   deleteOwnAccount: vi.fn(),
   listGrants: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock("@/lib/n8n-instances.server", async (importOriginal) => {
     listInstances: mocks.listInstances,
     createInstance: mocks.createInstance,
     setNativeMcpToken: mocks.setNativeMcpToken,
+    setDefaultInstance: mocks.setDefaultInstance,
     deleteInstance: mocks.deleteInstance,
   };
 });
@@ -167,7 +169,74 @@ describe("dashboard API error contract", () => {
       ),
       400,
       "invalid_request",
-      "mcp_token is required",
+      "mcp_token or is_default is required",
+    );
+    await expectError(
+      await instance.PATCH(
+        req(`/api/dashboard/instances/${KEY_ID}`, {
+          method: "PATCH",
+          body: '{"is_default":false}',
+        }),
+        params(KEY_ID),
+      ),
+      400,
+      "invalid_request",
+      "is_default can only be set to true; choose another instance to move MCP away from this one",
+    );
+    await expectError(
+      await instance.PATCH(
+        req(`/api/dashboard/instances/${KEY_ID}`, {
+          method: "PATCH",
+          body: '{"is_default":"true"}',
+        }),
+        params(KEY_ID),
+      ),
+      400,
+      "invalid_request",
+      "is_default can only be set to true; choose another instance to move MCP away from this one",
+    );
+    await expectError(
+      await instance.PATCH(
+        req(`/api/dashboard/instances/${KEY_ID}`, {
+          method: "PATCH",
+          body: '{"is_default":true,"mcp_token":null}',
+        }),
+        params(KEY_ID),
+      ),
+      400,
+      "invalid_request",
+      "Send either mcp_token or is_default, not both",
+    );
+    expect(mocks.setDefaultInstance).not.toHaveBeenCalled();
+    expect(mocks.setNativeMcpToken).not.toHaveBeenCalled();
+  });
+
+  it("chooses the MCP instance with is_default: true", async () => {
+    const { InstanceError } = await import("@/lib/n8n-instances.server");
+    const instance = await import("../instances/[id]/route");
+    mocks.setDefaultInstance.mockResolvedValueOnce({ id: KEY_ID, is_default: true });
+
+    const response = await instance.PATCH(
+      req(`/api/dashboard/instances/${KEY_ID}`, { method: "PATCH", body: '{"is_default":true}' }),
+      params(KEY_ID),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    await expect(response.json()).resolves.toEqual({
+      instance: { id: KEY_ID, is_default: true },
+    });
+    expect(mocks.setDefaultInstance).toHaveBeenCalledWith("user-1", KEY_ID);
+    expect(mocks.setNativeMcpToken).not.toHaveBeenCalled();
+
+    mocks.setDefaultInstance.mockRejectedValueOnce(new InstanceError("Instance not found", 404));
+    await expectError(
+      await instance.PATCH(
+        req(`/api/dashboard/instances/${KEY_ID}`, { method: "PATCH", body: '{"is_default":true}' }),
+        params(KEY_ID),
+      ),
+      404,
+      "not_found",
+      "Instance not found",
     );
   });
 

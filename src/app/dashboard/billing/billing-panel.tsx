@@ -111,15 +111,20 @@ export function BillingPanel() {
     };
   }, [checkoutEnabled, clientToken, environment, pollForUpgrade]);
 
-  function openCheckout() {
+  async function openCheckout() {
     if (!paddle || !config?.prices.pro || !config.checkout) return;
     setOpening(true);
     try {
+      // The signed customData is single use: one binding per nonce. Fetch a
+      // fresh one for every checkout so a second purchase is not rejected.
+      const fresh = await load();
+      if (!fresh?.enabled || !fresh.prices.pro || !fresh.checkout) return;
       paddle.Checkout.open({
-        items: [{ priceId: config.prices.pro, quantity: 1 }],
-        ...(config.checkout.email ? { customer: { email: config.checkout.email } } : {}),
-        // The webhook maps the subscription to this account via customData.user_id.
-        customData: config.checkout.customData,
+        items: [{ priceId: fresh.prices.pro, quantity: 1 }],
+        ...(fresh.checkout.email ? { customer: { email: fresh.checkout.email } } : {}),
+        // The webhook binds the subscription to this account only through the
+        // server-signed customData { user_id, ts, nonce, sig }.
+        customData: fresh.checkout.customData,
         settings: { displayMode: "overlay", allowLogout: false },
       });
     } finally {
@@ -234,7 +239,11 @@ export function BillingPanel() {
               Payment received. Activating your plan...
             </p>
           ) : checkoutEnabled ? (
-            <Button className="mt-4" onClick={openCheckout} disabled={!paddle || opening}>
+            <Button
+              className="mt-4"
+              onClick={() => void openCheckout()}
+              disabled={!paddle || opening}
+            >
               {!paddle || opening ? <Loader2 className="animate-spin" aria-hidden="true" /> : null}
               Upgrade to {TIER_LABELS.pro}
             </Button>

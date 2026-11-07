@@ -10,7 +10,11 @@ import { Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { supabase } from "@/integrations/supabase/client";
+import {
+  approveAuthorization,
+  denyAuthorization,
+  getAuthorizationDetails,
+} from "@/lib/auth/oauth-server.client";
 import {
   DEFAULT_GRANTED_SCOPES,
   MCP_SCOPES,
@@ -53,7 +57,7 @@ function ConsentScreen() {
       return;
     }
     let cancelled = false;
-    supabase.auth.oauth.getAuthorizationDetails(authorizationId).then(({ data, error }) => {
+    getAuthorizationDetails(authorizationId).then(({ data, error }) => {
       if (cancelled) return;
       if (error || !data) {
         setState({
@@ -97,10 +101,7 @@ function ConsentScreen() {
         method: "POST",
         body: JSON.stringify({ authorization_id: pending.authorizationId, scopes }),
       });
-      const { data, error } = await supabase.auth.oauth.approveAuthorization(
-        pending.authorizationId,
-        { skipBrowserRedirect: true },
-      );
+      const { data, error } = await approveAuthorization(pending.authorizationId);
       if (error || !data) throw new Error("Supabase did not accept the approval.");
       setState({ kind: "redirecting" });
       window.location.assign(data.redirect_url);
@@ -113,9 +114,7 @@ function ConsentScreen() {
   async function deny(pending: Pending) {
     setSubmitting(true);
     setActionError(null);
-    const { data, error } = await supabase.auth.oauth.denyAuthorization(pending.authorizationId, {
-      skipBrowserRedirect: true,
-    });
+    const { data, error } = await denyAuthorization(pending.authorizationId);
     if (error || !data) {
       setActionError("Could not send the refusal. Close this window to cancel.");
       setSubmitting(false);
