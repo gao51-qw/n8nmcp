@@ -95,7 +95,11 @@ export async function removeSupportAttachments(userId: string): Promise<number> 
  * lets only that cascade through. support_tickets has no foreign key to
  * auth.users, so it is deleted here explicitly; its replies, tags, internal
  * notes, events and attachment claims cascade from the ticket rows, and the
- * uploaded attachment objects are removed from storage afterwards.
+ * uploaded attachment objects are removed from storage afterwards. What a
+ * support agent wrote on other users' tickets (tags, internal notes, events)
+ * stays with those tickets and loses its author instead
+ * (20261108090000_support_actor_references_set_null), so staff accounts
+ * can be deleted too.
  *
  * Every step must succeed before the auth user is deleted: Supabase returns
  * errors instead of throwing, and a silently failed delete would otherwise
